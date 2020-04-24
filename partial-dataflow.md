@@ -12,17 +12,6 @@ The challenges aren't really just about implementing "on top of Noria".
 They are relatively fundamental to the approach. Should they be covered
 here, or is there a clean line that can be drawn between what is
 discussed here and those challenges?
-
-Challenges:
- - consistency
-   - exactly once
- - no blocking
- - sharding
- - multiple indices
-Solutions:
- - union buffering
- - joins alternation
- - tagged paths
 -->
 
 ## Model Goals
@@ -111,20 +100,10 @@ needed data, and must itself issue an upquery further up the dataflow.
 Only when that recursive upquery completes can the original upquery be
 satisfied.
 
-The need for these recursing upqueries raises several implementation
-concerns. Prime among these is that we do not wish to stop processing
-other dataflow messages while we are waiting for the recursing upquery.
-I cover those challenges in the next chapter.
-
 ## Key Invariants
 
 <!--
 Intro to this section.
-
-For each invariant below, give intuition for why it's needed, and
-examples of how things go wrong if they're not upheld.
-
-Terminology: "holes" / "missing"
 -->
 
 ### 1. Update completeness.
@@ -132,7 +111,8 @@ Terminology: "holes" / "missing"
 > If data stops flowing into the dataflow, the dataflow will eventually
 > quiesce. When it does, for every key in every state, the value for
 > that key is either missing, or it reflects the effects of each input
-> to the system applied exactly once.
+> to the system applied exactly once. An upquery of any missing key in
+> any materialization also produces every input exactly once.
 
 The intuition here is that we want the system to _at least_ eventually
 do the right thing. That is, we want to make sure that all the data
@@ -141,6 +121,9 @@ is double-counted, and that no other spurious data is added. Unless, of
 course, the application has inserted dataflow operators that
 double-count, in which case they should be exactly double-counted. We
 also permit state to be explicitly missing to allow for partial state.
+
+The last sentence is needed to ensure that the system _can_ also
+correctly populate any missing state.
 
 ### 2. No partial updates.
 
@@ -157,8 +140,9 @@ but that would eagerly fill the partial state, which we want to avoid.
 
 ### 3. Upquery responses are snapshots.
 
-> An upquery response on some edge `e` must reflect all past messages on
-> `e`, and no subsequent messages on `e`.
+> An upquery response for key `k` on some edge `e` must reflect all
+> past messages for `k` that would have been sent on `e`, and no
+> subsequent messages for `k` on `e`.
 
 Consider what would happen if this were not the case: imagine that some
 operator `o` is missing the state for `k = 1`, and so upqueries for it.
@@ -187,17 +171,36 @@ in this way in XXX
 ### 4. Prefix presence.
 
 > If state is present for some key `k` on edge `e`, then either `k` is
-> also present in every materialization above `e`, or an eviction
-> message for `k` is in-flight towards `e`.
+> not missing in any materialization above `e`, or an eviction message
+> for `k` is in-flight towards `e`.
+
+Imagine if this were not the case, and new data arrives with key `k`
+along a path that eventually reaches `e`. When that data is processed by
+the ancestor of `e` that is missing `k`, it is discarded following
+invariant 2. As a result, the state for `k` in the materialization at
+`e` is never updated to reflect the new data, which violates invariant
+1. We permit upstream state to be missing as long as an eviction notice
+for `k` is in-transit towards `e`, since `k` will then eventually be
+missing in `e`, satisfying invariant 1.
+
+## Challenges
+
+Upqueries are conceptually simple. However, once you add them to any
+real dataflow system, challenges arise in trying to maintain the
+invariants above. I outline the main challenges below, and give
+solutions to them in the next chapter.
+
+
 
 <!--
-must be present upstream or about to be evicted
--->
-
-### 5. One response per edge.
-
-> Only one response can be sent per upquery on any given edge.
-
-<!--
-one response per edge per query
+Challenges:
+ - consistency
+   - exactly once
+ - no blocking
+ - sharding
+ - multiple indices
+Solutions:
+ - union buffering
+ - joins alternation
+ - tagged paths
 -->
