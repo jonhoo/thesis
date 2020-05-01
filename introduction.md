@@ -1,5 +1,7 @@
 # Partially-Stateful Dataflow
 
+<!-- Google Dataflow -->
+
 The term "dataflow" covers a wide range of systems: streaming systems
 like Kafka, stream processing systems like Spark and Flink, and dataflow
 computation systems like Naiad. The lines between these systems are

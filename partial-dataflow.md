@@ -190,7 +190,126 @@ real dataflow system, challenges arise in trying to maintain the
 invariants above. I outline the main challenges below, and give
 solutions to them in the next chapter.
 
+### Partial Eligibility
 
+Partial state only makes sense if populating a particular subset of the
+state of an operator is cheaper than populating its entire state. As a
+trivial example consider an aggregation that counts the total number of
+books in a database. If the application performs a lookup in this
+aggregation's state, that lookup has no parameters. As a result, if the
+state was partial, and missing, the system's only option is to query for
+**all** the books, count them, and then store that count. At that point,
+the state is fully materialized. Partial state did not buy us much here
+beyond laziness, since the state is only ever empty or full. In a case
+like this, it may even be faster for the system to eagerly materialize
+the aggregation's state to avoid the overhead associated with an
+asynchronous upquery.
+
+Partial state is useful when the system can perform "narrower" upqueries.
+That is, upqueries that do not query the entire state of ancestors. As
+an example, consider an aggregation that counts the number of books in a
+given genre. When the application queries the state of this aggregation,
+it queries for the count for a **given** genre. The aggregation only
+needs to upquery the books for **that** genre, and count those. Only the
+counts for frequently queried genres will be materialized and
+maintained.
+
+The implementation must intelligently analyze the dataflow to determine
+which state should and should not be partially materialized. The first
+operator should probably not, whereas the latter should. In addition,
+the implementation may need to add supplement indices so that the books
+with a given genre can be efficiently queried — if the upquery to find
+all books for a given genre is satisfied by a scan over all books, then
+upqueries are very expensive, and making the operator partial may not be
+worthwhile.
+
+This analysis can get complicated quickly. For example, an operator
+cannot be partial if any of its descendants must be fully materialized.
+This follows from invariant 2; the partial operator may discard an
+update early, and that update will then be perpetually missing from the
+downstream full materialization, which violates invariant 1. Or,
+consider a variant of the book-by-genre query above, but where the
+application queries for genres with a given number of books. While we
+still have a parameter to divide the state space, the aggregation has no
+efficient way to upquery for "all the books whose genre has N books".
+The aggregation is still the same, but the upquery requirements placed
+on it are different, and this affects the choice of whether it should be
+partial or not.
+
+### Multi-Ancestor Operators
+
+Operators that have multiple ancestors pose a problem to the partial
+model. Consider an identity operator that merely combines the input
+streams of its ancestors (i.e., a union). An upquery that crosses this
+operator must _split_ its upquery; it must query each ancestor of the
+operator, and take the union of the responses to populate missing state.
+But when we allow concurrent processing, these responses may be
+arbitrarily delayed between the different upquery paths.
+
+Let's examine what happens with a union, U, across two inputs, A and B,
+and a single materialized and partial downstream operator C. C discovers
+that it needs the state for `k = 1`, and sends an upquery for `k = 1` to
+both A and B. A responds first, and C receives that response. It needs
+to remember that the missing state is still missing, so that it does not
+expose incomplete state downstream (e.g., if it received an upquery for
+`k = 1`, it could not reply with **just** A's state). Now imagine that
+both A and B send one normal dataflow message each, and that they both
+include data for `k = 1`. When these messages reach C, C faces a
+dilemma. It cannot drop the messages, since the message from A includes
+data that was not included in A's upquery response. If it dropped them,
+that data would disappear forever, which violates invariant 1. But it
+also cannot apply the messages, since B's message includes data that
+will be included in B's eventual upquery response. If it did, that data
+would be duplicated.
+
+How upqueries work across multi-ancestor operators depends on the
+semantics of that operator. For unions, as we saw above, the upquery
+must go to all the ancestors. For joins on the other hand, the upquery
+must only go to **one** ancestor. This is because when a join processes
+a message from one ancestor, it already queries the "other" ancestor and
+thus pulls in any relevant state. In the example above, if U were a
+join, then if C sent an upquery to both A and B, the two upquery
+responses it received would contain duplicate data. For a symmetric
+join, the responses would in fact be identical, whereas for an
+asymmetric join (like a left join), they would differ. This suggests
+that we must determine the algorithm for upqueries across each
+multi-ancestor operator separately. In this thesis, I present an upquery
+solution for both unions and joins.
+
+### Dependent Upqueries
+
+Sometimes, an operator must issue an upquery upstream in order to
+satisfy an upquery from downstream. I refer to a recursive upquery like
+this as a _dependent_ upquery. Dependent upqueries are not, in and of
+themselves, complicated. They function exactly like a regular upquery.
+However, combined with invariant 3, they pose a challenging system
+design problem.
+
+Invariant 3 requires us to ensure that upquery responses are, in some
+sense, atomic. They must occur at some single logical point in time with
+respect to an operator's input and output streams. Consider what happens
+if an operator is part-way through processing an upquery response, and
+discovers that it must perform a dependent upquery in order to complete
+that processing. It may be a while before the dependent upquery
+resolves, and in the meantime the operator needs to decide what to do.
+
+If it blocks waiting for the response to come back, it holds up all
+processing of other upqueries and writes. That would not be great. On
+the other hand, if it continues processing other inputs, it risks
+violating invariant 3; any part of the upquery response it produced
+**before** it found the need for the dependent query still reflects the
+state at that point in time. Since it may have processed writes since
+then that affect that computed state, the upquery response would no
+longer reflect a current, atomic snapshot.
+
+### Indirect Dependencies
+
+
+<!-- join eviction -->
+
+### Upquery Explosion
+
+<!-- upqueries across reshuffles -->
 
 <!--
 Challenges:
@@ -203,4 +322,6 @@ Solutions:
  - union buffering
  - joins alternation
  - tagged paths
+ - join eviction
+ - imposed upquery requirements/constraints
 -->
