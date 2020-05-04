@@ -338,9 +338,15 @@ materialization, which marks the state for article number 7 as empty
 (though not missing). Any subsequent read for article number 7 receives
 an empty response, which violates invariant 1.
 
+<!--
 ### Upquery Explosion
 
-<!-- upqueries across reshuffles -->
+upqueries across reshuffles
+
+this is (at least at the moment) left for future work, and should
+therefore probably be left for that section. it probably would not even
+belong here, since it is a performance problem, not a correctness one.
+-->
 
 <!--
 Challenges:
