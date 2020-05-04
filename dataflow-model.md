@@ -85,3 +85,8 @@ Each dataflow edge provides in-order delivery, but operators may process
 data from their incoming edges in any order. Noria requires operators to
 be deterministic and commutative over their inputs to ensure that the
 dataflow computation eventually converges.
+
+## Example Execution
+
+<!-- give an example execution with Article + Vote, walking through
+everything  -->

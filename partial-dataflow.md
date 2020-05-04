@@ -104,6 +104,9 @@ satisfied.
 
 <!--
 Intro to this section.
+
+Mention that what we mean by "state for key k" is "all data up to time t
+that has key k".
 -->
 
 ### 1. Update completeness.
@@ -137,6 +140,8 @@ count of 42 for some `g = 1` is evicted, and then more data arrives with
 `g = 1`, the count operator cannot assume that the current count is 0
 (because it is not). It _could_ issue an upquery for the missing state,
 but that would eagerly fill the partial state, which we want to avoid.
+
+<!-- not the case during upquery processing -->
 
 ### 3. Upquery responses are snapshots.
 
@@ -304,8 +309,34 @@ longer reflect a current, atomic snapshot.
 
 ### Indirect Dependencies
 
+We have to guarantee that all data relevant to a given state entry
+eventually reaches that state (invariant 1). A corollary of this is that
+we cannot discard messages that may affect non-missing, downstream state
+as a result of invariant 2. Normally, this follows from invariant 4 — if
+some key `k` is present at an edge down the graph, it is also present at
+every materialization above that edge, and therefore messages with key
+`k` will not be discarded early.
 
-<!-- join eviction -->
+Unfortunately, this only holds for upqueries where all dependent
+upqueries share the same key as the leaf-most upquery. Consider a
+dataflow that joins two inputs, `Article` and `User`, on the article's
+author field. A downstream operator then issues an upquery for article
+number 7. The upquery is issued to `Article`, which produces a message
+that contains article number 7 with, say, author "Elena". That message
+arrives at the join, which issues a dependent upquery to `User` for
+"Elena". When that dependent upquery resolves, the join produces the
+final upquery response, and the state for article number 7 is populated
+in the downstream materialization.
+
+Next, an editor changes the author for article number 7 to "Talia". This
+takes the form of a message with a negative for `[7, "Elena"]` and a
+positive for `[7, "Talia"]`. When this message arrives at the join, it
+may miss when performing the lookup for "Talia". Invariant 2 dictates
+that we should drop the corresponding data, so the join drops `[7,
+"Talia"]`. Only the negative for "Elena" propagates to the downstream
+materialization, which marks the state for article number 7 as empty
+(though not missing). Any subsequent read for article number 7 receives
+an empty response, which violates invariant 1.
 
 ### Upquery Explosion
 
