@@ -338,6 +338,19 @@ materialization, which marks the state for article number 7 as empty
 (though not missing). Any subsequent read for article number 7 receives
 an empty response, which violates invariant 1.
 
+### Sharded Upqueries
+
+Upqueries across a sharding boundary are a complicated affair. The
+operator that issues the upquery must determine which shard or shards to
+send the upquery to. If it queries multiple shards, the responses from
+those shards are subject to the same multi-ancestor issue as unions.
+When a response to the upquery comes back, it must be specifically
+routed to only the requesting shard, so that it does not accidentally
+populate the state of other shards. This logic must work even if
+multiple shards issue an upquery for the same key concurrently. Or,
+worse yet, if  a single upquery must traverse **multiple** sharding
+boundaries.
+
 <!--
 Challenges:
  - consistency
