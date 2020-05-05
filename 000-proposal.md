@@ -17,14 +17,14 @@ that missing state on demand.
 
 ## Completed Work: Noria
 
-In OSDI 2018, I co-authored Noria; an implementation of the partially
-stateful dataflow model for incremental view maintenance in databases.
-The paper focused on building a better database backend for read-heavy
-applications. A long-running dataflow program maintains any number of
-materialized user-defined views, specified in SQL. We then use joint
-query optimization techniques to find ways to integrate new views and
-queries with the running dataflow. Noria is also highly concurrent and
-distributed, and supports sharding cliques of operators to share
+In OSDI 2018, I co-authored [Noria][osdi]; an implementation of the
+partially stateful dataflow model for incremental view maintenance in
+databases. The paper focused on building a better database backend for
+read-heavy applications. A long-running dataflow program maintains any
+number of materialized user-defined views, specified in SQL. We then use
+joint query optimization techniques to find ways to integrate new views
+and queries with the running dataflow. Noria is also highly concurrent
+and distributed, and supports sharding cliques of operators to share
 resource costs and increase sustainable throughput.
 
 My primary work on the paper revolved around the implementation of
@@ -333,3 +333,5 @@ The contributions of my thesis, subject to this proposal, will be:
  - **June 1st, 2020**: Complete chapters on Noria, partial invariants, challenges, and solutions.
  - **July 1st, 2020**: All micro evaluations completed and written. Macro evaluations planned.
  - **August 1st, 2020**: All evaluations completed and written. Related work finished.
+
+[osdi]: https://www.usenix.org/conference/osdi18/presentation/gjengset
