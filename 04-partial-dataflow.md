@@ -114,8 +114,9 @@ that has key k".
 > If data stops flowing into the dataflow, the dataflow will eventually
 > quiesce. When it does, for every key in every state, the value for
 > that key is either missing, or it reflects the effects of each input
-> to the system applied exactly once. An upquery of any missing key in
-> any materialization also produces every input exactly once.
+> to the system applied exactly once. A subsequent upquery for any
+> missing key in any materialization populates the state for the missing
+> key consistent with the property above for non-missing state.
 
 The intuition here is that we want the system to _at least_ eventually
 do the right thing. That is, we want to make sure that all the data
@@ -348,7 +349,7 @@ When a response to the upquery comes back, it must be specifically
 routed to only the requesting shard, so that it does not accidentally
 populate the state of other shards. This logic must work even if
 multiple shards issue an upquery for the same key concurrently. Or,
-worse yet, if  a single upquery must traverse **multiple** sharding
+worse yet, if a single upquery must traverse **multiple** sharding
 boundaries.
 
 <!--
