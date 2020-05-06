@@ -201,17 +201,21 @@ of my proposed solutions:
 #### Partial Eligibility
 
 Partial state only makes sense if populating a particular subset of the
-state of an operator is cheaper than populating its entire state. As a
-trivial example consider an aggregation that counts the total number of
-books in a database. If the application performs a lookup in this
-aggregation's state, that lookup has no parameters. As a result, if the
-state was partial, and missing, the system's only option is to query for
-**all** the books, count them, and then store that count. At that point,
-the state is fully materialized. Partial state did not buy us much here
-beyond laziness, since the state is only ever empty or full. In a case
-like this, it may even be faster for the system to eagerly materialize
-the aggregation's state to avoid the overhead associated with an
-asynchronous upquery.
+state of an operator is cheaper than populating its entire state. And it
+comes with costs of its own. Partial state must track tombstones for
+empty, non-missing state, and issuing and responding to upqueries is
+slower than regular "forward" dataflow processing.
+
+As a trivial example consider an aggregation that counts the total
+number of books in a database. If the application performs a lookup in
+this aggregation's state, that lookup has no parameters. As a result, if
+the state was partial, and missing, the system's only option is to query
+for **all** the books, count them, and then store that count. At that
+point, the state is fully materialized. Partial state did not buy us
+much here beyond laziness, since the state is only ever empty or full.
+In a case like this, it may be faster for the system to eagerly
+materialize the aggregation's state to avoid the latency and storage
+overheads that partial state introduces.
 
 Partial state is useful when the system can perform "narrower" upqueries.
 That is, upqueries that do not query the entire state of ancestors. As
