@@ -466,6 +466,7 @@ OSDI paper.
 
 The contributions of my thesis, subject to this proposal, will be:
 
+ - An algorithm for implementing upqueries.
  - An improved version of Noria with support for partial state even for
    complex, sharded applications.
  - Key correctness invariants for partially stateful dataflow.
