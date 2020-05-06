@@ -90,6 +90,26 @@ and queries with the running dataflow. Noria is also highly concurrent
 and distributed, and supports sharding cliques of operators to share
 resource costs and increase sustainable throughput.
 
+As I mentioned previously, dataflow is a broad term, so I want to take a
+moment to discuss Noria's specific dataflow implementation. Noria takes
+SQL queries from the application, and folds them into a single, unified
+dataflow program. The dataflow is a directed, acyclic graph, with the
+base tables at the "top", and application-accessible views at the
+"bottom". The nodes in between represent the SQL operators that make up
+the query of every view. Reads (`SELECT` queries) access
+materializations at the leaves only, while writes (`INSERT`, `UPDATE`,
+and `DELETE` queries) flow into the graph at the roots.
+
+After a write has been persisted by the base table operator, it flows
+into the dataflow graph as an "update", following the graph's edges.
+Every operator the update passes through processes the update according
+to the operator semantics, and emits a derived update. Eventually the
+update arrives at a leaf view and changes the state visible to reads
+through the leaf's materialization. Updates are _signed_ (i.e., they can
+be "negative" or "positive"), with negative updates reflecting
+revocations of past results, and modifications represented as a
+negative-positive update pair.
+
 My primary work on the paper revolved around the implementation of
 partial state, including much of the core dataflow fabric.
 
