@@ -180,11 +180,23 @@ do the right thing. That is, we want to make sure that all the data
 the application inserts into the dataflow is considered, that none of it
 is double-counted, and that no other spurious data is added. Unless, of
 course, the application has inserted dataflow operators that
-double-count, in which case they should be exactly double-counted. We
-also permit state to be explicitly missing to allow for partial state.
+double-count, in which case they should be exactly double-counted.
 
-Several situations arise in a real dataflow implementation that
-make this property difficult to uphold. I sketch the primary ones below:
+We want to provide stronger guarantees than eventual consistency
+whenever we can. But this is challenging when working in the context of
+Noria, which is itself only eventually consistent. While Noria works
+hard to minimize cases where inconsistencies are visible to the
+application, some cases still remain. In those cases, Noria tries to
+rectify the inconsistencies promptly, but periods of inconsistencies do
+still occur. The goal for my thesis in terms of consistency is therefore
+to ensure that partial state does not introduce additional
+inconsistencies beyond those inherent in Noria's coordination-free
+design.
+
+There are several situations that arise in a real dataflow
+implementation that make even this seemingly simple property difficult
+to uphold. I sketch the primary ones below, and give brief descriptions
+of my proposed solutions:
 
 #### Partial Eligibility
 
