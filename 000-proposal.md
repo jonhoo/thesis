@@ -250,6 +250,16 @@ The aggregation is still the same, but the upquery requirements placed
 on it are different, and this affects the choice of whether it should be
 partial or not.
 
+**Solution key**: The idea here is to perform _key provenance analysis_
+over all the upqueries an application may issue to the system. By
+analyzing the dataflow, we can statically determine the set of all
+possible upqueries, and then trace what columns they need to access in
+their ancestors. The problematic cases above then become visible as
+particular patterns in those key traces. For example, in the
+query-by-number book example above, the analysis can conclude that no
+full materialization contains the data needed by the upquery, and
+therefore it cannot be satisfied efficiently.
+
 #### Multi-Ancestor Operators
 
 Operators that have multiple ancestors pose a problem to the partial
@@ -290,6 +300,14 @@ that we must determine the algorithm for upqueries across each type of
 multi-ancestor operator separately. Unions, joins, and left joins for
 example all have different upquery restrictions.
 
+**Solution key**: Unions must buffer upquery results until all their
+inputs have responded. In the meantime, they must buffer updates for the
+buffer upquery keys to ensure that a single, complete, upquery response
+is emitted. Joins already contain implied upqueries, so only one side
+must be upqueried, with the upqueries to the other side left to the join
+itself. Left joins work the same way, but with the additional
+restriction that the initial upquery _must_ go the left input.
+
 #### Dependent Upqueries
 
 Sometimes, an operator must issue an upquery upstream in order to
@@ -314,6 +332,13 @@ produced **before** it found the need for the dependent query still
 reflects the state at that point in time. Since it may have processed
 writes since then that affect that computed state, the upquery response
 would no longer reflect a current, atomic snapshot.
+
+**Solution key**: Operators issue dependent upqueries only if the need
+arises while processing an upquery response. Otherwise, that part of the
+current update is discarded. If a dependent upquery must be issued to
+complete processing some past upquery response, the response is dropped,
+the dependent upquery is issued, and the operator re-tries the original
+upquery when the dependent upquery resolves.
 
 #### Indirect Dependencies
 
@@ -346,6 +371,13 @@ number 7 as empty (though not missing). Any subsequent read for article
 number 7 receives an empty response, which violates our primary system
 property.
 
+**Solution key**: Key provenance analysis detects when the dataflow
+downstream of an operator has this property. With that information, an
+operator knows when it is about to drop an update that _may_ nonetheless
+exist in downstream state. It issues an eviction for that state,
+ensuring that if the updated state is subsequently needed, it will be
+queried for.
+
 #### Sharded Upqueries
 
 Noria supports sharding cliques of operators to increase the throughput
@@ -367,6 +399,15 @@ populate the state of other shards. This logic must work even if
 multiple shards issue an upquery for the same key concurrently. Or,
 worse yet, if a single upquery must traverse **multiple** sharding
 boundaries.
+
+**Solution key**: Key provenance informs operators whether an
+upquery for a given column should be sent to all shards, or just one
+shard, of the upquery source. This information, as well as the shard
+identifier of the requesting operator, is included in the upquery
+itself, and in the eventual response. Sharding unions buffer upquery
+responses that originated from more than one shard (like regular
+unions). Shard "splitters" ensure that responses only arrive at the
+requesting shard using the requestor information in the response.
 
 ### System Evaluation
 
