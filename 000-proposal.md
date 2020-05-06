@@ -348,6 +348,15 @@ property.
 
 #### Sharded Upqueries
 
+Noria supports sharding cliques of operators to increase the throughput
+of particular sections of the dataflow. Shards of an operator execute in
+parallel, without synchronization. Edges that cross from an unsharded
+operator to a sharded one split its outgoing updates using hash
+partitioning. Edges that cross back have an implicit union injected to
+merge the sharded results. Edges that cross from one sharding to a
+different sharding are merged and then split again. Upqueries must also
+work when Noria decides to shard operators in this way.
+
 Upqueries across a sharding boundary are a complicated affair. The
 operator that issues the upquery must determine which shard or shards to
 send the upquery to. If it queries multiple shards, the responses from
