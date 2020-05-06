@@ -144,7 +144,7 @@ underlying principles and the details of the solutions.
 ## Proposed Work: Partially Stateful Dataflow
 
 In my thesis, I propose to give a more complete architecture for
-partially stateful dataflow. In brief, this includes:
+partially stateful dataflow, nicknamed Theriac. In brief, this includes:
 
  - a more exhaustive analysis of the primary difficulties in realizing
    partial state in dataflow
@@ -175,23 +175,22 @@ property:
 > key in any materialization populates the state for the missing key
 > consistent with the property above for non-missing state.
 
-The intuition here is that we want the system to _at least_ eventually
-do the right thing. That is, we want to make sure that all the data
-the application inserts into the dataflow is considered, that none of it
-is double-counted, and that no other spurious data is added. Unless, of
+The intuition here is that Theriac must _at least_ eventually do the
+right thing. That is, it must make sure that all the data the
+application inserts into the dataflow is considered, that none of it is
+double-counted, and that no other spurious data is added. Unless, of
 course, the application has inserted dataflow operators that
 double-count, in which case they should be exactly double-counted.
 
-We want to provide stronger guarantees than eventual consistency
-whenever we can. But this is challenging when working in the context of
-Noria, which is itself only eventually consistent. While Noria works
+We want Theriac to provide stronger guarantees than eventual consistency
+whenever possible. But this is challenging when working in the context
+of Noria, which is itself only eventually consistent. While Noria works
 hard to minimize cases where inconsistencies are visible to the
 application, some cases still remain. In those cases, Noria tries to
 rectify the inconsistencies promptly, but periods of inconsistencies do
-still occur. The goal for my thesis in terms of consistency is therefore
-to ensure that partial state does not introduce additional
-inconsistencies beyond those inherent in Noria's coordination-free
-design.
+still occur. The goal for Theriac then is to ensure that partial state
+does not introduce _additional_ inconsistencies beyond those inherent in
+Noria's coordination-free design.
 
 There are several situations that arise in a real dataflow
 implementation that make even this seemingly simple property difficult
