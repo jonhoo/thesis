@@ -478,6 +478,69 @@ The contributions of my thesis, subject to this proposal, will be:
  - Micro and macro evaluations of the performance and memory impact of
    introducing partial state to an application's dataflow.
 
+## Thesis outline
+
+ - **Introduction/Motivation**
+   
+   Similar to the proposal introduction. Why dataflow is useful. Why
+   existing approaches are problematic.
+ - **Background: The Dataflow Model**
+   
+   How dataflow works in general. Inputs, operators, signed updates,
+   propagation, etc.
+ - **Background: Noria**
+   
+   Important Noria-specific dataflow mechanisms. Materializations,
+   dynamic dataflow, SQL-to-dataflow, thread domains, no coordiation.
+ - **Related Work**
+   
+   Existing dataflow systems. Differential Dataflow arrangements and
+   cyclic evictions. Windowing. Database view materialization. Maybe
+   cache eviction work.
+ - **The Partially Stateful Dataflow Model**
+   - **Model goals**
+     
+     What do we want from partial state? Memory use, eviction,
+     performance, consistency.
+   - **Upqueries**
+     
+     How upqueries work conceptually. Why they present an attractive
+     design (can re-use existing dataflow "forward" logic). Terminology.
+   - **Invariants**
+     
+     Establish dataflow invariants needed to ensure that upqueries
+     produce correct results.
+   - **Challenges**
+     
+     Detail the challenges from "Technical Approach" above.
+ - **Making Partial State Practical**
+   
+   Introduce the mechanisms outlined in the solution keys for the
+   challenges in "Technical Approach". Detail what problem they solve,
+   their impact, and how they related back to the invariants.
+ - **Evaluation**
+   - **Micro-Benchmarks**
+     
+     Primarily focused on benchmarking specific dataflow patterns as
+     outlined in the evaluation section of the proposal.
+   - **Unsharded Lobsters**
+     
+     The "overall application impact" benchmark outlined in the
+     evaluation section.
+   - **Sharded Lobsters**
+     
+     This is the same application as above, but run with Noria sharding
+     enabled. My theory at this time is that this will work _correctly_,
+     but will suffer from certain known performance problems. I have
+     ideas for how these _might_ be solved, which brings us to:
+ - **Future Work**
+   
+   Efficient upqueries across multi-level sharded shuffles. Upquery key
+   subsumption: possibly no need to upquery for (A, B) if you previously
+   upqueried for A. "Relaxed" aggregations that assume monotonicity of
+   inputs (e.g., top-k that never upqueries). Ranged upqueries and
+   upqueries across range partitioned shards.
+
 ## Proposed Timeline
 
  - **May 1st, 2020**: (already completed) Finish Noria implementation.
