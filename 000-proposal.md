@@ -1,19 +1,82 @@
 # Thesis Proposal
 
-The dataflow architecture is attractive for reactive applications, where
-computations are relatively fixed, but the data is changing.
-Unfortunately, existing dataflow systems require the state of stateful
-dataflow operators to be fully present in memory. This is costly when an
-application has a large data set, but a relatively much smaller working
-set — resources must be provisioned for computing over all the
-application's data, even though only a small subset of the computation
-output is observed.
+The dataflow architecture has seen a resurgence in recent years, with
+systems like Kafka, Spark, Flink, and Naiad all seeing interest from
+academia and industry alike. The term "dataflow" covers a wide range of
+systems: streaming systems (like Kafka), stream processing systems (like
+Spark and Flink), and dataflow computation systems (like Naiad). The
+lines between these systems are blurry at best, as are the labels I have
+put on them above. They vary, often significantly, in their design
+goals, their intended uses, and their system architecture. Yet they all
+share the high-level property that they take data as _input_, and feed
+processed data forward through a graph of _operators_. In other words,
+they have _data flow_ through operators.
 
-I propose in this thesis to design and implement _partially stateful
-dataflow_. The essence of the design is to introduce a notion of
-"missing state" to the dataflow engine. And alongside it, a mechanism to
-retroactively, and efficiently, compute over past inputs to repopulate
-that missing state on demand.
+This high-level design is attractive for reactive applications, where
+computations are relatively fixed, but the data is changing, since it
+clearly designates the data dependencies of the application. Explicitly
+modeling the compute and data flow this way also allows dataflow systems
+to easily scale to multiple cores or physical hosts; any dataflow edge
+can be realized as a function call, a thread synchronization point, or a
+network channel, and the model still "works".
+
+These systems all face a fundamental decision when it comes to
+_stateful_ operators — operators that must maintain some state in order
+to process their inputs. To compute the result of a join for example,
+the values in the "other side" of the join must be available to the
+operator that performs the join. Traditionally, dataflow systems have
+made one of three decisions in this space: ignore such operators, make
+all the state the operator needs available, or keep only a subset of the
+state. The third option, often called, windowing, is a popular option
+because it lets the system support stateful operators without keeping
+vast amounts of state at the ready just in case the operator needs it.
+The window will usually keep only recent data, so that the results of
+the computation is only "missing" data that is old anyway.
+
+None of these three options are particularly attractive. Leaving the
+management of state to individual operators makes it difficult to
+provide consistency and fault-tolerance. Keeping all the state around
+forever requires either large amounts of wasted memory or using slower,
+disk-based storage to back the state. This is particularly a problem
+when the application's working set is significantly smaller than its
+total dataset size — resources must be provisioned for computing over
+all the application's data, even though only a small subset of the
+computation output is observed. Windowing works well in settings where
+seeing only a subset of the data is acceptable, such as analytics, but
+cannot be used in applications where complete results are needed.
+
+I propose in this thesis to design and implement _partially-stateful
+dataflow_. In a dataflow system with support for partial state,
+operators act as though they have access to the full state of their
+inputs. In reality, that state is lazily constructed behind the scenes;
+a given piece of the input state for an operator is only produced and
+stored when the operator asks for that piece. If an operator only
+accesses part of its input state, the remaining parts are not computed
+or stored.
+
+This approach provides a number of benefits. First, its memory use is
+**proportional to the working set** of the application, rather than to
+the size of the data. Second, it works for applications that **cannot
+use windowing**. Third, it allows the system to **eagerly discard**, and
+avoid computation for, data that later operators have never needed, as
+long as that data can later be re-produced. And finally, it allows the
+application to **selectively evict** from stateful operators as the
+working set changes.
+
+The essence of the design is to introduce a notion of "missing state" to
+the dataflow engine. And alongside it, a mechanism to retroactively, and
+efficiently, compute over past inputs to repopulate that missing state
+on demand. This design, while alluring, introduces a number of
+challenges in practice. Many of these stem from operators that may now
+need to communicate with their inputs to populate needed state. Those
+inputs may again need to retrieve that state from their inputs, and so
+on until the source of the needed data is reached. These queries for
+past state flow in the "opposite" direction of the data, something
+existing dataflow systems do not generally allow. When these queries are
+eventually answered, the system must reconcile those results with any
+data that flowed through the system while the query was pending. My
+thesis will cover the specific problems that arise in depth, and provide
+solutions to those problems.
 
 ## Completed Work: Noria
 
