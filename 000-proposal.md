@@ -286,8 +286,9 @@ join, then if C sent an upquery to both A and B, the two upquery
 responses it received would contain duplicate data. For a symmetric
 join, the responses would in fact be identical, whereas for an
 asymmetric join (like a left join), they would differ. This suggests
-that we must determine the algorithm for upqueries across each
-multi-ancestor operator separately.
+that we must determine the algorithm for upqueries across each type of
+multi-ancestor operator separately. Unions, joins, and left joins for
+example all have different upquery restrictions.
 
 #### Dependent Upqueries
 
