@@ -1,4 +1,4 @@
-# Thesis Proposal
+# Thesis Proposal: Partial Dataflow in Noria
 
 The dataflow architecture has seen a resurgence in recent years, with
 systems like Kafka, Spark, Flink, and Naiad all seeing interest from
@@ -33,26 +33,33 @@ vast amounts of state at the ready just in case the operator needs it.
 The window will usually keep only recent data, so that the results of
 the computation is only "missing" data that is old anyway.
 
-None of these three options are particularly attractive. Leaving the
-management of state to individual operators makes it difficult to
-provide consistency and fault-tolerance. Keeping all the state around
-forever requires either large amounts of wasted memory or using slower,
-disk-based storage to back the state. This is particularly a problem
-when the application's working set is significantly smaller than its
-total dataset size — resources must be provisioned for computing over
-all the application's data, even though only a small subset of the
-computation output is observed. Windowing works well in settings where
-seeing only a subset of the data is acceptable, such as analytics, but
-cannot be used in applications where complete results are needed.
+Each of these points in the design space caters to a particular type of
+application. Non-stateful dataflow is useful as a messaging fabric.
+Fully stateful dataflow works well for applications that operate over
+small data sets, or where the application's working set spans nearly the
+entire data set. Windowing is a great intermediate point for
+applications that do not need complete results, and are willing to trade
+completeness for performance, such as analytics workloads.
 
-I propose in this thesis to design and implement _partially-stateful
-dataflow_. In a dataflow system with support for partial state,
-operators act as though they have access to the full state of their
-inputs. In reality, that state is lazily constructed behind the scenes;
-a given piece of the input state for an operator is only produced and
-stored when the operator asks for that piece. If an operator only
-accesses part of its input state, the remaining parts are not computed
-or stored.
+But unfortunately, not all applications fit into one of these
+categories. In particular, user-facing applications whose working set is
+significantly smaller than their total dataset size are not well served
+by these options. Stateless operation is not feasible, since evaluating
+the dataflow from scratch each time would incur significant extra
+latency. Fully stateful operation is similarly unattractive —
+computational resources would need to be provisioned for computing over
+all the application's data, even though only a small subset of the
+computation output is observed. And windowing can often not be applied
+for these applications, since users may request data that lives outside
+the window, and that data must still be available.
+
+In OSDI 2018, I co-authored [Noria][osdi]; a dataflow system that
+supports _partially-stateful dataflow_. In Noria, operators act as
+though they have access to the full state of their inputs. While in
+reality, that state is lazily constructed behind the scenes; a given
+piece of the input state for an operator is only produced and stored
+when the operator asks for that piece. If an operator only accesses part
+of its input state, the remaining parts are not computed or stored.
 
 This approach provides a number of benefits. First, its memory use is
 **proportional to the working set** of the application, rather than to
@@ -62,6 +69,12 @@ avoid computation for, data that later operators have never needed, as
 long as that data can later be re-produced. And finally, it allows the
 application to **selectively evict** from stateful operators as the
 working set changes.
+
+Another key advantage of partial state is that it makes it possible to
+extend a running dataflow program **lazily**. Noria can cheaply
+accommodate new segments of dataflow by instantiating the new dataflow
+as initially empty. That new dataflow is then populated through
+application activity, rather than by incurring a large upfront cost.
 
 The essence of the design is to introduce a notion of "missing state" to
 the dataflow engine. And alongside it, a mechanism to retroactively, and
@@ -74,31 +87,35 @@ on until the source of the needed data is reached. These queries for
 past state flow in the "opposite" direction of the data, something
 existing dataflow systems do not generally allow. When these queries are
 eventually answered, the system must reconcile those results with any
-data that flowed through the system while the query was pending. My
-thesis will cover the specific problems that arise in depth, and provide
-solutions to those problems.
+data that flowed through the system while the query was pending.
+
+My thesis will cover the design and implementation of partially stateful
+dataflow in Noria in detail, including several key components that were
+only briefly sketched or not present at all in the OSDI paper. I will
+discuss the specific problems that arise in depth, and provide solutions
+to those problems.
 
 ## Completed Work: Noria
 
-In OSDI 2018, I co-authored [Noria][osdi]; an implementation of the
-partially stateful dataflow model for incremental view maintenance in
-databases. The paper focused on building a better database backend for
-read-heavy applications. A long-running dataflow program maintains any
-number of materialized user-defined views, specified in SQL. We then use
-joint query optimization techniques to find ways to integrate new views
-and queries with the running dataflow. Noria is also highly concurrent
-and distributed, and supports sharding cliques of operators to share
+Noria implemented an implementation of the partially stateful dataflow
+model for incremental view maintenance in databases. The paper focused
+on building a better database backend for read-heavy applications. A
+long-running dataflow program maintains any number of materialized
+user-defined views, specified in SQL. We then use joint query
+optimization techniques to find ways to integrate new views and queries
+with the running dataflow. Noria is also highly concurrent and
+distributed, and supports sharding cliques of operators to share
 resource costs and increase sustainable throughput.
 
-As I mentioned previously, dataflow is a broad term, so I want to take a
-moment to discuss Noria's specific dataflow implementation. Noria takes
-SQL queries from the application, and folds them into a single, unified
-dataflow program. The dataflow is a directed, acyclic graph, with the
-base tables at the "top", and application-accessible views at the
-"bottom". The nodes in between represent the SQL operators that make up
-the query of every view. Reads (`SELECT` queries) access
-materializations at the leaves only, while writes (`INSERT`, `UPDATE`,
-and `DELETE` queries) flow into the graph at the roots.
+Dataflow is a broad term, so I want to take a moment to discuss Noria's
+specific dataflow implementation. Noria takes SQL queries from the
+application, and folds them into a single, unified dataflow program. The
+dataflow is a directed, acyclic graph, with the base tables at the
+"top", and application-accessible views at the "bottom". The nodes in
+between represent the SQL operators that make up the query of every
+view. Reads (`SELECT` queries) access materializations at the leaves
+only, while writes (`INSERT`, `UPDATE`, and `DELETE` queries) flow into
+the graph at the roots.
 
 After a write has been persisted by the base table operator, it flows
 into the dataflow graph as an "update", following the graph's edges.
@@ -144,7 +161,7 @@ underlying principles and the details of the solutions.
 ## Proposed Work: Partially Stateful Dataflow
 
 In my thesis, I propose to give a more complete architecture for
-partially stateful dataflow, nicknamed Theriac. In brief, this includes:
+the partially stateful dataflow as implemented in Noria. This includes:
 
  - a more exhaustive analysis of the primary difficulties in realizing
    partial state in dataflow
@@ -175,27 +192,48 @@ property:
 > key in any materialization populates the state for the missing key
 > consistent with the property above for non-missing state.
 
-The intuition here is that Theriac must _at least_ eventually do the
-right thing. That is, it must make sure that all the data the
-application inserts into the dataflow is considered, that none of it is
+The intuition here is that Noria must _at least_ eventually do the right
+thing. That is, it must make sure that all the data the application
+inserts into the dataflow is considered, that none of it is
 double-counted, and that no other spurious data is added. Unless, of
 course, the application has inserted dataflow operators that
 double-count, in which case they should be exactly double-counted.
 
-We want Theriac to provide stronger guarantees than eventual consistency
-whenever possible. But this is challenging when working in the context
-of Noria, which is itself only eventually consistent. While Noria works
-hard to minimize cases where inconsistencies are visible to the
-application, some cases still remain. In those cases, Noria tries to
-rectify the inconsistencies promptly, but periods of inconsistencies do
-still occur. The goal for Theriac then is to ensure that partial state
-does not introduce _additional_ inconsistencies beyond those inherent in
-Noria's coordination-free design.
+We want Noria to provide stronger guarantees than eventual consistency
+whenever possible and, in the common case, it does. Specifically, for
+most queries, Noria ensures that a read from any given view sees
+complete query results as of some recent time at each dataflow input.
+That is, for a given view, for each input that feeds into that view, the
+view reflects a prefix of the data ingested by that input. Each view is
+also continuously kept up to date; any new input is reflected in the
+view shortly after being ingested, subject only to the propagation delay
+in the dataflow.
+
+This story gets more complicated when there are multiple paths from a
+given dataflow input to a given view, such as through a self-join.
+Depending on the precise semantics of the paths, this can cause a view
+to briefly reflect **some** of the effects of newly inserted data, but
+not all. For example, consider a self-join that computes a parent-child
+relationship between records. If the application removes a record `A`,
+that dataflow input must be processed along two edges. When it has been
+processed by one edge, but no the other, the downstream view will
+briefly continue to include `A` as a child, even though it no longer
+appears as a parent. This inconsistency is rectified once the dataflow
+input is also processed on the second edge.
+
+This problem is not directly related to partial state — Noria exhibits
+this behavior when all state is fully materialized. However, the
+implementation of partial state must work in the context of such
+temporary inconsistencies. Furthermore, partial state should not
+exaggerate these problems by introducing additional inconsistencies.
 
 There are several situations that arise in a real dataflow
 implementation that make even this seemingly simple property difficult
 to uphold. I sketch the primary ones below, and give brief descriptions
-of my proposed solutions:
+of my proposed solutions. In my thesis, I will go into these in greater
+detail. I will also provide a more comprehensive analysis of the
+possible inconsistencies that can arise if these situations are not
+handled correctly by the partial state logic.
 
 #### Partial Eligibility
 
@@ -431,24 +469,32 @@ complexity will vary.
 Third, **steady-state read performance impact**. These experiments will
 evaluate the cost of partial state in the steady-state where few or no
 upqueries are issued. Ideally, this should not differ significantly from
-the steady-state read performance when partial state is disabled.
+the steady-state read performance when partial state is disabled. This
+experiment exists primarily to evaluate the overheads that partial state
+logic may introduce on the read path.
 
 Fourth, **write performance impact**. These experiments will evaluate
 the change in write performance as a result of introducing partial
-state. The results here will likely vary highly depending on the
-specific dataflow and workload in question. In skewed dataflow programs
-with fairly simple data dependencies, write performance should increase,
-as unpopular keys no longer need to be maintained. In dataflow programs
-with a large working set relative to the data set, performance is likely
-to be mostly the same. For applications that have complex data
-dependencies, the bookkeeping needed to ensure that the partial state
-remains consistent may introduce a write performance penalty.
+state. The primary focus here is on whether the partial state logic adds
+significant overheads to the dataflow processing pipeline. The results
+here will likely vary highly depending on the specific dataflow and
+workload in question. In skewed dataflow programs with fairly simple
+data dependencies, write performance should increase, as unpopular keys
+no longer need to be maintained. In dataflow programs with a large
+working set relative to the data set, performance is likely to be mostly
+the same. For applications that have complex data dependencies, the
+bookkeeping needed to ensure that the partial state remains consistent
+may introduce a write performance penalty.
 
 And fifth, **overall application impact**. For a complex application
 with a wide range of queries and complex access patterns, it may be hard
 to predict how partial state will affect the application's performance
 and memory use. To estimate this, an end-to-end experiment with a
-realistic application and workload is needed.
+realistic application and workload is needed. My plan here is to
+follow in the footsteps of the OSDI paper and evaluate the "Lobsters"
+application, since I already have the queries and a workload generator
+for it. This experiment will also help answer the question of what
+overhead partial state adds.
 
 ### Feasibility
 
@@ -491,6 +537,7 @@ The contributions of my thesis, subject to this proposal, will be:
    
    Important Noria-specific dataflow mechanisms. Materializations,
    dynamic dataflow, SQL-to-dataflow, thread domains, no coordiation.
+   An analysis of consistency issues that can crop up in Noria.
  - **Related Work**
    
    Existing dataflow systems. Differential Dataflow arrangements and
