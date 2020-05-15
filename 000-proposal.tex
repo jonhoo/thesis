@@ -3,6 +3,9 @@
 % page margins
 \usepackage[margin=1.5in]{geometry}
 
+% enumerate* and itemize*
+\usepackage[inline]{enumitem}
+
 % for 1.5 line spacing
 \renewcommand{\baselinestretch}{1.5}
 
@@ -40,52 +43,53 @@ uses, and their system architecture. Yet they all share the property that they
 take data as \emph{input}, and feed processed data forward through a graph of
 \emph{operators}.
 
-This data-flow design is attractive for reactive applications, where
-computations are relatively fixed, but the data is changing, since it clearly
-designates the data dependencies of the application. Explicitly modeling the
-compute and data flow this way also allows dataflow systems to easily scale to
-multiple cores or physical hosts; any dataflow edge can be realized as a
-function call, a thread synchronization point, or a network channel, and the
-model still ``works''.
+This data-flow design is attractive for ready-heavy applications where the
+computation is relatively fixed over time, and it is the data that changes.
+We can store the results of the computation to serve reads quickly, and use the
+known data dependencies to keep those results efficiently up to date as the data
+changes. Explicitly modeling the compute and data flow this way also allows
+dataflow systems to easily scale to multiple cores or physical hosts; any
+dataflow edge can be realized as a function call, a thread synchronization
+point, or a network channel, and the model still ``works''.
 
 These systems all face a decision when it comes to \emph{stateful} operators\,
 ---\,operators that must maintain some state in order to process their inputs.
 To compute the result of a join for example, the values in the ``other side'' of
 the join must be available to the operator that performs the join.
-Traditionally, dataflow systems have made one of three decisions: ignore such
+Traditionally, dataflow systems have made one of two decisions: ignore such
 operators, make all the state the operator needs available, or keep only a
-subset of the state. The third option, often called, windowing, is a popular
-option because it lets the system support stateful operators without keeping
-vast amounts of state at the ready just in case the operator needs it. The
-window will usually keep only recent data, so that the results of the
-computation is only ``missing'' data that is old anyway.
+subset of the state. Each of these caters to a particular type of application.
+Non-stateful dataflow is primarily useful as a messaging fabric. Fully stateful
+dataflow works well for applications that operate over small data sets, or where
+the application's working set spans nearly the entire data set.
 
-Each one of these three decisions caters to a particular type of application.
-Non-stateful dataflow is useful as a messaging fabric. Fully stateful dataflow
-works well for applications that operate over small data sets, or where the
-application's working set spans nearly the entire data set. Windowing is a
-useful intermediate point for applications that do not need complete results,
-and are willing to trade completeness for performance, such as analytics
-workloads.
+A third intermediate solution called \emph{windowing} is an option for some
+applications. Windowed state only keeps \emph{recent} data, which ensures that
+the state remains small over time. However, this also means that old state is
+not reflected in computational outputs. If an application needs to compute over
+the full application state, such as all users or all articles, windowing does
+not work. Windowing is primarily used for analytics applications, where
+historical data is less relevant.
 
 But unfortunately, not all applications fit into one of these categories. In
 particular, user-facing applications whose working set is significantly smaller
 than their total dataset size are not well served by these options. Stateless
 operation is not feasible, since evaluating the dataflow from scratch each time
 would incur significant extra latency. Fully stateful operation is similarly
-unattractive\,---\, computational resources would need to be provisioned for
+unattractive\,---\,computational resources would need to be provisioned for
 computing over all the application's data, even though only a small subset of
-the computation output is observed. And windowing can often not be applied for
-these applications, since users may request data that lives outside the window,
-and that data must still be available.
+the computation output is observed. And windowing is frequently not applicable
+to these applications; since users may request data that lives outside the
+window, that data must still be available.
 
 This thesis presents the Noria dataflow system; a dataflow system that supports
 \emph{partially-stateful dataflow}. In Noria, operators act as though they have
-access to the full state of their inputs. While in reality, that state is lazily
+access to the full state of their inputs, while in reality that state is lazily
 constructed behind the scenes; a given piece of the input state for an operator
-is only produced and stored when the operator asks for that piece. If an
-operator only accesses part of its input state, the remaining parts are not
-computed or stored.
+is only produced and stored when the operator asks for that piece. From that
+point forward, the state is continuously updated to reflect new data added to
+the system. If an operator only accesses part of its input state, the remaining
+parts are not computed or stored.
 
 This approach provides a number of benefits. First, its memory use is
 \textbf{proportional to the working set} of the application, rather than to the
@@ -172,8 +176,8 @@ result of this.
 
 \section{Thesis: Partially Stateful Dataflow}
 
-In my thesis, I propose to give a more complete architecture for
-the partially stateful dataflow as implemented in Noria. This includes:
+In my thesis, I describe the architecture for partially stateful dataflow as
+implemented in Noria. This includes:
 
 \begin{itemize}
 
@@ -185,14 +189,13 @@ the partially stateful dataflow as implemented in Noria. This includes:
 
 In the following, I go into more detail of what that work will entail.
 
-\subsection{Technical Approach}
+\subsection{Challenges}
+\label{s:challenges}
 
-The thesis will build on the work from the 2018 OSDI paper, but go into more
-detail specifically about the partially stateful model. I will approach the work
-by specifying the key invariants of partially stateful dataflow, deriving
-problematic cases that challenge those invariants, and then outlining practical
-solutions to those cases. This includes giving a full explanation for how
-upqueries are planned, issued, and executed.
+I will approach the work by specifying the key invariants of partially stateful
+dataflow, deriving problematic cases that challenge those invariants, and then
+outlining practical solutions to those cases. This includes giving a full
+explanation for how upqueries are planned, issued, and executed.
 
 To give some intuition for why this problem is challenging, we first need to
 understand what the goal of the system as a whole is. Ultimately, the partial
@@ -459,6 +462,7 @@ responses that originated from more than one shard (like regular unions). Shard
 the requestor information in the response.
 
 \subsection{System Evaluation}
+\label{s:eval}
 
 The thesis will include extensive micro and macro benchmarks of the
 costs and benefits of introducing partial state to a dataflow system. In
@@ -554,41 +558,41 @@ The contributions of my thesis, subject to this proposal, will be:
      Establish dataflow invariants needed to ensure that upqueries
      produce correct results.
    \item \textbf{Challenges}\\
-     Detail the challenges from "Technical Approach" above.
+     Detail the challenges from \S\ref{s:challenges}.
    \end{enumerate}
  \item \textbf{Making Partial State Practical}\\
    Introduce the mechanisms outlined in the solution keys for the
-   challenges in "Technical Approach". Detail what problem they solve,
+   challenges in \S\ref{s:challenges}. Detail what problem they solve,
    their impact, and how they related back to the invariants.
  \item \textbf{Evaluation}
    \begin{enumerate}
    \item \textbf{Micro-Benchmarks}\\
      Primarily focused on benchmarking specific dataflow patterns as
-     outlined in the evaluation section of the proposal.
+     outlined in \S\ref{s:eval}.
    \item \textbf{Unsharded Lobsters}\\
-     The ``overall application impact'' benchmark outlined in the
-     evaluation section.
+     The ``overall application impact'' benchmark outlined in \S\ref{s:eval}.
    \item \textbf{Sharded Lobsters}\\
      This is the same application as above, but run with Noria sharding
      enabled. My theory at this time is that this will work \emph{correctly},
      but will suffer from certain known performance problems. I have
      ideas for how these \emph{might} be solved, which brings us to:
    \end{enumerate}
- \item \textbf{Future Work}\\
-   Efficient upqueries across multi-level sharded shuffles. Upquery key
-   subsumption: possibly no need to upquery for (A, B) if you previously
-   upqueried for A. ``Relaxed'' aggregations that assume monotonicity of
-   inputs (e.g., top-k that never upqueries). Ranged upqueries and
-   upqueries across range partitioned shards.
+ \item \textbf{Discussion}
+   \begin{enumerate*}
+   \item Ranged upqueries and upqueries across range partitioned shards.
+   \item Efficient upqueries across multi-level sharded shuffles.
+   \item Upquery key subsumption: possibly no need to upquery for $(A, B)$ if you previously upqueried for $A$.
+   \item ``Relaxed'' aggregations that assume monotonicity of inputs (e.g., top-k that never upqueries).
+   \end{enumerate*}
 \end{enumerate}
 
 \section{Proposed Timeline}
 
 \begin{itemize}
  \item \textbf{May 1st, 2020}: (already completed) Finish Noria implementation.
- \item \textbf{June 1st, 2020}: Complete chapters on Noria, partial invariants, challenges, and solutions.
- \item \textbf{July 1st, 2020}: All micro evaluations completed and written. Macro evaluations planned.
- \item \textbf{August 1st, 2020}: All evaluations completed and written. Related work finished.
+ \item \textbf{June 15th, 2020}: All results compiled and evaluation text written.
+ \item \textbf{July 1st, 2020}: Complete chapters on Noria, partial invariants, challenges, and solutions.
+ \item \textbf{August 1st, 2020}: Complete discussion chapter and related work.
 \end{itemize}
 
 \printbibliography
