@@ -1,13 +1,20 @@
-\documentclass[12pt,letterpaper,twoside]{article}
-
-% page margins
-\usepackage[margin=1.5in]{geometry}
+\documentclass[fontsize=12pt,paper=letter]{scrartcl}
+% in thesis: twoside (and read section of KOMA)
 
 % enumerate* and itemize*
 \usepackage[inline]{enumitem}
 
 % for 1.5 line spacing
-\renewcommand{\baselinestretch}{1.5}
+\usepackage{setspace}
+\onehalfspacing
+% in thesis: single spacing for table of contents
+% \AfterTOCHead{\singlespacing}
+
+% recompute page layout based on the above
+\recalctypearea
+
+% so we can splice in PDFs
+\usepackage{pdfpages}
 
 % set up bibliography
 \usepackage[
@@ -27,12 +34,72 @@
 % for \begin{comment}
 \usepackage{verbatim}
 
+% in thesis: titlehead, subject, title, subtitle
 \title{Thesis Proposal: Partial Dataflow in Noria}
 \author{Jon Gjengset}
 \begin{document}
 
-\maketitle
+% single spacing for title page
+\begin{spacing}{1}
+  \begin{titlepage}
+    \begin{center}
+      Massachusetts Institute of Technology\\
+      Department of Electrical Engineering and Computer Science%
+    \end{center}
 
+    \begin{center}
+      Proposal for Thesis Research in Partial Fulfillment\\
+      of the Requirements for the Degree of\\
+      Doctorate of Philosophy%
+    \end{center}
+
+    \begin{flushleft}
+    Title: Partial Dataflow in Noria
+
+    \vspace{\baselineskip}
+    \begin{tabular}{@{}ll}
+      Submitted by: & Jon Gjengset\\
+      &250 Elm Street, Floor 3\\
+      &Cambridge, MA, 02139\\
+    \end{tabular}
+
+    \vspace{\baselineskip}
+    Signature of Author: \makebox[2.5in]{\hrulefill}
+
+    \vspace{\baselineskip}
+    Date of Submission: \today
+
+    \vspace{\baselineskip}
+    Expected Date of Completion: October 2020
+
+    \vspace{\baselineskip}
+    Laboratory where thesis will be done: CSAIL
+
+    \vspace{\baselineskip}
+    Brief Statement of the Problem:
+    \end{flushleft}
+
+    \noindent
+    Existing dataflow systems must either materialize no state, or materialize
+    all state. The former precludes interesting applications, and the latter
+    incurs onerous memory overhead and prevents fast changes to the dataflow.
+    This thesis proposes partially stateful dataflow, where only the working set
+    of the application is materialized, and other data is fetch and computed
+    only on demand.
+  \end{titlepage}
+\end{spacing}
+% in thesis: \tableofcontents
+
+\includepdf[pages=-]{./jfrg-thesis-proposal-agreement-robert.pdf}
+\includepdf[pages=-]{./jfrg-thesis-proposal-agreement-frans.pdf}
+\includepdf[pages=-]{./jfrg-thesis-proposal-agreement-sam.pdf}
+
+\begin{center}
+  \Large Partial Dataflow in Noria
+\end{center}
+
+\vspace{0.3in}
+\noindent
 The dataflow architecture has seen a resurgence in recent years, with systems
 like Kafka\cite{kafka}, Spark\cite{spark,spark-streaming}, Flink\cite{flink}, and
 Naiad\cite{naiad} all seeing interest from academia and industry alike. The term
