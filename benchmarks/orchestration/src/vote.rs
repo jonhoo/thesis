@@ -308,7 +308,7 @@ pub(crate) async fn one(
     tracing::trace!("cleaning up instances");
     let cleanup = aws.terminate_all().await;
     tracing::debug!("done");
-    let result = result.wrap_err("benchmark failed")?;
+    let result = result?;
     let _ = cleanup.wrap_err("cleanup failed")?;
     Ok(result)
 }

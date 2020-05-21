@@ -52,9 +52,15 @@ pub(crate) async fn main() -> Result<(), Report> {
             tracing::info!("benchmark completed successfully");
 
             // copy out all the log files
-            let files = ssh.command("ls").arg("vote-*.log").output().await?;
+            let files = ssh
+                .command("ls")
+                .raw_arg("vote-*.log")
+                .output()
+                .await
+                .wrap_err("ls vote-*.log")?;
             if files.status.success() {
                 let mut sftp = ssh.sftp();
+                let mut nfiles = 0;
                 tracing::debug!("downloading log files");
                 for file in std::io::BufRead::lines(&*files.stdout) {
                     let file = file.expect("reading from Vec<u8> cannot fail");
@@ -75,11 +81,18 @@ pub(crate) async fn main() -> Result<(), Report> {
                             .await
                             .wrap_err("copy remote to local")?;
 
+                        nfiles += 1;
                         Ok::<_, Report>(())
                     }
                     .instrument(file_span)
                     .await?;
                 }
+                tracing::debug!(n = nfiles, "log files downloaded");
+            } else {
+                Err(
+                    eyre::eyre!(String::from_utf8_lossy(&files.stderr).to_string())
+                        .wrap_err("failed to find remote log files"),
+                )?;
             }
         }
 
@@ -102,7 +115,7 @@ pub(crate) async fn main() -> Result<(), Report> {
     tracing::trace!("cleaning up instances");
     let cleanup = aws.terminate_all().await;
     tracing::debug!("done");
-    let result = result.wrap_err("benchmark failed")?;
+    let result = result?;
     let _ = cleanup.wrap_err("cleanup failed")?;
     Ok(result)
 }

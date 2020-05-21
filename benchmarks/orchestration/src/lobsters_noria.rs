@@ -58,7 +58,6 @@ pub(crate) async fn one(nshards: usize, in_flight: usize) -> Result<(), Report> 
         let result: Result<(), Report> = try {
             let mut scales = ExponentialCliffSearcher::until(500, 500);
             while let Some(scale) = scales.next() {
-                eprintln!("==> running benchmark (scale: {})", scale);
                 let scale_span = tracing::info_span!("scale", scale);
                 async {
                     tracing::info!("start benchmark target");
@@ -294,7 +293,7 @@ pub(crate) async fn one(nshards: usize, in_flight: usize) -> Result<(), Report> 
     tracing::trace!("cleaning up instances");
     let cleanup = aws.terminate_all().await;
     tracing::debug!("done");
-    let result = result.wrap_err("benchmark failed")?;
+    let result = result?;
     let _ = cleanup.wrap_err("cleanup failed")?;
     Ok(result)
 }

@@ -53,9 +53,10 @@ async fn main() {
         .init();
 
     // run all benchmarks in parallel
+    tracing::info!("starting all benchmarks");
     let mut running = BTreeMap::new();
     for benchmark in benchmarks {
-        running.insert(
+        let had = running.insert(
             benchmark,
             match benchmark {
                 "vote-migration" => tokio::spawn(vote_migration::main()),
@@ -64,13 +65,23 @@ async fn main() {
                 _ => unreachable!("{}", benchmark),
             },
         );
+        assert!(had.is_none());
     }
+    tracing::trace!("all benchmarks started");
 
     // wait for all to complete before reporting any results
+    tracing::trace!("waiting for benchmarks to complete");
     let mut completed = BTreeMap::new();
     for (benchmark, completion) in running {
-        completed.insert(benchmark, completion.await);
+        let result = completion.await.expect("runtime shut down");
+        if let Err(ref e) = result {
+            tracing::error!(%benchmark, "benchmark failed: {}", e);
+        } else {
+            tracing::debug!(%benchmark, "benchmark completed");
+        }
+        completed.insert(benchmark, result);
     }
+    tracing::info!("all benchmarks completed");
 
     // show result of all benchmarks
     for (_, result) in completed {
@@ -115,6 +126,8 @@ fn noria_setup(
         Box::pin(
             async move {
                 // first, make sure we have the latest release
+                tracing::debug!("setting up host");
+                tracing::trace!("git pull");
                 let updated = ssh
                     .shell("git -C noria pull")
                     .status()
@@ -125,6 +138,7 @@ fn noria_setup(
                 }
 
                 // then, we need to compile the target binary
+                tracing::trace!("cargo build");
                 let compiled = ssh
                     .shell(format!(
                         "cd noria && cargo b -p {} --bin {} --release",
@@ -138,6 +152,7 @@ fn noria_setup(
                 }
 
                 // and then ensure that ZooKeeper is running
+                tracing::trace!("start zookeeper");
                 let zk = ssh
                     .shell("sudo systemctl start zookeeper")
                     .status()
@@ -147,6 +162,7 @@ fn noria_setup(
                     eyre::bail!("failed to start zookeeper")
                 }
 
+                tracing::debug!("setup complete");
                 Ok(())
             }
             .in_current_span(),
