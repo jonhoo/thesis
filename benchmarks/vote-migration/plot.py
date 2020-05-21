@@ -2,6 +2,7 @@
 
 import common
 import gflags
+import glob
 import matplotlib
 import matplotlib.gridspec as gridspec
 from matplotlib.ticker import AutoMinorLocator
@@ -12,8 +13,6 @@ import sys, os
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool('paper_mode', False, 'Adjusts the size of the plots for paper.')
-gflags.DEFINE_string('new_reads', 'non-blocking new reads', 'Name of new reads.')
-gflags.DEFINE_string('output', 'migration', 'Output file prefix.')
 
 try:
     sys.argv = FLAGS(sys.argv)
@@ -21,8 +20,10 @@ except gflags.FlagsError as e:
     print(e)
     sys.exit(1)
 
-output_file = FLAGS.output
+output_file = "migration"
 input_files = sys.argv[1:]
+if len(input_files) == 0:
+    input_files = glob.glob('../orchestration/vote-migration*.log')
 
 common.setup(FLAGS.paper_mode)
 
@@ -130,9 +131,8 @@ for name in order:
     # add fake bar
     ax.bar(max_time, -1000, color=common.colors['write'], label="Total write throughput", lw=0)
     if FLAGS.paper_mode:
-        ax.bar(max_time, -1000, color=common.colors['read'], label=("\\%% %s" % FLAGS.new_reads), lw=0)
+        ax.bar(max_time, -1000, color=common.colors['read'], label="\\%% non-blocking new reads", lw=0)
     else:
-        #ax.bar(max_time, -1000, color=common.colors['read'], label=("%% %s" % FLAGS.new_reads), lw=0)
         pass
 
     # "main" plot should have old+new write throughput
