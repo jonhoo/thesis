@@ -1,0 +1,4 @@
+*.hist
+*.log
+*.json
+Cargo.lock
