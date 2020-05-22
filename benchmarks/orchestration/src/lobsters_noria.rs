@@ -25,6 +25,26 @@ pub(crate) async fn one(nshards: usize, in_flight: usize) -> Result<(), Report> 
     // try to ensure we do AWS cleanup
     let result: Result<(), Report> = try {
         tracing::info!("spinning up aws instances");
+
+        fn c_setup_patch<'r>(
+            ssh: &'r mut tsunami::Session,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Report>> + Send + 'r>>
+        {
+            Box::pin(
+                async move {
+                    tracing::debug!("patch trawler");
+                    crate::output_on_success(ssh.shell("cd noria && cargo update -p trawler"))
+                        .await
+                        .wrap_err("cargo update -p trawler")?;
+
+                    crate::noria_setup("noria-applications", "lobsters-noria")(ssh).await?;
+
+                    Ok(())
+                }
+                .in_current_span(),
+            )
+        }
+
         aws.spawn(
             vec![
                 (
@@ -39,7 +59,7 @@ pub(crate) async fn one(nshards: usize, in_flight: usize) -> Result<(), Report> 
                     aws::Setup::default()
                         .instance_type("m5n.24xlarge")
                         .ami(crate::AMI, "ubuntu")
-                        .setup(crate::noria_setup("noria-applications", "lobsters-noria")),
+                        .setup(c_setup_patch),
                 ),
             ],
             Some(Duration::from_secs(2 * 60)),
