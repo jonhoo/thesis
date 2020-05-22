@@ -137,3 +137,25 @@ pub(crate) async fn write_stats(
 
     Ok(())
 }
+
+#[instrument(debug, skip(ssh))]
+pub(crate) async fn vmrss(ssh: &tsunami::Session) -> Result<usize, Report> {
+    let pid = crate::output_on_success(ssh.command("pgrep").arg("-o").arg("noria-server"))
+        .await
+        .wrap_err("pgrep")?;
+    let pid = String::from_utf8_lossy(&pid.0);
+    let pid: usize = match pid.trim().parse() {
+        Ok(pid) => pid,
+        Err(_) => Err(eyre::eyre!(pid.to_string()).wrap_err("failed to parse server pid"))?,
+    };
+
+    let vmrss = crate::output_on_success(ssh.shell(format!("grep VmRSS /proc/{}/status", pid)))
+        .await
+        .wrap_err("grep VmRSS")?;
+    let vmrss = String::from_utf8_lossy(&vmrss.0);
+    vmrss
+        .split_whitespace()
+        .nth(1)
+        .and_then(|text| text.parse().ok())
+        .ok_or_else(|| eyre::eyre!(vmrss.to_string()).wrap_err("could not parse VmRSS"))
+}

@@ -37,63 +37,55 @@ pub(crate) async fn main() -> Result<(), Report> {
 
         tracing::info!("running benchmark");
         tracing::trace!("launching remote process");
-        let status = crate::run_with_stderr(
+        let _ = crate::output_on_success(
             crate::noria_bin(ssh, "noria-applications", "vote-migration")
                 .arg("--migrate=90")
                 .arg("--runtime=180")
                 .arg("--do-it-all")
-                .arg("--articles=2000000"),
-            "main",
+                .arg("--articles=2000000")
+                .stdout(std::process::Stdio::null()),
         )
         .await?;
-        tracing::debug!("remote process exited");
 
-        if status.success() {
-            tracing::info!("benchmark completed successfully");
+        tracing::info!("benchmark completed successfully");
 
-            // copy out all the log files
-            let files = ssh
-                .command("ls")
-                .raw_arg("vote-*.log")
-                .output()
-                .await
-                .wrap_err("ls vote-*.log")?;
-            if files.status.success() {
-                let mut sftp = ssh.sftp();
-                let mut nfiles = 0;
-                tracing::debug!("downloading log files");
-                for file in std::io::BufRead::lines(&*files.stdout) {
-                    let file = file.expect("reading from Vec<u8> cannot fail");
-                    let file_span = tracing::trace_span!("file", file = &*file);
-                    async {
-                        tracing::trace!("downloading");
-                        let mut remote = sftp
-                            .read_from(&file)
-                            .in_current_span()
-                            .await
-                            .wrap_err("open remote file")?;
-                        let mut local = tokio::fs::File::create(&file)
-                            .in_current_span()
-                            .await
-                            .wrap_err("create local file")?;
-                        tokio::io::copy(&mut remote, &mut local)
-                            .in_current_span()
-                            .await
-                            .wrap_err("copy remote to local")?;
+        // copy out all the log files
+        let files = ssh
+            .command("ls")
+            .raw_arg("vote-*.log")
+            .output()
+            .await
+            .wrap_err("ls vote-*.log")?;
+        if files.status.success() {
+            let mut sftp = ssh.sftp();
+            let mut nfiles = 0;
+            tracing::debug!("downloading log files");
+            for file in std::io::BufRead::lines(&*files.stdout) {
+                let file = file.expect("reading from Vec<u8> cannot fail");
+                let file_span = tracing::trace_span!("file", file = &*file);
+                async {
+                    tracing::trace!("downloading");
+                    let mut remote = sftp
+                        .read_from(&file)
+                        .in_current_span()
+                        .await
+                        .wrap_err("open remote file")?;
+                    let mut local = tokio::fs::File::create(&file)
+                        .in_current_span()
+                        .await
+                        .wrap_err("create local file")?;
+                    tokio::io::copy(&mut remote, &mut local)
+                        .in_current_span()
+                        .await
+                        .wrap_err("copy remote to local")?;
 
-                        nfiles += 1;
-                        Ok::<_, Report>(())
-                    }
-                    .instrument(file_span)
-                    .await?;
+                    nfiles += 1;
+                    Ok::<_, Report>(())
                 }
-                tracing::debug!(n = nfiles, "log files downloaded");
-            } else {
-                Err(
-                    eyre::eyre!(String::from_utf8_lossy(&files.stderr).to_string())
-                        .wrap_err("failed to find remote log files"),
-                )?;
+                .instrument(file_span)
+                .await?;
             }
+            tracing::debug!(n = nfiles, "log files downloaded");
         }
 
         tracing::debug!("cleaning up");

@@ -1,4 +1,4 @@
-#![feature(try_blocks)]
+#![feature(try_blocks, label_break_value)]
 
 const AMI: &str = "ami-037890a1186dbfcb8";
 
@@ -189,45 +189,35 @@ fn noria_bin<'s>(
 }
 
 #[instrument(debug, skip(cmd))]
-async fn run_with_stderr(
-    cmd: &mut openssh::Command<'_>,
-    p: &'static str,
-) -> Result<std::process::ExitStatus, Report> {
-    use tokio::{io::AsyncBufReadExt, stream::StreamExt};
-
-    tracing::debug!("execute");
-    let mut remote = cmd
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .wrap_err("spawn")?;
-    let mut stderr = tokio::io::BufReader::new(remote.stderr().take().unwrap()).lines();
-
-    while let Some(line) = stderr.next().await.transpose().wrap_err("next line")? {
-        tracing::trace!(message = &*line);
+async fn output_on_success<'a, C: std::borrow::BorrowMut<openssh::Command<'a>>>(
+    mut cmd: C,
+) -> Result<(Vec<u8>, Vec<u8>), Report> {
+    let proc = cmd
+        .borrow_mut()
+        .output()
+        .await
+        .wrap_err("failed to execute")?;
+    if proc.status.success() {
+        Ok((proc.stdout, proc.stderr))
+    } else {
+        Err(
+            eyre::eyre!(String::from_utf8_lossy(&proc.stderr).to_string())
+                .wrap_err("execution failed"),
+        )
     }
-
-    remote.wait().await.wrap_err("wait").map_err(Into::into)
 }
 
 #[instrument(debug, skip(ssh))]
 pub(crate) async fn load(ssh: &tsunami::Session) -> Result<(f64, f64), Report> {
-    let load = ssh
-        .command("awk")
-        .arg("{print $1\" \"$2}")
-        .arg("/proc/loadavg")
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()
-        .await
-        .wrap_err("awk")?;
-    if !load.status.success() {
-        return Err(
-            eyre::eyre!(String::from_utf8_lossy(&load.stderr).to_string())
-                .wrap_err("failed to measure server load"),
-        );
-    }
+    let load = crate::output_on_success(
+        ssh.command("awk")
+            .arg("{print $1\" \"$2}")
+            .arg("/proc/loadavg"),
+    )
+    .await
+    .wrap_err("awk")?;
 
-    let load = String::from_utf8_lossy(&load.stdout);
+    let load = String::from_utf8_lossy(&load.0);
 
     let mut loads = load
         .split_whitespace()
