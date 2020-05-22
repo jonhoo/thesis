@@ -7,8 +7,8 @@ use tsunami::providers::aws;
 use tsunami::providers::Launcher;
 
 /// vote-migration; requires only one machine
-#[instrument(name = "vote_migration")]
-pub(crate) async fn main() -> Result<(), Report> {
+#[instrument(name = "vote_migration", skip(exit))]
+pub(crate) async fn main(mut exit: tokio::sync::watch::Receiver<bool>) -> Result<(), Report> {
     let mut aws = crate::launcher();
     // shouldn't take _that_ long
     aws.set_max_instance_duration(1);
@@ -36,57 +36,80 @@ pub(crate) async fn main() -> Result<(), Report> {
         tracing::debug!("connected");
 
         tracing::info!("running benchmark");
-        tracing::trace!("launching remote process");
-        let _ = crate::output_on_success(
-            crate::noria_bin(ssh, "noria-applications", "vote-migration")
-                .arg("--migrate=90")
-                .arg("--runtime=180")
-                .arg("--do-it-all")
-                .arg("--articles=2000000")
-                .stdout(std::process::Stdio::null()),
-        )
-        .await?;
 
-        tracing::info!("benchmark completed successfully");
+        // work around https://github.com/rust-lang/rust/issues/48594#issuecomment-632729902
+        async {
+            'run: {
+                tracing::trace!("launching remote process");
+                let mut benchmark = crate::noria_bin(ssh, "noria-applications", "vote-migration");
+                benchmark
+                    .arg("--migrate=90")
+                    .arg("--runtime=180")
+                    .arg("--do-it-all")
+                    .arg("--articles=2000000")
+                    .stdout(std::process::Stdio::null());
+                let benchmark = crate::output_on_success(benchmark);
 
-        // copy out all the log files
-        let files = ssh
-            .command("ls")
-            .raw_arg("vote-*.log")
-            .output()
-            .await
-            .wrap_err("ls vote-*.log")?;
-        if files.status.success() {
-            let mut sftp = ssh.sftp();
-            let mut nfiles = 0;
-            tracing::debug!("downloading log files");
-            for file in std::io::BufRead::lines(&*files.stdout) {
-                let file = file.expect("reading from Vec<u8> cannot fail");
-                let file_span = tracing::trace_span!("file", file = &*file);
-                async {
-                    tracing::trace!("downloading");
-                    let mut remote = sftp
-                        .read_from(&file)
-                        .in_current_span()
-                        .await
-                        .wrap_err("open remote file")?;
-                    let mut local = tokio::fs::File::create(&file)
-                        .in_current_span()
-                        .await
-                        .wrap_err("create local file")?;
-                    tokio::io::copy(&mut remote, &mut local)
-                        .in_current_span()
-                        .await
-                        .wrap_err("copy remote to local")?;
-
-                    nfiles += 1;
-                    Ok::<_, Report>(())
+                if let Some(false) = exit.recv().await {
+                } else {
+                    tracing::info!("exiting as instructed");
+                    break 'run;
                 }
-                .instrument(file_span)
-                .await?;
+
+                tokio::select! {
+                    r = benchmark => {
+                        let _ = r?;
+                    }
+                    _ = exit.recv() => {
+                        tracing::info!("exiting as instructed");
+                        break 'run;
+                    }
+                };
+
+                tracing::info!("benchmark completed successfully");
+
+                // copy out all the log files
+                let files = ssh
+                    .command("ls")
+                    .raw_arg("vote-*.log")
+                    .output()
+                    .await
+                    .wrap_err("ls vote-*.log")?;
+                if files.status.success() {
+                    let mut sftp = ssh.sftp();
+                    let mut nfiles = 0;
+                    tracing::debug!("downloading log files");
+                    for file in std::io::BufRead::lines(&*files.stdout) {
+                        let file = file.expect("reading from Vec<u8> cannot fail");
+                        let file_span = tracing::trace_span!("file", file = &*file);
+                        async {
+                            tracing::trace!("downloading");
+                            let mut remote = sftp
+                                .read_from(&file)
+                                .in_current_span()
+                                .await
+                                .wrap_err("open remote file")?;
+                            let mut local = tokio::fs::File::create(&file)
+                                .in_current_span()
+                                .await
+                                .wrap_err("create local file")?;
+                            tokio::io::copy(&mut remote, &mut local)
+                                .in_current_span()
+                                .await
+                                .wrap_err("copy remote to local")?;
+
+                            nfiles += 1;
+                            Ok::<_, Report>(())
+                        }
+                        .instrument(file_span)
+                        .await?;
+                    }
+                    tracing::debug!(n = nfiles, "log files downloaded");
+                }
             }
-            tracing::debug!(n = nfiles, "log files downloaded");
+            Ok::<_, Report>(())
         }
+        .await?;
 
         tracing::debug!("cleaning up");
         tracing::trace!("cleaning up ssh connections");

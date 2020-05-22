@@ -12,11 +12,11 @@ use tsunami::providers::aws;
 use tsunami::Tsunami;
 
 /// lobsters-noria; requires two machines: a client and a server
-#[instrument(name = "lobsters-noria")]
-pub(crate) async fn main() -> Result<(), Report> {
+#[instrument(name = "lobsters-noria", skip(exit))]
+pub(crate) async fn main(exit: tokio::sync::watch::Receiver<bool>) -> Result<(), Report> {
     let results = futures_util::future::join_all(vec![
-        tokio::spawn(one(0, true).in_current_span()),
-        tokio::spawn(one(0, false).in_current_span()),
+        tokio::spawn(one(0, true, exit.clone()).in_current_span()),
+        tokio::spawn(one(0, false, exit.clone()).in_current_span()),
     ])
     .await;
 
@@ -27,8 +27,12 @@ pub(crate) async fn main() -> Result<(), Report> {
     Ok(())
 }
 
-#[instrument]
-pub(crate) async fn one(nshards: usize, partial: bool) -> Result<(), Report> {
+#[instrument(err, skip(exit))]
+pub(crate) async fn one(
+    nshards: usize,
+    partial: bool,
+    mut exit: tokio::sync::watch::Receiver<bool>,
+) -> Result<(), Report> {
     let mut aws = crate::launcher();
     // aws.set_max_instance_duration(3);
 
@@ -88,6 +92,12 @@ pub(crate) async fn one(nshards: usize, partial: bool) -> Result<(), Report> {
         let result: Result<(), Report> = try {
             let mut scales = ExponentialCliffSearcher::until(500, 500);
             while let Some(scale) = scales.next() {
+                if let Some(false) = exit.recv().await {
+                } else {
+                    tracing::info!("exiting as instructed");
+                    break;
+                }
+
                 let scale_span = tracing::info_span!("scale", scale);
                 async {
                     tracing::info!("start benchmark target");
@@ -116,37 +126,25 @@ pub(crate) async fn one(nshards: usize, partial: bool) -> Result<(), Report> {
 
                     'run: {
                         tracing::debug!("prime");
-                        let prime = lobsters_client(c, server, scale)
+                        let mut prime = lobsters_client(c, server, scale);
+                        let prime = prime
                             .arg("--warmup=0")
                             .arg("--runtime=0")
                             .arg("--prime")
                             .stdout(std::process::Stdio::null())
-                            .output()
-                            .await
-                            .wrap_err("failed to prime")?;
+                            .output();
 
-                        if prime.status.success() {
-                            tracing::trace!("priming succeeded");
-                            tracing::debug!("warm");
-                            let warm = lobsters_client(c, server, scale)
-                                .arg("--warmup=30")
-                                .arg("--runtime=0")
-                                .stdout(std::process::Stdio::null())
-                                .output()
-                                .await
-                                .wrap_err("failed to warm")?;
-
-                            if warm.status.success() {
-                                tracing::trace!("warming succeeded");
-                            } else {
-                                tracing::warn!(
-                                    "warming failed:\n{}",
-                                    String::from_utf8_lossy(&warm.stderr)
-                                );
-                                scales.overloaded();
+                        // priming in lobsters-noria is slow, so allow interrupting with ctrl-c
+                        let prime = tokio::select! {
+                            r = prime => {
+                                r.wrap_err("failed to prime")?
+                            }
+                            _ = exit.recv() => {
                                 break 'run;
                             }
-                        } else {
+                        };
+
+                        if !prime.status.success() {
                             tracing::warn!(
                                 "priming failed:\n{}",
                                 String::from_utf8_lossy(&prime.stderr)
@@ -155,7 +153,32 @@ pub(crate) async fn one(nshards: usize, partial: bool) -> Result<(), Report> {
                             break 'run;
                         }
 
+                        tracing::trace!("priming succeeded");
+                        tracing::debug!("warm");
+                        let warm = lobsters_client(c, server, scale)
+                            .arg("--warmup=30")
+                            .arg("--runtime=0")
+                            .stdout(std::process::Stdio::null())
+                            .output()
+                            .await
+                            .wrap_err("failed to warm")?;
+
+                        if !warm.status.success() {
+                            tracing::warn!(
+                                "warming failed:\n{}",
+                                String::from_utf8_lossy(&warm.stderr)
+                            );
+                            scales.overloaded();
+                            break 'run;
+                        }
+
                         tracing::trace!("warming succeeded");
+
+                        if let Some(false) = exit.recv().await {
+                        } else {
+                            break 'run;
+                        }
+
                         tracing::debug!("benchmark");
                         let mut bench = lobsters_client(c, server, scale)
                             .arg("--warmup=40")
@@ -175,81 +198,99 @@ pub(crate) async fn one(nshards: usize, partial: bool) -> Result<(), Report> {
                         let mut results = tokio::io::BufWriter::new(results);
                         let mut target = None;
                         let mut actual = None;
-                        while let Some(line) = stdout.next().await {
-                            let line = line.wrap_err("failed to read client output")?;
-                            results.write_all(line.as_bytes()).await?;
-                            results.write_all(b"\n").await?;
+                        let fin = async {
+                            while let Some(line) = stdout.next().await {
+                                let line = line.wrap_err("failed to read client output")?;
+                                results.write_all(line.as_bytes()).await?;
+                                results.write_all(b"\n").await?;
 
-                            if target.is_none() || actual.is_none() {
-                                if line.starts_with("# target ops/s") {
-                                    target =
-                                        Some(line.rsplitn(2, ' ').next().unwrap().parse::<f64>()?);
-                                } else if line.starts_with("# generated ops/s") {
-                                    actual =
-                                        Some(line.rsplitn(2, ' ').next().unwrap().parse::<f64>()?);
+                                if target.is_none() || actual.is_none() {
+                                    if line.starts_with("# target ops/s") {
+                                        target = Some(
+                                            line.rsplitn(2, ' ').next().unwrap().parse::<f64>()?,
+                                        );
+                                    } else if line.starts_with("# generated ops/s") {
+                                        actual = Some(
+                                            line.rsplitn(2, ' ').next().unwrap().parse::<f64>()?,
+                                        );
+                                    }
+                                    if let (Some(target), Some(actual)) = (target, actual) {
+                                        if actual < target * 4.0 / 5.0 {
+                                            tracing::warn!(%actual, %target, "low throughput");
+                                            scales.overloaded();
+                                        }
+                                    }
                                 }
-                                if let (Some(target), Some(actual)) = (target, actual) {
-                                    if actual < target * 4.0 / 5.0 {
-                                        tracing::warn!(%actual, %target, "low throughput");
+
+                                // Submit          sojourn         95      4484
+                                if line.contains("sojourn") {
+                                    let mut fields = line.trim().split_whitespace();
+                                    let field = fields.next().unwrap();
+                                    if let "Login" | "Logout" = field {
+                                        // ignore not-that-interesting endpoints
+                                        continue;
+                                    }
+
+                                    let metric = if let Some(metric) = fields.next() {
+                                        metric
+                                    } else {
+                                        tracing::warn!(case = "bad line", message = &*line);
+                                        continue;
+                                    };
+                                    if metric != "sojourn" {
+                                        assert_eq!(metric, "processing");
+                                        continue;
+                                    }
+
+                                    let pct = if let Some(pct) = fields.next() {
+                                        pct
+                                    } else {
+                                        tracing::warn!(case = "bad line", message = &*line);
+                                        continue;
+                                    };
+                                    if pct != "95" {
+                                        assert!(
+                                            pct == "50" || pct == "99" || pct == "100",
+                                            "{}",
+                                            pct
+                                        );
+                                        continue;
+                                    }
+
+                                    let ms = if let Some(ms) = fields.next() {
+                                        ms
+                                    } else {
+                                        tracing::warn!(case = "bad line", message = &*line);
+                                        continue;
+                                    };
+                                    let ms: usize = if let Ok(ms) = ms.parse() {
+                                        ms
+                                    } else {
+                                        tracing::warn!(case = "bad line", message = &*line);
+                                        continue;
+                                    };
+                                    if ms > 200 {
+                                        tracing::warn!(
+                                            endpoint = field,
+                                            sojourn = ms,
+                                            "high sojourn latency"
+                                        );
                                         scales.overloaded();
                                     }
                                 }
                             }
+                            results.flush().await?;
+                            Ok::<_, Report>(())
+                        };
 
-                            // Submit          sojourn         95      4484
-                            if line.contains("sojourn") {
-                                let mut fields = line.trim().split_whitespace();
-                                let field = fields.next().unwrap();
-                                if let "Login" | "Logout" = field {
-                                    // ignore not-that-interesting endpoints
-                                    continue;
-                                }
-
-                                let metric = if let Some(metric) = fields.next() {
-                                    metric
-                                } else {
-                                    tracing::warn!(case = "bad line", message = &*line);
-                                    continue;
-                                };
-                                if metric != "sojourn" {
-                                    assert_eq!(metric, "processing");
-                                    continue;
-                                }
-
-                                let pct = if let Some(pct) = fields.next() {
-                                    pct
-                                } else {
-                                    tracing::warn!(case = "bad line", message = &*line);
-                                    continue;
-                                };
-                                if pct != "95" {
-                                    assert!(pct == "50" || pct == "99" || pct == "100", "{}", pct);
-                                    continue;
-                                }
-
-                                let ms = if let Some(ms) = fields.next() {
-                                    ms
-                                } else {
-                                    tracing::warn!(case = "bad line", message = &*line);
-                                    continue;
-                                };
-                                let ms: usize = if let Ok(ms) = ms.parse() {
-                                    ms
-                                } else {
-                                    tracing::warn!(case = "bad line", message = &*line);
-                                    continue;
-                                };
-                                if ms > 200 {
-                                    tracing::warn!(
-                                        endpoint = field,
-                                        sojourn = ms,
-                                        "high sojourn latency"
-                                    );
-                                    scales.overloaded();
-                                }
+                        tokio::select! {
+                            r = fin => {
+                                let _ = r?;
                             }
-                        }
-                        results.flush().await?;
+                            _ = exit.recv() => {
+                                break 'run;
+                            }
+                        };
 
                         if target.is_none() || actual.is_none() {
                             tracing::warn!("missing throughput line, probably overloaded");

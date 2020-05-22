@@ -12,12 +12,12 @@ use tsunami::providers::aws;
 use tsunami::Tsunami;
 
 /// vote; requires at least two machines: a server and 1+ clients
-#[instrument(name = "vote")]
-pub(crate) async fn main() -> Result<(), Report> {
+#[instrument(name = "vote", skip(exit))]
+pub(crate) async fn main(exit: tokio::sync::watch::Receiver<bool>) -> Result<(), Report> {
     let results = futures_util::future::join_all(vec![
-        tokio::spawn(one(19, "skewed", 1, true).in_current_span()),
-        tokio::spawn(one(19, "skewed", 6, true).in_current_span()),
-        tokio::spawn(one(19, "skewed", 6, false).in_current_span()),
+        tokio::spawn(one(19, "skewed", 1, true, exit.clone()).in_current_span()),
+        tokio::spawn(one(19, "skewed", 6, true, exit.clone()).in_current_span()),
+        tokio::spawn(one(19, "skewed", 6, false, exit.clone()).in_current_span()),
     ])
     .await;
 
@@ -28,12 +28,13 @@ pub(crate) async fn main() -> Result<(), Report> {
     Ok(())
 }
 
-#[instrument]
+#[instrument(err, skip(exit))]
 pub(crate) async fn one(
     write_every: usize,
     distribution: &'static str,
     nclients: usize,
     partial: bool,
+    mut exit: tokio::sync::watch::Receiver<bool>,
 ) -> Result<(), Report> {
     let mut aws = crate::launcher();
     // aws.set_max_instance_duration(3);
@@ -79,6 +80,12 @@ pub(crate) async fn one(
         let result: Result<(), Report> = try {
             let mut targets = ExponentialCliffSearcher::until(100_000, 400_000);
             while let Some(target) = targets.next() {
+                if let Some(false) = exit.recv().await {
+                } else {
+                    tracing::info!("exiting as instructed");
+                    break;
+                }
+
                 let target_span = tracing::info_span!("target", target);
                 async {
                     tracing::info!("start benchmark target");
@@ -127,6 +134,7 @@ pub(crate) async fn one(
                         }
 
                         tracing::trace!("priming succeeded");
+
                         tracing::debug!("benchmark");
                         let mut benches = cs
                             .iter()
@@ -157,53 +165,67 @@ pub(crate) async fn one(
                         let results = results.await.wrap_err("failed to create local log file")?;
                         let mut results = tokio::io::BufWriter::new(results);
                         let mut got_lines = false;
-                        for bench in &mut benches {
-                            let mut stdout =
-                                tokio::io::BufReader::new(bench.stdout().take().unwrap()).lines();
-                            while let Some(line) = stdout.next().await {
-                                let line = line.wrap_err("failed to read client output")?;
-                                results.write_all(line.as_bytes()).await?;
-                                results.write_all(b"\n").await?;
+                        let fin = async {
+                            for bench in &mut benches {
+                                let mut stdout =
+                                    tokio::io::BufReader::new(bench.stdout().take().unwrap())
+                                        .lines();
+                                while let Some(line) = stdout.next().await {
+                                    let line = line.wrap_err("failed to read client output")?;
+                                    results.write_all(line.as_bytes()).await?;
+                                    results.write_all(b"\n").await?;
 
-                                if !line.starts_with('#') {
-                                    let mut fields = line.split_whitespace();
-                                    let field = fields.next().unwrap();
-                                    let pct = fields.next();
-                                    let sjrn = fields.next();
+                                    if !line.starts_with('#') {
+                                        let mut fields = line.split_whitespace();
+                                        let field = fields.next().unwrap();
+                                        let pct = fields.next();
+                                        let sjrn = fields.next();
 
-                                    if let (Some(pct), Some(sjrn)) = (pct, sjrn) {
-                                        let pct: Result<u32, _> = pct.parse();
-                                        let sjrn: Result<u32, _> = sjrn.parse();
-                                        if let (Ok(pct), Ok(sjrn)) = (pct, sjrn) {
-                                            got_lines = true;
+                                        if let (Some(pct), Some(sjrn)) = (pct, sjrn) {
+                                            let pct: Result<u32, _> = pct.parse();
+                                            let sjrn: Result<u32, _> = sjrn.parse();
+                                            if let (Ok(pct), Ok(sjrn)) = (pct, sjrn) {
+                                                got_lines = true;
 
-                                            if pct == 50 && (sjrn > 100_000 || sjrn == 0) {
-                                                tracing::warn!(
-                                                    endpoint = field,
-                                                    sojourn = sjrn,
-                                                    "high sojourn latency"
-                                                );
-                                                targets.overloaded();
+                                                if pct == 50 && (sjrn > 100_000 || sjrn == 0) {
+                                                    tracing::warn!(
+                                                        endpoint = field,
+                                                        sojourn = sjrn,
+                                                        "high sojourn latency"
+                                                    );
+                                                    targets.overloaded();
+                                                }
+                                                continue;
                                             }
-                                            continue;
                                         }
-                                    }
-                                    tracing::warn!(case = "bad line", message = &*line);
-                                } else if line.starts_with("# generated ops/s")
-                                    | line.starts_with("# actual ops/s")
-                                {
-                                    let mut fields = line.split_whitespace();
-                                    let rate: f64 = fields.next_back().unwrap().parse().unwrap();
-                                    if target_per_client as f64 - rate
-                                        > 0.05 * target_per_client as f64
+                                        tracing::warn!(case = "bad line", message = &*line);
+                                    } else if line.starts_with("# generated ops/s")
+                                        | line.starts_with("# actual ops/s")
                                     {
-                                        tracing::warn!(%rate, "low throughput");
-                                        targets.overloaded();
+                                        let mut fields = line.split_whitespace();
+                                        let rate: f64 =
+                                            fields.next_back().unwrap().parse().unwrap();
+                                        if target_per_client as f64 - rate
+                                            > 0.05 * target_per_client as f64
+                                        {
+                                            tracing::warn!(%rate, "low throughput");
+                                            targets.overloaded();
+                                        }
                                     }
                                 }
                             }
-                        }
-                        results.flush().await?;
+                            results.flush().await?;
+                            Ok::<_, Report>(())
+                        };
+
+                        tokio::select! {
+                            r = fin => {
+                                let _ = r?;
+                            }
+                            _ = exit.recv() => {
+                                break 'run;
+                            }
+                        };
 
                         if !got_lines {
                             tracing::warn!("missing throughput line, probably overloaded");

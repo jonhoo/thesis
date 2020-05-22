@@ -52,6 +52,16 @@ async fn main() {
         .with(ErrorLayer::default())
         .init();
 
+    // set up a mechanism for stopping the program early
+    let (tx, rx) = tokio::sync::watch::channel(false);
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to listen for ^c");
+        tracing::info!("exit signal received");
+        let _ = tx.broadcast(true);
+    });
+
     // run all benchmarks in parallel
     tracing::info!("starting all benchmarks");
     let mut running = BTreeMap::new();
@@ -59,9 +69,9 @@ async fn main() {
         let had = running.insert(
             benchmark,
             match benchmark {
-                "vote-migration" => tokio::spawn(vote_migration::main()),
-                "vote" => tokio::spawn(vote::main()),
-                "lobsters-noria" => tokio::spawn(lobsters_noria::main()),
+                "vote-migration" => tokio::spawn(vote_migration::main(rx.clone())),
+                "vote" => tokio::spawn(vote::main(rx.clone())),
+                "lobsters-noria" => tokio::spawn(lobsters_noria::main(rx.clone())),
                 _ => unreachable!("{}", benchmark),
             },
         );
