@@ -80,8 +80,7 @@ pub(crate) async fn one(
         let result: Result<(), Report> = try {
             let mut targets = ExponentialCliffSearcher::until(100_000, 400_000);
             while let Some(target) = targets.next() {
-                if let Some(false) = exit.recv().await {
-                } else {
+                if *exit.borrow() {
                     tracing::info!("exiting as instructed");
                     break;
                 }
@@ -134,6 +133,10 @@ pub(crate) async fn one(
                         }
 
                         tracing::trace!("priming succeeded");
+
+                        if *exit.borrow() {
+                            break 'run;
+                        }
 
                         tracing::debug!("benchmark");
                         let mut benches = cs

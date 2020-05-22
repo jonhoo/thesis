@@ -92,8 +92,7 @@ pub(crate) async fn one(
         let result: Result<(), Report> = try {
             let mut scales = ExponentialCliffSearcher::until(500, 500);
             while let Some(scale) = scales.next() {
-                if let Some(false) = exit.recv().await {
-                } else {
+                if *exit.borrow() {
                     tracing::info!("exiting as instructed");
                     break;
                 }
@@ -174,8 +173,7 @@ pub(crate) async fn one(
 
                         tracing::trace!("warming succeeded");
 
-                        if let Some(false) = exit.recv().await {
-                        } else {
+                        if *exit.borrow() {
                             break 'run;
                         }
 
