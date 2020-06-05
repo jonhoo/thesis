@@ -1,6 +1,6 @@
 #![feature(try_blocks, label_break_value)]
 
-const AMI: &str = "ami-037890a1186dbfcb8";
+const AMI: &str = "ami-0dd3b8a95b3f8f7a6";
 
 use clap::{App, Arg};
 use color_eyre::Report;
@@ -12,15 +12,158 @@ use tracing::instrument;
 use tracing_futures::Instrument;
 use tsunami::providers::aws;
 
+#[derive(Debug, Clone)]
+struct Context {
+    server_type: String,
+    client_type: String,
+    exit: tokio::sync::watch::Receiver<bool>,
+}
+
+#[macro_export]
+macro_rules! explore {
+    ([$($arg:expr),+,], $one:ident, $ctx:ident, $min:expr) => {{
+        crate::explore!([$($arg),*], $one, $ctx, $min)
+    }};
+    ([$($arg:expr),*], $one:ident, $ctx:ident, $min:expr) => {{
+        use tokio::stream::StreamExt;
+
+        let targets = vec![$($arg),*];
+        let mut futs = futures_util::stream::futures_unordered::FuturesUnordered::new();
+        let mut maxed_out_at = Vec::new();
+        for (i, target) in targets.iter().enumerate() {
+            maxed_out_at.push(Ok(0));
+
+            if futs.len() >= 3 {
+                // don't overwhelm ec2
+                let (i, r) = futs.next().await.expect(".len() > 0");
+                maxed_out_at[i] = r;
+            }
+
+            let mut ctx = $ctx.clone();
+            // we need to await exit so that it only yields again when we should exit
+            // we need to do this for _every_ clone of exit
+            if let Some(false) = ctx.exit.recv().await {
+            } else {
+                tracing::info!("exiting as instructed");
+                maxed_out_at.into_iter().collect::<Result<Vec<_>, _>>()?;
+                return Ok(());
+            }
+
+            let fut = tokio::spawn($one(target.clone(), None, ctx).in_current_span());
+            futs.push(async move {
+                (i, fut.await.expect("runtime went away?"))
+            });
+        }
+
+        tracing::debug!("waiting for primary groups to finish");
+
+        // collect the remaining results
+        if !futs.is_empty() {
+            while let Some((i, r)) = futs.next().await {
+                maxed_out_at[i] = r;
+            }
+        }
+
+        // surface any errors. note that we do this _after_ we've awaited all the experiments, so
+        // we don't termiante them early. if there are multiple errors, we reports just the first,
+        // and that's fine.
+        let maxed_out_at = maxed_out_at.into_iter().collect::<Result<Vec<_>, _>>()?;
+
+        tracing::info!("all primary groups finished");
+
+        if *$ctx.exit.borrow() {
+            tracing::info!("exiting as instructed");
+            return Ok(());
+        }
+
+        let mut need_to_run = std::collections::HashMap::new();
+        for (_, &last_good) in maxed_out_at.iter().enumerate() {
+            if last_good == 0 {
+                // it never got off the ground
+                continue;
+            }
+
+            // we need to run all the _other_ targets at this load
+            for (oi, &olast_good) in maxed_out_at.iter().enumerate() {
+                if (!$min && olast_good > last_good) || ($min && olast_good < last_good) {
+                    // this other target maxed out at an "easier" number than we did
+                    // so it did _not_ run this particular iteration step
+                    tracing::debug!(parameters = ?targets[oi], load = last_good, "found missing data point");
+                    need_to_run.entry(oi).or_insert_with(Vec::new).push(last_good);
+                }
+            }
+        }
+
+        // now run all the missing datapoints
+        let mut results = Vec::new();
+        let mut futs = futures_util::stream::futures_unordered::FuturesUnordered::new();
+        for (i, mut loads) in need_to_run {
+            // make sure we don't run the same load twice
+            loads.sort_unstable();
+            loads.dedup();
+
+            if futs.len() >= 3 {
+                // same deal again -- don't overwhelm ec2
+                results.push(futs.next().await.expect(".len() > 0"));
+            }
+
+            let mut ctx = $ctx.clone();
+            if let Some(false) = ctx.exit.recv().await {
+            } else {
+                tracing::info!("exiting as instructed");
+                results.into_iter().collect::<Result<Vec<_>, _>>()?;
+                return Ok(());
+            }
+
+
+            let fut = tokio::spawn($one(targets[i], Some(loads), ctx).in_current_span());
+            futs.push(async move {
+                fut.await.expect("runtime went away?")
+            });
+        }
+
+        tracing::debug!("waiting for secondary groups to finish");
+
+        // surface errors again
+        if !futs.is_empty() {
+            while let Some(r) = futs.next().await {
+                results.push(r);
+            }
+        }
+        let _ = results.into_iter().collect::<Result<Vec<_>, _>>()?;
+
+        tracing::info!("all secondary groups finished");
+
+        // aaaand finally we're done!
+        Ok(())
+    }};
+
+    (@IT $tup:ident, $head:expr, $n:expr) => {
+        $tup.$n
+    };
+
+    (@IT $tup:ident, $head:expr; $($tail:expr);+, $n:expr) => {
+        $tup.$n, crate::explore!(@IT $tup, $($tail);+, $n + 1)
+    };
+}
+
 mod lobsters_noria;
+mod lobsters_noria_mem;
 mod vote;
+mod vote_mem;
 mod vote_migration;
 
 pub(crate) mod server;
 
 #[tokio::main]
 async fn main() {
-    let mut benchmarks = vec!["vote-migration", "vote", "lobsters-noria"];
+    let mut benchmarks = vec![
+        "vote-migration",
+        "vote",
+        "vote-memory",
+        "lobsters-noria",
+        "lobsters-noria-memory",
+    ];
 
     let matches = App::new("Noria benchmark orchestrator")
         .author("Jon Gjengset <jon@tsp.io>")
@@ -32,6 +175,18 @@ async fn main() {
                 .possible_values(&benchmarks)
                 .help("Run only the specified benchmarks [all by default]"),
         )
+        .arg(
+            Arg::with_name("server")
+                .long("server-instance")
+                .default_value("r5.4xlarge")
+                .help("Run the noria server on an instance of this type"),
+        )
+        .arg(
+            Arg::with_name("client")
+                .long("client-instance")
+                .default_value("m5.4xlarge")
+                .help("Run the benchmark clients on instances of this type"),
+        )
         .get_matches();
 
     // only run specified benchmarks
@@ -39,6 +194,15 @@ async fn main() {
         benchmarks.clear();
         benchmarks.extend(vs);
     }
+
+    let server_type = matches
+        .value_of("server")
+        .expect("has default value")
+        .to_string();
+    let client_type = matches
+        .value_of("client")
+        .expect("has default value")
+        .to_string();
 
     // set up tracing
     use tracing_error::ErrorLayer;
@@ -62,6 +226,13 @@ async fn main() {
         let _ = tx.broadcast(true);
     });
 
+    // wrap all the contextual benchmark info in a Context
+    let ctx = Context {
+        server_type,
+        client_type,
+        exit: rx,
+    };
+
     // run all benchmarks in parallel
     tracing::info!("starting all benchmarks");
     let mut running = BTreeMap::new();
@@ -69,9 +240,11 @@ async fn main() {
         let had = running.insert(
             benchmark,
             match benchmark {
-                "vote-migration" => tokio::spawn(vote_migration::main(rx.clone())),
-                "vote" => tokio::spawn(vote::main(rx.clone())),
-                "lobsters-noria" => tokio::spawn(lobsters_noria::main(rx.clone())),
+                "vote-migration" => tokio::spawn(vote_migration::main(ctx.clone())),
+                "vote" => tokio::spawn(vote::main(ctx.clone())),
+                "vote-memory" => tokio::spawn(vote_mem::main(ctx.clone())),
+                "lobsters-noria" => tokio::spawn(lobsters_noria::main(ctx.clone())),
+                "lobsters-noria-memory" => tokio::spawn(lobsters_noria_mem::main(ctx.clone())),
                 _ => unreachable!("{}", benchmark),
             },
         );
@@ -154,11 +327,14 @@ fn noria_setup(
                         "cd noria && cargo b -p {} --bin {} --release",
                         package, binary
                     ))
-                    .status()
+                    .output()
                     .await
                     .wrap_err("cargo build")?;
-                if !compiled.success() {
-                    eyre::bail!("failed to compile")
+                if !compiled.status.success() {
+                    return Err(
+                        eyre::eyre!(String::from_utf8_lossy(&compiled.stderr).to_string())
+                            .wrap_err("failed to compile"),
+                    );
                 }
 
                 // and then ensure that ZooKeeper is running
@@ -186,7 +362,7 @@ fn noria_bin<'s>(
     binary: &'static str,
 ) -> openssh::Command<'s> {
     let mut cmd = ssh.command("cargo");
-    cmd.arg("+nightly")
+    cmd.arg("+nightly-2020-05-21")
         .arg("run")
         .arg("--manifest-path=noria/Cargo.toml")
         .arg("-p")

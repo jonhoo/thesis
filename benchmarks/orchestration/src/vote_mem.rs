@@ -10,34 +10,30 @@ use tracing_futures::Instrument;
 use tsunami::providers::aws;
 use tsunami::Tsunami;
 
-/// vote; requires at least two machines: a server and 1+ clients
-#[instrument(name = "vote", skip(ctx))]
+const KB: usize = 1024;
+const MB: usize = 1024 * KB;
+const GB: usize = 1024 * MB;
+
+/// vote_mem; requires at least two machines: a server and 1+ clients
+#[instrument(name = "vote-mem", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
-        [
-            //(20, "skewed", 1, true),
-            //(20, "skewed", 1, false),
-            //(2, "skewed", 6, true),
-            //(2, "skewed", 6, false),
-            (20, "skewed", 6, true),
-            (20, "skewed", 6, false),
-            (20, "uniform", 6, true),
-            (20, "uniform", 6, false),
-        ],
+        [(800_000, 20, "skewed", 6), (1_000_000, 20, "skewed", 6)],
         one,
         ctx,
-        false
+        true
     )
 }
 
 #[instrument(err, skip(ctx))]
 pub(crate) async fn one(
-    parameters: (usize, &'static str, usize, bool),
-    loads: Option<Vec<usize>>,
+    parameters: (usize, usize, &'static str, usize),
+    limits: Option<Vec<usize>>,
     ctx: Context,
 ) -> Result<usize, Report> {
-    let (write_every, distribution, nclients, partial) = parameters;
-    let mut last_good_target = 0;
+    let (target, write_every, distribution, nclients) = parameters;
+    let partial = true;
+    let mut last_good_limit = 0;
     let Context {
         server_type,
         client_type,
@@ -46,8 +42,8 @@ pub(crate) async fn one(
     } = ctx;
 
     let mut aws = crate::launcher();
-    // vote exploration generally take less than two hours, but make it 3
-    aws.set_max_instance_duration(3);
+    // vote exploration generally take less than an hour, but make it 2
+    aws.set_max_instance_duration(2);
 
     // try to ensure we do AWS cleanup
     let result: Result<_, Report> = try {
@@ -81,32 +77,40 @@ pub(crate) async fn one(
             .collect();
         tracing::debug!("connected");
 
-        let mut targets = if let Some(loads) = loads {
-            Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        let mut limits = if let Some(limits) = limits {
+            Box::new(cliff::LoadIterator::from(limits)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(100_000, 500_00))
+            Box::new(cliff::BinaryMinSearcher::until(2 * GB, 32 * MB))
+                as Box<dyn cliff::CliffSearch + Send>
         };
+        let mut zero = Some(0);
         let result: Result<(), Report> = try {
-            let mut successful_target = None;
-            while let Some(target) = targets.next() {
-                if let Some(target) = successful_target.take() {
-                    // last run succeeded at the given target
-                    last_good_target = target;
+            let mut successful_limit = None;
+            while let Some(limit) = zero.take().or_else(|| limits.next()) {
+                if let Some(limit) = successful_limit.take() {
+                    // last run succeeded at the given limit
+                    last_good_limit = limit;
                 }
-                successful_target = Some(target);
+                successful_limit = Some(limit);
+
+                if limit == 0 && target % 1000 == 0 && (target / 1_000).is_power_of_two() {
+                    // we already have this
+                    tracing::info!(%target, "skipping non-limited target we already have");
+                    continue;
+                }
 
                 if *exit.borrow() {
                     tracing::info!("exiting as instructed");
                     break;
                 }
 
-                let target_span = tracing::info_span!("target", target);
+                let limit_span = tracing::info_span!("limit", limit);
                 async {
                     tracing::info!("start benchmark target");
                     let backend = if partial { "partial" } else { "full" };
                     let prefix = format!(
-                        "{}.5000000a.{}t.{}r.{}c.0m.{}",
-                        backend, target, write_every, nclients, distribution,
+                        "{}.5000000a.{}t.{}r.{}c.{}m.{}",
+                        backend, target, write_every, nclients, limit, distribution,
                     );
                     let target_per_client = (target as f64 / nclients as f64).ceil() as usize;
 
@@ -119,6 +123,8 @@ pub(crate) async fn one(
                         .arg("--durability=memory")
                         .arg("--no-reuse")
                         .arg("--shards=0")
+                        .arg("-m")
+                        .arg(limit.to_string())
                         .spawn()
                         .wrap_err("failed to start noria-server")?;
 
@@ -143,8 +149,8 @@ pub(crate) async fn one(
                                 "priming failed:\n{}",
                                 String::from_utf8_lossy(&prime.stderr)
                             );
-                            targets.overloaded();
-                            successful_target.take();
+                            limits.overloaded();
+                            successful_limit.take();
                             break 'run;
                         }
 
@@ -211,8 +217,8 @@ pub(crate) async fn one(
                                                         sojourn = sjrn,
                                                         "high sojourn latency"
                                                     );
-                                                    targets.overloaded();
-                                                    successful_target.take();
+                                                    limits.overloaded();
+                                                    successful_limit.take();
                                                 }
                                                 continue;
                                             }
@@ -228,8 +234,8 @@ pub(crate) async fn one(
                                             > 0.05 * target_per_client as f64
                                         {
                                             tracing::warn!(%rate, bar = %target_per_client, "low throughput");
-                                            targets.overloaded();
-                                            successful_target.take();
+                                            limits.overloaded();
+                                            successful_limit.take();
                                         }
                                     }
                                 }
@@ -252,8 +258,8 @@ pub(crate) async fn one(
 
                         if !got_lines {
                             tracing::warn!("missing throughput line, probably overloaded");
-                            targets.overloaded();
-                            successful_target.take();
+                            limits.overloaded();
+                            successful_limit.take();
                         }
 
                         let mut all_ok = true;
@@ -270,8 +276,8 @@ pub(crate) async fn one(
                             let status = bench.wait().await?;
                             if !status.success() {
                                 tracing::warn!(client = clienti, "benchmark failed:\n{}", stderr);
-                                targets.overloaded();
-                                successful_target.take();
+                                limits.overloaded();
+                                successful_limit.take();
                                 all_ok = false;
                             }
                             clients.push(status);
@@ -364,7 +370,7 @@ pub(crate) async fn one(
 
                     Ok::<_, Report>(())
                 }
-                .instrument(target_span)
+                .instrument(limit_span)
                 .await?;
             }
         };
@@ -391,7 +397,7 @@ pub(crate) async fn one(
     tracing::debug!("done");
     let _ = result?;
     let _ = cleanup.wrap_err("cleanup failed")?;
-    Ok(last_good_target)
+    Ok(last_good_limit)
 }
 
 fn vote_client<'c>(

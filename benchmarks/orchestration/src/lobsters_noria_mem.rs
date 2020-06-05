@@ -10,20 +10,25 @@ use tracing_futures::Instrument;
 use tsunami::providers::aws;
 use tsunami::Tsunami;
 
+const KB: usize = 1024;
+const MB: usize = 1024 * KB;
+const GB: usize = 1024 * MB;
+
 /// lobsters-noria; requires two machines: a client and a server
-#[instrument(name = "lobsters-noria", skip(ctx))]
+#[instrument(name = "lobsters-noria-mem", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!([(0, true), (0, false)], one, ctx, false)
+    crate::explore!([(2000, 0), (3000, 0)], one, ctx, false)
 }
 
 #[instrument(err, skip(ctx))]
 pub(crate) async fn one(
-    parameters: (usize, bool),
-    loads: Option<Vec<usize>>,
+    parameters: (usize, usize),
+    limits: Option<Vec<usize>>,
     ctx: Context,
 ) -> Result<usize, Report> {
-    let (nshards, partial) = parameters;
-    let mut last_good_scale = 0;
+    let (scale, nshards) = parameters;
+    let partial = true;
+    let mut last_good_limit = 0;
     let Context {
         server_type,
         client_type,
@@ -90,28 +95,25 @@ pub(crate) async fn one(
         let c = &client.ssh;
         tracing::debug!("connected");
 
-        let mut scales = if let Some(loads) = loads {
-            Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        let mut limits = if let Some(limits) = limits {
+            Box::new(cliff::LoadIterator::from(limits)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(500, 500))
+            Box::new(cliff::BinaryMinSearcher::until(2 * GB, 32 * MB))
+                as Box<dyn cliff::CliffSearch + Send>
         };
+        let mut zero = Some(0);
         let result: Result<(), Report> = try {
-            let mut successful_scale = None;
-            while let Some(scale) = scales.next() {
-                if let Some(scale) = successful_scale.take() {
-                    // last run succeeded at the given scale
-                    last_good_scale = scale;
+            let mut successful_limit = None;
+            while let Some(limit) = zero.take().or_else(|| limits.next()) {
+                if let Some(limit) = successful_limit.take() {
+                    // last run succeeded at the given limit
+                    last_good_limit = limit;
                 }
-                successful_scale = Some(scale);
+                successful_limit = Some(limit);
 
-                if (partial == false
-                    && nshards == 0
-                    && (scale == 8_000 || scale == 6_000 || scale == 5_000 || scale == 4_500))
-                    || (partial == true && nshards == 0 && scale == 8_000)
-                {
-                    // i happen to know that this fails
-                    scales.overloaded();
-                    tracing::warn!(%scale, "skipping known-bad scale");
+                if limit == 0 && scale % 500 == 0 && (scale / 500).is_power_of_two() {
+                    // we already have this
+                    tracing::info!(%scale, "skipping non-limited scale we already have");
                     continue;
                 }
 
@@ -120,7 +122,7 @@ pub(crate) async fn one(
                     break;
                 }
 
-                let scale_span = tracing::info_span!("scale", scale);
+                let limit_span = tracing::info_span!("limit", limit);
                 async {
                     tracing::info!("start benchmark target");
                     let mut backend = if nshards == 0 {
@@ -131,7 +133,7 @@ pub(crate) async fn one(
                     if !partial {
                         backend.push_str("_full");
                     }
-                    let prefix = format!("lobsters-{}-{}-0m", backend, scale);
+                    let prefix = format!("lobsters-{}-{}-{}m", backend, scale, limit);
 
                     tracing::trace!("starting noria server");
                     let mut noria_server = crate::server::build(s, server);
@@ -143,6 +145,8 @@ pub(crate) async fn one(
                         .arg("--no-reuse")
                         .arg("--shards")
                         .arg(nshards.to_string())
+                        .arg("-m")
+                        .arg(limit.to_string())
                         .spawn()
                         .wrap_err("failed to start noria-server")?;
 
@@ -170,8 +174,8 @@ pub(crate) async fn one(
                                 "priming failed:\n{}",
                                 String::from_utf8_lossy(&prime.stderr)
                             );
-                            scales.overloaded();
-                            successful_scale.take();
+                            limits.overloaded();
+                            successful_limit.take();
                             break 'run;
                         }
 
@@ -213,8 +217,8 @@ pub(crate) async fn one(
                                     if let (Some(target), Some(actual)) = (target, actual) {
                                         if actual < target * 4.0 / 5.0 {
                                             tracing::warn!(%actual, %target, "low throughput");
-                                            scales.overloaded();
-                                            successful_scale.take();
+                                            limits.overloaded();
+                                            successful_limit.take();
                                         }
                                     }
                                 }
@@ -272,8 +276,8 @@ pub(crate) async fn one(
                                             sojourn = us,
                                             "high sojourn latency"
                                         );
-                                        scales.overloaded();
-                                        successful_scale.take();
+                                        limits.overloaded();
+                                        successful_limit.take();
                                     }
                                 }
                             }
@@ -292,8 +296,8 @@ pub(crate) async fn one(
 
                         if target.is_none() || actual.is_none() {
                             tracing::warn!("missing throughput line, probably overloaded");
-                            scales.overloaded();
-                            successful_scale.take();
+                            limits.overloaded();
+                            successful_limit.take();
                         }
 
                         use tokio::io::AsyncReadExt;
@@ -307,8 +311,8 @@ pub(crate) async fn one(
                         let status = bench.wait().await?;
                         if !status.success() {
                             tracing::warn!("benchmark failed:\n{}", stderr);
-                            scales.overloaded();
-                            successful_scale.take();
+                            limits.overloaded();
+                            successful_limit.take();
                         }
 
                         tracing::debug!("saving meta-info");
@@ -378,7 +382,7 @@ pub(crate) async fn one(
 
                     Ok::<_, Report>(())
                 }
-                .instrument(scale_span)
+                .instrument(limit_span)
                 .await?;
             }
         };
@@ -405,7 +409,7 @@ pub(crate) async fn one(
     tracing::debug!("done");
     let _ = result?;
     let _ = cleanup.wrap_err("cleanup failed")?;
-    Ok(last_good_scale)
+    Ok(last_good_limit)
 }
 
 fn lobsters_client<'c>(

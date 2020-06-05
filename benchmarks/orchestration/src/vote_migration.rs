@@ -1,14 +1,20 @@
+use crate::Context;
 use color_eyre::Report;
 use eyre::WrapErr;
-use std::time::Duration;
 use tracing::instrument;
 use tracing_futures::Instrument;
 use tsunami::providers::aws;
 use tsunami::providers::Launcher;
 
 /// vote-migration; requires only one machine
-#[instrument(name = "vote_migration", skip(exit))]
-pub(crate) async fn main(mut exit: tokio::sync::watch::Receiver<bool>) -> Result<(), Report> {
+#[instrument(err, name = "vote_migration", skip(ctx))]
+pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
+    let Context {
+        server_type,
+        mut exit,
+        ..
+    } = ctx;
+
     let mut aws = crate::launcher();
     // shouldn't take _that_ long
     aws.set_max_instance_duration(1);
@@ -20,11 +26,11 @@ pub(crate) async fn main(mut exit: tokio::sync::watch::Receiver<bool>) -> Result
             vec![(
                 String::from("host"),
                 aws::Setup::default()
-                    .instance_type("r5n.4xlarge")
+                    .instance_type(&server_type)
                     .ami(crate::AMI, "ubuntu")
                     .setup(crate::noria_setup("noria-applications", "vote-migration")),
             )],
-            Some(Duration::from_secs(2 * 60)),
+            None,
         )
         .await
         .wrap_err("failed to start instances")?;
@@ -32,7 +38,7 @@ pub(crate) async fn main(mut exit: tokio::sync::watch::Receiver<bool>) -> Result
         tracing::debug!("connecting");
         let vms = aws.connect_all().await?;
         let host = vms.get("host").unwrap();
-        let ssh = host.ssh.as_ref().unwrap();
+        let ssh = &host.ssh;
         tracing::debug!("connected");
 
         tracing::info!("running benchmark");
@@ -50,6 +56,8 @@ pub(crate) async fn main(mut exit: tokio::sync::watch::Receiver<bool>) -> Result
                     .stdout(std::process::Stdio::null());
                 let benchmark = crate::output_on_success(benchmark);
 
+                // make sure we shouldn't already be exiting.
+                // this also sets it up so that _any_ recv from exit means we should exit.
                 if let Some(false) = exit.recv().await {
                 } else {
                     tracing::info!("exiting as instructed");
@@ -115,10 +123,9 @@ pub(crate) async fn main(mut exit: tokio::sync::watch::Receiver<bool>) -> Result
         tracing::trace!("cleaning up ssh connections");
         for (name, host) in vms {
             let host_span = tracing::trace_span!("ssh_close", name = &*name);
-            let ssh = host.ssh.expect("ssh connection to host disappeared");
             async {
                 tracing::trace!("closing connection");
-                if let Err(e) = ssh.close().await {
+                if let Err(e) = host.ssh.close().await {
                     tracing::warn!("ssh connection failed: {}", e);
                 }
             }
