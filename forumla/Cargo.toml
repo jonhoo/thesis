@@ -1,0 +1,5 @@
+[package]
+name = "forumla"
+version = "0.1.0"
+authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
+edition = "2018"
