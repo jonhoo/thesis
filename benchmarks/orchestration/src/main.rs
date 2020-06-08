@@ -1,6 +1,6 @@
 #![feature(try_blocks, label_break_value)]
 
-const AMI: &str = "ami-0dd3b8a95b3f8f7a6";
+const AMI: &str = "ami-0c9d24659d720d581";
 
 use clap::{App, Arg};
 use color_eyre::Report;
@@ -152,6 +152,8 @@ mod lobsters_noria_mem;
 mod vote;
 mod vote_mem;
 mod vote_migration;
+
+mod invoke;
 
 pub(crate) mod server;
 
