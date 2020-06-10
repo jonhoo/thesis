@@ -14,7 +14,7 @@ const GB: usize = 1024 * MB;
 #[instrument(name = "vote-mem", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
-        [(800_000, 20, "skewed", 6), (1_000_000, 20, "skewed", 6)],
+        [(800_000, 20, "skewed", 6), (1_600_000, 20, "skewed", 6)],
         one,
         ctx,
         true
@@ -128,6 +128,7 @@ pub(crate) async fn one(
                         },
                         &cs[..],
                         &server,
+                        crate::invoke::vote::Backend::Netsoup,
                         &mut ctx,
                     )
                     .await?;

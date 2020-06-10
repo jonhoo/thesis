@@ -52,7 +52,7 @@ pub(crate) async fn run(
     tracing::trace!("priming succeeded");
     tracing::debug!("benchmark");
     let mut bench = lobsters_client(c, server, scale)
-        .arg("--runtime=540")
+        .arg("--runtime=384")
         .arg("--histogram=benchmark.hist")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -81,7 +81,7 @@ pub(crate) async fn run(
                 }
                 if let (Some(target), Some(actual)) = (target, actual) {
                     if actual < target * 4.0 / 5.0 {
-                        tracing::warn!(%actual, %target, "low throughput");
+                        tracing::error!(%actual, %target, "low throughput");
                         on_overloaded();
                     }
                 }
@@ -99,7 +99,7 @@ pub(crate) async fn run(
                 let metric = if let Some(metric) = fields.next() {
                     metric
                 } else {
-                    tracing::warn!(case = "bad line", message = &*line);
+                    tracing::error!(case = "bad line", message = &*line);
                     continue;
                 };
                 if metric != "sojourn" {
@@ -110,7 +110,7 @@ pub(crate) async fn run(
                 let pct = if let Some(pct) = fields.next() {
                     pct
                 } else {
-                    tracing::warn!(case = "bad line", message = &*line);
+                    tracing::error!(case = "bad line", message = &*line);
                     continue;
                 };
                 if pct != "95" {
@@ -121,18 +121,18 @@ pub(crate) async fn run(
                 let us = if let Some(us) = fields.next() {
                     us
                 } else {
-                    tracing::warn!(case = "bad line", message = &*line);
+                    tracing::error!(case = "bad line", message = &*line);
                     continue;
                 };
                 let us: usize = if let Ok(us) = us.parse() {
                     us
                 } else {
-                    tracing::warn!(case = "bad line", message = &*line);
+                    tracing::error!(case = "bad line", message = &*line);
                     continue;
                 };
                 if us > 200_000 {
                     tracing::warn!(endpoint = field, sojourn = us, "high sojourn latency");
-                    on_overloaded();
+                    // on_overloaded();
                 }
             }
         }

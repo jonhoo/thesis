@@ -7,6 +7,12 @@ use tokio::{
 };
 use tracing_futures::Instrument;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Backend {
+    Netsoup,
+    Redis,
+}
+
 pub(crate) async fn run(
     prefix: &str,
     target: usize,
@@ -15,6 +21,7 @@ pub(crate) async fn run(
     mut on_overloaded: impl FnMut(),
     cs: &[&tsunami::Session],
     server: &tsunami::Machine<'_>,
+    backend: Backend,
     ctx: &mut Context,
 ) -> Result<(), Report> {
     let Context {
@@ -27,7 +34,7 @@ pub(crate) async fn run(
     let target_per_client = (target as f64 / cs.len() as f64).ceil() as usize;
 
     tracing::debug!("prime");
-    let prime = vote_client(cs[0], server, |cmd| {
+    let prime = vote_client(cs[0], server, backend, |cmd| {
         cmd.arg("--runtime=0")
             .arg("-d")
             .arg(distribution)
@@ -59,9 +66,9 @@ pub(crate) async fn run(
     let mut benches = cs
         .iter()
         .map(|c| {
-            vote_client(c, server, |cmd| {
+            vote_client(c, server, backend, |cmd| {
                 cmd.arg("--no-prime")
-                    .arg("--runtime=540")
+                    .arg("--runtime=384")
                     .arg("--histogram=benchmark.hist")
                     .arg("--target")
                     .arg(target_per_client.to_string())
@@ -103,24 +110,24 @@ pub(crate) async fn run(
                         if let (Ok(pct), Ok(sjrn)) = (pct, sjrn) {
                             got_lines = true;
 
-                            if pct == 50 && (sjrn > 200_000 || sjrn == 0) {
+                            if pct == 50 && (sjrn > 50_000 || sjrn == 0) {
                                 tracing::warn!(
                                     endpoint = field,
                                     sojourn = sjrn,
                                     "high sojourn latency"
                                 );
-                                on_overloaded();
+                                // on_overloaded();
                             }
                             continue;
                         }
                     }
-                    tracing::warn!(case = "bad line", message = &*line);
+                    tracing::error!(case = "bad line", message = &*line);
                 } else if line.starts_with("# generated ops/s") | line.starts_with("# actual ops/s")
                 {
                     let mut fields = line.split_whitespace();
                     let rate: f64 = fields.next_back().unwrap().parse().unwrap();
                     if target_per_client as f64 - rate > 0.05 * target_per_client as f64 {
-                        tracing::warn!(%rate, bar = %target_per_client, "low throughput");
+                        tracing::error!(%rate, bar = %target_per_client, "low throughput");
                         on_overloaded();
                     }
                 }
@@ -181,12 +188,16 @@ pub(crate) async fn run(
     results
         .write_all(format!("# server load: {} {}\n", sload1, sload5).as_bytes())
         .await?;
-    let vmrss = crate::server::vmrss(s)
-        .await
-        .wrap_err("failed to get server memory use")?;
-    results
-        .write_all(format!("# server memory (kB): {}\n", vmrss).as_bytes())
-        .await?;
+
+    if let Backend::Netsoup = backend {
+        let vmrss = crate::server::vmrss(s)
+            .await
+            .wrap_err("failed to get server memory use")?;
+        results
+            .write_all(format!("# server memory (kB): {}\n", vmrss).as_bytes())
+            .await?;
+    }
+
     let (cload1, cload5) = crate::load(cs[0])
         .await
         .wrap_err("failed to get client load")?;
@@ -226,15 +237,17 @@ pub(crate) async fn run(
     }
 
     if all_ok {
-        tracing::trace!("saving server stats");
-        let mut results = tokio::fs::File::create(format!("{}-statistics.json", prefix))
-            .await
-            .wrap_err("failed to create local stats file")?;
-        crate::server::write_stats(s, server, &mut results)
-            .await
-            .wrap_err("failed to save server stats")?;
-        results.flush().await?;
-        drop(results);
+        if let Backend::Netsoup = backend {
+            tracing::trace!("saving server stats");
+            let mut results = tokio::fs::File::create(format!("{}-statistics.json", prefix))
+                .await
+                .wrap_err("failed to create local stats file")?;
+            crate::server::write_stats(s, server, &mut results)
+                .await
+                .wrap_err("failed to save server stats")?;
+            results.flush().await?;
+            drop(results);
+        }
         tracing::debug!("all results saved");
     } else {
         tracing::debug!("partial results saved");
@@ -246,18 +259,28 @@ pub(crate) async fn run(
 fn vote_client<'c>(
     ssh: &'c tsunami::Session,
     server: &'c tsunami::Machine<'c>,
+    backend: Backend,
     add_args: impl FnOnce(&mut openssh::Command<'_>),
 ) -> openssh::Command<'c> {
     let mut cmd = crate::noria_bin(ssh, "noria-applications", "vote");
-    // vote args need to go _before_ the netsoup arguments
+    // vote args need to go _before_ the backend arguments
     add_args(&mut cmd);
-    cmd.arg("netsoup")
-        .arg("--deployment")
-        .arg("benchmark")
-        .arg("--zookeeper")
-        .arg(format!(
-            "{}:2181",
-            server.private_ip.as_ref().expect("private ip unknown")
-        ));
+    match backend {
+        Backend::Netsoup => {
+            cmd.arg("netsoup")
+                .arg("--deployment")
+                .arg("benchmark")
+                .arg("--zookeeper")
+                .arg(format!(
+                    "{}:2181",
+                    server.private_ip.as_ref().expect("private ip unknown")
+                ));
+        }
+        Backend::Redis => {
+            cmd.arg("redis")
+                .arg("--address")
+                .arg(server.private_ip.as_ref().expect("private ip unknown"));
+        }
+    }
     cmd
 }

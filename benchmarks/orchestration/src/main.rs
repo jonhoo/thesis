@@ -1,6 +1,6 @@
 #![feature(try_blocks, label_break_value)]
 
-const AMI: &str = "ami-0c9d24659d720d581";
+const AMI: &str = "ami-00694889777c5fbcc";
 
 use clap::{App, Arg};
 use color_eyre::Report;
@@ -152,6 +152,7 @@ mod lobsters_noria_mem;
 mod vote;
 mod vote_mem;
 mod vote_migration;
+mod vote_redis;
 
 mod invoke;
 
@@ -163,6 +164,7 @@ async fn main() {
         "vote-migration",
         "vote",
         "vote-memory",
+        "vote-redis",
         "lobsters-noria",
         "lobsters-noria-memory",
     ];
@@ -245,6 +247,7 @@ async fn main() {
                 "vote-migration" => tokio::spawn(vote_migration::main(ctx.clone())),
                 "vote" => tokio::spawn(vote::main(ctx.clone())),
                 "vote-memory" => tokio::spawn(vote_mem::main(ctx.clone())),
+                "vote-redis" => tokio::spawn(vote_redis::main(ctx.clone())),
                 "lobsters-noria" => tokio::spawn(lobsters_noria::main(ctx.clone())),
                 "lobsters-noria-memory" => tokio::spawn(lobsters_noria_mem::main(ctx.clone())),
                 _ => unreachable!("{}", benchmark),
@@ -339,15 +342,17 @@ fn noria_setup(
                     );
                 }
 
-                // and then ensure that ZooKeeper is running
-                tracing::trace!("start zookeeper");
-                let zk = ssh
-                    .shell("sudo systemctl start zookeeper")
-                    .status()
-                    .await
-                    .wrap_err("start zookeeper")?;
-                if !zk.success() {
-                    eyre::bail!("failed to start zookeeper")
+                if binary == "noria-server" {
+                    // and then ensure that ZooKeeper is running
+                    tracing::trace!("start zookeeper");
+                    let zk = ssh
+                        .shell("sudo systemctl start zookeeper")
+                        .status()
+                        .await
+                        .wrap_err("start zookeeper")?;
+                    if !zk.success() {
+                        eyre::bail!("failed to start zookeeper")
+                    }
                 }
 
                 tracing::debug!("setup complete");
@@ -364,7 +369,7 @@ fn noria_bin<'s>(
     binary: &'static str,
 ) -> openssh::Command<'s> {
     let mut cmd = ssh.command("cargo");
-    cmd.arg("+nightly-2020-05-21")
+    cmd.arg("+nightly")
         .arg("run")
         .arg("--manifest-path=noria/Cargo.toml")
         .arg("-p")
