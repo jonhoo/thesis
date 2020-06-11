@@ -1,0 +1,120 @@
+\documentclass[fontsize=12pt,paper=letter,draft=true]{scrbook}
+
+% enumerate* and itemize*
+\usepackage[inline]{enumitem}
+
+% for 1.5 line spacing
+\usepackage{setspace}
+\onehalfspacing
+% single spacing for table of contents
+\AfterTOCHead{\singlespacing}
+
+% recompute page layout based on the above
+\recalctypearea
+
+% so we can splice in PDFs
+\usepackage{pdfpages}
+
+% set up bibliography
+\usepackage[
+  backend=bibtex,
+  minalphanames=3,
+  isbn=false,
+  sortcites=true,
+  sorting=anyt,
+  abbreviate=false,
+  url=false,
+  doi=false,
+  maxnames=99,
+  minbibnames=3,
+  maxbibnames=99]{biblatex}
+\addbibresource{bibliography.bib}
+
+% for \begin{comment}
+\usepackage{verbatim}
+
+% do not reset page numbers at \mainmatter
+\let\mainmatterorig\mainmatter
+\renewcommand\mainmatter
+ {\edef\p{\arabic{page}}%
+  \mainmatterorig
+  % we need to compute the actual current page number. we know the page number
+  % from _before_ we called \mainmatter. but what is it now? well, it is
+  % certainly that +1. but we also need to account for the next chapter starting
+  % on a "right" (odd) page. we do this by adding the page number modulo two.
+  % TODO: double check before final version
+  \setcounter{page}{\p+1+(\p-\p/2*2)}%
+ }
+
+% for handy reference
+%
+% paragraph without spacing:
+% \setparsizes{0pt}{0pt}{0pt plus 1fil}
+
+% in thesis: titlehead, subject, title, subtitle
+\title{Noria: Partial State in Dataflow}
+\author{Jon Gjengset}
+\begin{document}
+
+\frontmatter
+
+% always arabic page numbering (default is roman in \frontmatter)
+\pagenumbering{arabic}
+
+\includepdf[pages=-]{./titlepage.pdf}
+\leavevmode\thispagestyle{empty}\newpage % since title page is single-sided
+
+\includepdf[pages=-]{./abstract.pdf}
+\leavevmode\thispagestyle{empty}\newpage % since abstract is also single-sided
+
+\section*{Prior Publication}
+Much of this thesis was previously published in a conference paper~\cite{noria},
+and represents the joint work of the coauthors of that paper.
+\newpage
+
+\section*{Acknowledgements}
+\begin{spacing}{1}
+  % TODO
+  Goes here.
+\end{spacing}
+
+\tableofcontents
+
+\mainmatter
+
+%\chapter{Introduction}
+%
+%\section{Motivation}
+%\section{Challenges}
+%\section{Approach}
+%\section{Noria}
+%\section{Contribution}
+%\section{Dissertation Outline}
+
+\chapter{Background}
+
+\chapter{Noria}
+
+\chapter{Related Work}
+
+\chapter{A Model of Partial State}
+
+\chapter{Practical Partial State}
+
+\chapter{Evaluation}
+
+\input{evaluation.tex}
+
+\chapter{Discussion}
+
+\appendix
+\chapter{Noria In Simpler Terms}
+
+\backmatter
+
+% single spacing for bibliography
+\begin{spacing}{1}
+\printbibliography
+\end{spacing}
+
+\end{document}
