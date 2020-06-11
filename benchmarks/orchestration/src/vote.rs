@@ -19,6 +19,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
             (20, "skewed", 6, false),
             (20, "uniform", 6, true),
             (20, "uniform", 6, false),
+            (1000, "skewed", 6, true),
         ],
         one,
         ctx,
