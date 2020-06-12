@@ -1,49 +1,77 @@
-This thesis is built on the belief that partial materialization is
-useful. In this section, I provide experimental and qualitative evidence
-that this belief is warranted through analysis of the following
-questions:
+The work in this thesis is built on the belief that materialization is useful,
+and that partial materialization is necessary to make it practical for an
+important class of applications. Without materialization, queries must either be
+manually cached, which is labor-intensive and error-prone, or be computed on
+demand, which is slow. And with full state materialization, all queries are
+fast, but the memory cost is prohibitive for any but the smallest applications.
+Whereas partial state allows you to trade off application tail latency for
+reduced memory use.
+
+In this section, I provide experimental and qualitative evidence that this
+belief is warranted through analysis of the following questions:
 
 \begin{enumerate}
- \item Why is materialization useful for real-world use-cases? \S\ref{s:eval:materialization}
- \item In what ways are existing materialization techniques lacking? \S\ref{s:eval:lacking}
- \item \textbf{How} does partial state improve the usefulness of materialization? \S\ref{s:eval:how}
- \item \textbf{When} does partial state improve the usefulness of materialization? \S\ref{s:eval:when}
+ \item What impact does partial state have on memory use? \S\ref{s:eval:mem}
+ \item How dependent is partial state on application access patterns? \S\ref{s:eval:patterns}
  \item What is the cost of using partial state? \S\ref{s:eval:cost}
  \item How does partial state compare to existing solutions? \S\ref{s:eval:existing}
 \end{enumerate}
 
-I cover these questions in the following sections. The high-level
-take-away is that partial state significantly reduces the labor cost and
-memory overhead of application caching, is competitive with existing
-non-partial solutions, and presents a trade-off between memory use and
-increased tail latency.
+The high-level take-away from this section is that partial state allows
+read-heavy applications with skewed access patterns to operate using
+significantly less memory, with marginal impact on system throughput and
+latency.
 
-\section{Why is materialization useful for real-world use-cases?}
-\label{s:eval:materialization}
+\section{What impact does partial state have on memory use?}
+\label{s:eval:mem}
 
-Caching
-OSDI paper
+The primary motivation behind reducing application memory use is to reduce cost.
+Higher memory use requires more memory, and more memory costs more, both in
+purchasing and in ongoing power consumption. An application that uses less
+memory can scale further on the same hardware, or, conversely, can run on
+smaller hardware than would otherwise be needed.
 
-\section{In what ways are existing materialization techniques lacking?}
-\label{s:eval:lacking}
+The key question for partially stateful dataflow then is whether it truly and
+meaningfully reduces application memory use. Or, more accurately, whether
+applications can run efficiently when only some of its query results are cached.
+Intuitively, one might expect this to be true for many user-driven applications:
+some queries may only be executed for rarely used features, and unpopular posts
+may be accessed only very infrequently, or perhaps not at all, after they were
+initially posted.
 
-Caching is labor intensive + error prone (Facebook memcached paper)
+To validate this, I used production statistics from the open-source Lobsters
+news aggregator~\cite{lobsters,lobsters-data} to build a benchmarking harness
+that approximates the page access patterns the real Lobsters website sees. The
+load generator is ``partially open-loop'' to ensure that clients maintain the
+measurement frequency even during periods of high latency, and also measure
+queueing time~\cite{frank-open-loop,open-loop-cautionary-tale}. Since Lobsters
+is a small site, relatively speaking, the harness also lets me to proportionally
+scale up the access frequency to evaluate a larger deployment with the same
+data and query access patterns.
 
-DB view materialization (like DBToaster) ``all or nothing''
+I then wrote a Noria implementation for each Lobsters page endpoint that
+queries the same data, and performs the same writes as the real Ruby-on-Rails
+application.%
+\footnote{I opted to do this rather than run the Ruby-on-Rails code directly to
+avoid measuring Ruby and Rails bottlenecks.}
+Together, these allow me to measure the throughput, latency, and memory overhead
+that Noria would provide if used as the backend for Lobsters as it scales up.
 
-Commercial DB view materialization limited and slow (ref OSDI paper)
+Figure~\ref{f:lobsters-memory} shows the memory use with and without partial
+materialization at a scale-up factor of 4000%
+\footnote{When Noria runs without partial, this is the highest factor that still
+fits in the 128GB of memory of the host machine.}
+times normal Lobsters load. The figure also shows the lowest memory limit Noria
+can sustain without (COMPROMISING LATENCY?) when eviction is enabled.
 
-\section{How does partial state improve the usefulness of materialization?}
-\label{s:eval:how}
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{example-image-golden}
+  \caption{Lobsters memory use full/partial (many things not accessed) and partial/evict (many things infrequently accessed).}
+  \label{f:lobsters-memory}
+\end{figure}
 
-By folding the cache into the database, database knows how to keep it up
-to date — avoids having that logic threaded through the application.
-
-Large parts of the application's dataset and queries are access
-infrequently, if at all. We want to devote memory only where it matters.
-
-Fig.: Lobsters memory use full/partial (many things not accessed) and
-partial/evict (many things infrequently accessed).
+Note difference between value here and VMRSS!
 
 Note that evict is necessary because, over time, more and more of the
 tail will be sampled. Without eviction, eventually the entire tail would
@@ -55,10 +83,8 @@ available, and does not compute until requested.
 
 Fig.: vote-migration skewed partial vs full
 
-\section{When does partial state improve the usefulness of materialization?}
-\label{s:eval:when}
-
-\subsection{When does partial help?}
+\section{How dependent is partial state on application access patterns?}
+\label{s:eval:patterns}
 
 Materialization is generally useful when reads are more common than
 writes, since it shifts the computation from reads to writes.
@@ -97,7 +123,7 @@ full.
 Lobsters suggests that significant skew is common. Also ref other
 studies on log-normal/zipf/skew.
 
-\subsection{When can we use partial?}
+\subsection{When can partial state be used?}
 
 \begin{itemize}
  \item SELECT COUNT(*) FROM table;
