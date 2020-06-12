@@ -1,6 +1,178 @@
+This thesis is built on the belief that partial materialization is
+useful. In this section, I provide experimental and qualitative evidence
+that this belief is warranted through analysis of the following
+questions:
+
+\begin{enumerate}
+ \item Why is materialization useful for real-world use-cases? \S\ref{s:eval:materialization}
+ \item In what ways are existing materialization techniques lacking? \S\ref{s:eval:lacking}
+ \item \textbf{How} does partial state improve the usefulness of materialization? \S\ref{s:eval:how}
+ \item \textbf{When} does partial state improve the usefulness of materialization? \S\ref{s:eval:when}
+ \item What is the cost of using partial state? \S\ref{s:eval:cost}
+ \item How does partial state compare to existing solutions? \S\ref{s:eval:existing}
+\end{enumerate}
+
+I cover these questions in the following sections. The high-level
+take-away is that partial state significantly reduces the labor cost and
+memory overhead of application caching, is competitive with existing
+non-partial solutions, and presents a trade-off between memory use and
+increased tail latency.
+
 \section{Why is materialization useful for real-world use-cases?}
+\label{s:eval:materialization}
+
+Caching
+OSDI paper
+
 \section{In what ways are existing materialization techniques lacking?}
+\label{s:eval:lacking}
+
+Caching is labor intensive + error prone (Facebook memcached paper)
+
+DB view materialization (like DBToaster) ``all or nothing''
+
+Commercial DB view materialization limited and slow (ref OSDI paper)
+
 \section{How does partial state improve the usefulness of materialization?}
+\label{s:eval:how}
+
+By folding the cache into the database, database knows how to keep it up
+to date — avoids having that logic threaded through the application.
+
+Large parts of the application's dataset and queries are access
+infrequently, if at all. We want to devote memory only where it matters.
+
+Fig.: Lobsters memory use full/partial (many things not accessed) and
+partial/evict (many things infrequently accessed).
+
+Note that evict is necessary because, over time, more and more of the
+tail will be sampled. Without eviction, eventually the entire tail would
+be kept in memory (so == full).
+
+Partial state also enables efficient migrations in many cases. Any view
+that can be made partial (ref section + later eval) is immediately
+available, and does not compute until requested.
+
+Fig.: vote-migration skewed partial vs full
+
 \section{When does partial state improve the usefulness of materialization?}
+\label{s:eval:when}
+
+\subsection{When does partial help?}
+
+Materialization is generally useful when reads are more common than
+writes, since it shifts the computation from reads to writes.
+But, without partial state, materialization is an ``off/on'' option —
+either you materialize all the results for a query, or none [TODO: not
+quite true — more subtlety here — depends what you mean by ``query''
+(e.g., parameterized or not)].
+
+Partial state (and caching in general) enables \textbf{selective}
+materialization. This makes sense if most application accesses are for
+a particular subset of the dataset. That is, accesses are \textit{skewed}
+towards particular data. In applications with skewed access patterns
+(common — ref log-normal + Lobsters above), you can choose to only
+materialize commonly-accessed results, rather than all. This uses
+potentially far less memory (as indicated above), while still giving you
+a speedup for \textbf{most} accesses. The more memory you provide the partial
+system with, the more of your tail will be pre-computed, and the more of
+your requests will be fast.
+
+Fig.: mem limit vs latency [mean/50/95/99] in Lobsters.
+
+Deciding what memory limit to set is challenging, in part because it
+may change over time as the access patterns change, and in part because
+it depends on load. The higher the load, the more requests will be in
+the tail (and miss). Of course, more requests will be in the head too.
+
+Fig.: throughput vs 95\%-ile latency [memlimits] in vote.
+
+For example, for Zipf distribution, we can compute \%s:
+
+Tab.: | load | skew | keys hit in 30s | keys hit by 99\% | 
+
+This is (again) why eviction is important — without it, partial would approach
+full.
+
+Lobsters suggests that significant skew is common. Also ref other
+studies on log-normal/zipf/skew.
+
+\subsection{When can we use partial?}
+
+\begin{itemize}
+ \item SELECT COUNT(*) FROM table;
+ \item Add ``karma'' query:
+   \begin{itemize}
+    \item If already have ``karma'' column, trivial in DB. But, equivalent in
+      Noria to saying that query was there from the start, so no migration.
+    \item If \textbf{not} already have ``karma'' column, DB has two choices:
+     \begin{enumerate}
+      \item Compute column == expensive, and same as Noria would do
+      \item Make query compute value on-demand -- same cost, but repeated!
+     \end{enumerate}
+   \end{itemize}
+ \item TopK
+\end{itemize}
+
 \section{What is the cost of using partial state?}
+\label{s:eval:cost}
+
+Migrations maybe? Latency timeline to show that early accesses are slow.
+Maybe good place to have comparison with Redis? Maybe show vote uniform
+numbers? Talk about ``warmup''.
+
+Fig.: throughput vs latency w/wo partial in vote.
+
+Note latency diff for lobsters, and that full fell over due to mem, and
+no bigger machine w/o more cores available.
+
+Note that the reason vote falls over when it does is single-core write
+processing (since only one query, so one data-flow path).
+
 \section{How does partial state compare to existing solutions?}
+\label{s:eval:existing}
+
+This is a difficult question to answer. High-performance solutions are
+often developed specifically for a given application, and not available
+as general-purpose tools (ref facebook memcache, need cites here).
+And applying the general-purpose tools that \textbf{are} available (memcache,
+redis) effectively, requires significant effort on the part of the
+application authors (or the evaluators). To manually add caching support
+to Lobsters' XX queries, including mitigation, thundering herd
+mitigation, and incremental updates would be a massive undertaking.
+
+In some sense, this alone is an argument for Noria's approach. Since the
+database uses information it already possesses (in the form of
+application queries) to automatically optimize accesses through
+materialization, it is relatively easy to take advantage of the benefits
+that Noria provides.
+
+Nonetheless, to shed some light on the absolute performance that Noria
+provides against a caching system, I include below a performance
+comparison between Noria and Redis. To approximate how a carefully
+planned and optimized application caching deployment might perform, it
+runs a workload that is idealized for a caching system:
+
+\begin{itemize}
+ \item Every Redis access hits in cache, to emulate perfect thundering herd
+   mitigation and invalidation-avoidance schemes.
+ \item Nearly all accesses (99.9\%) are reads, since writes would be
+   bottlenecked by the backing store.
+ \item All accesses are for a single integer value, to emulate a system that has
+   perfect cache coverage. Request access keys are chosen according to a Zipfian
+    distribution with $\alpha = 1.08$ (moderate skew).
+ \item Accesses are batched to reduce serialization cost and increase
+   throughput. Specifically, reads are \texttt{MGET}s, and writes are pipelined
+    \texttt{INCRBY}s.
+\end{itemize}
+
+This is not a realistic use of Redis, but it allows us to ``assume the best''
+about the underlying caching strategy and system. The benchmark runs for four
+minutes, and then samples latencies for another two minutes.
+
+Fig.: throughput vs 95\%-ile latency [noria,redis]
+
+Redis is single threaded, which necessarily limits its performance. If we assume
+perfect sharding, Redis should be able to support 16 times the load on a 16-core
+machine. We see that 16x Redis ~= Noria (??), which suggests that Noria is
+competitive with manual caching schemes.
