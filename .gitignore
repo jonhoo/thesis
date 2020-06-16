@@ -8,4 +8,5 @@
 *.pdf
 *.run.xml
 *.toc
+*.ipynb
 __pycache__/
