@@ -176,6 +176,12 @@ pub(crate) async fn run(
     results
         .write_all(format!("# client type: {}\n", client_type).as_bytes())
         .await?;
+    let commit = crate::noria_commit(s)
+        .await
+        .wrap_err("failed to get noria commit")?;
+    results
+        .write_all(format!("# commit: {}\n", commit).as_bytes())
+        .await?;
     tracing::trace!("saving load metrics");
     let (sload1, sload5) = crate::load(s).await.wrap_err("failed to get server load")?;
     results

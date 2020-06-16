@@ -401,6 +401,21 @@ async fn output_on_success<'a, C: std::borrow::BorrowMut<openssh::Command<'a>>>(
 }
 
 #[instrument(debug, skip(ssh))]
+pub(crate) async fn noria_commit(ssh: &tsunami::Session) -> Result<String, Report> {
+    let commit = crate::output_on_success(
+        ssh.command("git")
+            .arg("-C")
+            .arg("noria")
+            .arg("rev-parse")
+            .arg("HEAD"),
+    )
+    .await
+    .wrap_err("git")?;
+
+    Ok(String::from_utf8_lossy(&commit.0).trim().to_string())
+}
+
+#[instrument(debug, skip(ssh))]
 pub(crate) async fn load(ssh: &tsunami::Session) -> Result<(f64, f64), Report> {
     let load = crate::output_on_success(
         ssh.command("awk")
