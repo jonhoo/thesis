@@ -93,6 +93,7 @@ pub(crate) async fn run(
     let fin = async {
         for bench in &mut benches {
             let mut stdout = tokio::io::BufReader::new(bench.stdout().take().unwrap()).lines();
+            let mut min_median = None;
             while let Some(line) = stdout.next().await {
                 let line = line.wrap_err("failed to read client output")?;
                 results.write_all(line.as_bytes()).await?;
@@ -110,13 +111,14 @@ pub(crate) async fn run(
                         if let (Ok(pct), Ok(sjrn)) = (pct, sjrn) {
                             got_lines = true;
 
-                            if pct == 50 && (sjrn > 50_000 || sjrn == 0) {
-                                tracing::warn!(
-                                    endpoint = field,
-                                    sojourn = sjrn,
-                                    "high sojourn latency"
-                                );
-                                // on_overloaded();
+                            if pct == 50 {
+                                if let Some((_, t)) = min_median {
+                                    if sjrn < t {
+                                        min_median = Some((field.to_string(), sjrn));
+                                    }
+                                } else {
+                                    min_median = Some((field.to_string(), sjrn));
+                                }
                             }
                             continue;
                         }
@@ -130,6 +132,17 @@ pub(crate) async fn run(
                         tracing::error!(%rate, bar = %target_per_client, "low throughput");
                         on_overloaded();
                     }
+                }
+            }
+
+            if let Some((field, sjrn)) = min_median {
+                if sjrn > 50_000 || sjrn == 0 {
+                    tracing::warn!(
+                        endpoint = &*field,
+                        latency = sjrn,
+                        "high min. sojourn latency"
+                    );
+                    on_overloaded();
                 }
             }
         }
