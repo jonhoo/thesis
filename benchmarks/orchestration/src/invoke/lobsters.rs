@@ -113,8 +113,8 @@ pub(crate) async fn run(
                     tracing::error!(case = "bad line", message = &*line);
                     continue;
                 };
-                if pct != "95" {
-                    assert!(pct == "50" || pct == "99" || pct == "100", "{}", pct);
+                if pct != "50" {
+                    assert!(pct == "95" || pct == "99" || pct == "100", "{}", pct);
                     continue;
                 }
 
@@ -131,8 +131,8 @@ pub(crate) async fn run(
                     continue;
                 };
                 if us > 200_000 {
-                    tracing::warn!(endpoint = field, sojourn = us, "high sojourn latency");
-                    // on_overloaded();
+                    tracing::error!(endpoint = field, sojourn = us, "high sojourn latency");
+                    on_overloaded();
                 }
             }
         }

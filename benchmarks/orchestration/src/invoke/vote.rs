@@ -137,7 +137,7 @@ pub(crate) async fn run(
 
             if let Some((field, sjrn)) = min_median {
                 if sjrn > 50_000 || sjrn == 0 {
-                    tracing::warn!(
+                    tracing::error!(
                         endpoint = &*field,
                         latency = sjrn,
                         "high min. sojourn latency"
