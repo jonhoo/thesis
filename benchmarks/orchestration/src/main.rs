@@ -173,47 +173,26 @@ async fn main() {
         exit: rx,
     };
 
-    // run all benchmarks in parallel
-    tracing::info!("starting all benchmarks");
-    let mut running = BTreeMap::new();
+    tracing::info!("running benchmarks");
     for benchmark in benchmarks {
-        let had = running.insert(
-            benchmark,
-            match benchmark {
-                "vote-migration" => tokio::spawn(vote_migration::main(ctx.clone())),
-                "vote" => tokio::spawn(vote::main(ctx.clone())),
-                "vote-memory" => tokio::spawn(vote_mem::main(ctx.clone())),
-                "vote-redis" => tokio::spawn(vote_redis::main(ctx.clone())),
-                "lobsters-noria" => tokio::spawn(lobsters_noria::main(ctx.clone())),
-                "lobsters-noria-memory" => tokio::spawn(lobsters_noria_mem::main(ctx.clone())),
-                _ => unreachable!("{}", benchmark),
-            },
-        );
-        assert!(had.is_none());
-    }
-    tracing::trace!("all benchmarks started");
+        let result = match benchmark {
+            "vote-migration" => vote_migration::main(ctx.clone()).await,
+            "vote" => vote::main(ctx.clone()).await,
+            "vote-memory" => vote_mem::main(ctx.clone()).await,
+            "vote-redis" => vote_redis::main(ctx.clone()).await,
+            "lobsters-noria" => lobsters_noria::main(ctx.clone()).await,
+            "lobsters-noria-memory" => lobsters_noria_mem::main(ctx.clone()).await,
+            _ => unreachable!("{}", benchmark),
+        };
 
-    // wait for all to complete before reporting any results
-    tracing::trace!("waiting for benchmarks to complete");
-    let mut completed = BTreeMap::new();
-    for (benchmark, completion) in running {
-        let result = completion.await.expect("runtime shut down");
         if let Err(ref e) = result {
             tracing::error!(%benchmark, "benchmark failed: {}", e);
+            eprintln!("{:?}", e);
         } else {
             tracing::debug!(%benchmark, "benchmark completed");
         }
-        completed.insert(benchmark, result);
     }
     tracing::info!("all benchmarks completed");
-
-    // show result of all benchmarks
-    for (_, result) in completed {
-        if let Err(e) = result {
-            // NOTE: benchmark name is already in spans
-            eprintln!("{:?}", e);
-        }
-    }
 }
 
 fn launcher() -> aws::Launcher<rusoto_sts::StsAssumeRoleSessionCredentialsProvider> {
