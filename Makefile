@@ -12,5 +12,15 @@ proposal.pdf: 000-proposal.tex bibliography.bib \
 
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
-	    evaluation.tex
+	    evaluation.tex \
+	    graphs/lobsters-memory.pdf
 	latexmk -pdf thesis.tex
+
+graphs/source.pickle: graphs/memoize.py \
+                      $(wildcard benchmarks/orchestration/ex/*.log) \
+                      $(wildcard benchmarks/orchestration/ex/*.hist) \
+                      $(wildcard benchmarks/orchestration/ex/*.json)
+	graphs/memoize.py benchmarks/orchestration/ex/ $@
+
+graphs/%.pdf: graphs/source.pickle graphs/common.py graphs/%.py
+	python graphs/$*.py graphs/source.pickle graphs/$*

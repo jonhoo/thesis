@@ -1,0 +1,145 @@
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
+
+golden_ratio = 1.61803
+figwidth = 8.5 / golden_ratio
+
+# bring in aggregated results
+from memoize import source
+
+# now, extract and clean up the data
+
+#
+# Lobsters
+#
+
+# extract
+lobsters = source['lobsters-noria'].copy()
+lobsters = lobsters.query("until <= 512")
+
+# adjust units
+lobsters["vmrss"] = lobsters["vmrss"] / (1024 * 1024 * 1024)
+lobsters["basemem"] = lobsters["basemem"] / (1024 * 1024 * 1024)
+lobsters["opmem"] = lobsters["opmem"] / (1024 * 1024 * 1024)
+lobsters["rmem"] = lobsters["rmem"] / (1024 * 1024 * 1024)
+
+# compute derivatives
+lobsters["mem"] = lobsters["basemem"] + lobsters["opmem"]
+
+# set up indexes properly
+lobsters.sort_index(inplace = True)
+
+# find subset that corresponds to the "main" experiment
+lobsters_experiments = lobsters.query('op == "all" & memlimit == 0 & achieved >= 0.95 * requested & mean < 100').groupby([c for c in lobsters.index.names if c not in ["op", "until", "metric"]]).tail(1)
+
+# compute subset of data for memory-limited lobsters
+limited_lobsters_scale = 4000
+limited_lobsters = lobsters.query('op == "all" & memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
+limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested')["memlimit"].min()
+limited_lobsters = lobsters.query('op == "all" & memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
+print('Using %.0fMB memory limit as representative for lobsters (%d pages/s)' % (limited_lobsters_still_ok * 1024, limited_lobsters["achieved"].min()))
+
+# find scale that is shared among the most lobsters configurations
+data = lobsters_experiments
+shared_scale = None
+shared_scale_cnt = 0
+for scale in data.reset_index()["scale"]:
+    r = data.query("scale == %d" % scale)
+    if len(r) > shared_scale_cnt or (len(r) == shared_scale_cnt and scale > shared_scale):
+        shared_scale_cnt = len(r)
+        shared_scale = scale
+print('Shared lobsteres scaling factor is %dx (%d/%d rows)' % (shared_scale, shared_scale_cnt, len(data)))
+
+# compute maximum scale across all lobsters experiments
+max_scale = lobsters.reset_index()["scale"].max() * 1.1
+max_pps = (46.0 / 60.0) * max_scale # BASE_OPS_PER_MIN
+print("Max scale is %f (%f pages per second)" % (max_scale, max_pps))
+
+#
+# vote
+#
+
+# extract
+vote = source['vote'].copy()
+vote = vote.query("until <= 512")
+
+# adjust units
+vote["vmrss"] = vote["vmrss"] / (1024 * 1024 * 1024)
+vote["basemem"] = vote["basemem"] / (1024 * 1024 * 1024)
+vote["opmem"] = vote["opmem"] / (1024 * 1024 * 1024)
+vote["rmem"] = vote["rmem"] / (1024 * 1024 * 1024)
+
+# compute derivatives
+vote["mem"] = vote["basemem"] + vote["opmem"]
+vote["aggmem"] = vote["opmem"] - vote["rmem"]
+
+# set up indexes properly
+vote.sort_index(inplace = True)
+
+# find subset that corresponds to the "main" experiment
+vote_experiments = vote.query('op == "all" & memlimit == 0 & write_every == 20 & achieved >= 0.95 * target & mean < 50').groupby([c for c in vote.index.names if c not in ["op", "until", "metric"]]).tail(1)
+
+# compute subset of data for memory-limited vote
+limited_vote_target = 1600000
+limited_vote = vote.query('op == "all" & memlimit != 0 & target == %d' % limited_vote_target).groupby('memlimit').tail(1).reset_index()
+limited_vote_still_ok = limited_vote.query('achieved >= 0.99 * target')["memlimit"].min()
+limited_vote = vote.query('op == "all" & memlimit == %f & target == %d' % (limited_vote_still_ok, limited_vote_target)).tail(1).copy()
+print('Using %.0fMB memory limit as representative for vote (achieved %d ops/s)' % (limited_vote_still_ok * 1024, limited_vote["achieved"].min()))
+
+# find target that is shared among the most lobsters configurations
+data = vote_experiments
+shared_target = None
+shared_target_cnt = 0
+for target in data.reset_index()["target"]:
+    r = data.query("target == %d" % target)
+    if len(r) > shared_target_cnt or (len(r) == shared_target_cnt and target > shared_target):
+        shared_target_cnt = len(r)
+        shared_target = target
+print('Shared vote target is %d ops/s (%d/%d rows)' % (shared_target, shared_target_cnt, len(data)))
+
+# compute maximum scale across all redis experiments
+mx1 = vote["achieved"].max()
+mx2 = vote.reset_index()["target"].max()
+max_target = max([mx1, mx2]) * 1.1
+print("Max vote target is", max_target)
+
+#
+# redis
+#
+
+# extract and tidy
+redis = source['redis'].copy()
+redis = redis.query("until <= 512")
+redis.sort_index(inplace = True)
+
+# find subset that corresponds to the "main" experiment
+redis_experiments = redis.query('op == "all" & write_every == 1000 & achieved >= 0.95 * target & mean < 50').groupby([c for c in redis.index.names if c not in ["op", "until", "metric"]]).tail(1)
+
+# compute maximum scale across all redis experiments
+mx1 = redis["achieved"].max()
+mx2 = redis.reset_index()["target"].max()
+max_redis_target = max([mx1, mx2]) * 1.1
+print("Max redis target is", max_redis_target)
+
+#
+# next, set up general matplotlib styles so all figures look the same.
+#
+
+matplotlib.style.use('ggplot')
+matplotlib.rc('font', family='serif', size=11)
+matplotlib.rc('text.latex', preamble=['\\usepackage{mathptmx}'])
+matplotlib.rc('text', usetex=True)
+matplotlib.rc('figure', figsize=(figwidth, figwidth / golden_ratio))
+matplotlib.rc('legend', fontsize=11)
+matplotlib.rc('axes', linewidth=1)
+matplotlib.rc('lines', linewidth=2)
+
+mkfunc = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.0fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
+kfmt = matplotlib.ticker.FuncFormatter(mkfunc)
+
+colors = {
+    'full': '#7570b3',
+    'partial': '#1b9e77',
+    'evict': '#d95f02',
+}
