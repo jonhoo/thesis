@@ -5,7 +5,6 @@ const AMI: &str = "ami-0a5c785eb40c5cfcb";
 use clap::{App, Arg};
 use color_eyre::Report;
 use eyre::WrapErr;
-use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use tracing::instrument;
@@ -29,14 +28,14 @@ macro_rules! explore {
 
         let targets = vec![$($arg),*];
         let mut futs = futures_util::stream::futures_unordered::FuturesUnordered::new();
-        let mut maxed_out_at = Vec::new();
+        let mut results = Vec::new();
         for (i, target) in targets.iter().enumerate() {
-            maxed_out_at.push(Ok(0));
+            results.push(Ok(0));
 
             if futs.len() >= 3 {
                 // don't overwhelm ec2
                 let (i, r) = futs.next().await.expect(".len() > 0");
-                maxed_out_at[i] = r;
+                results[i] = r;
             }
 
             let mut ctx = $ctx.clone();
@@ -45,7 +44,7 @@ macro_rules! explore {
             if let Some(false) = ctx.exit.recv().await {
             } else {
                 tracing::info!("exiting as instructed");
-                maxed_out_at.into_iter().collect::<Result<Vec<_>, _>>()?;
+                results.into_iter().collect::<Result<Vec<_>, _>>()?;
                 return Ok(());
             }
 
@@ -55,86 +54,23 @@ macro_rules! explore {
             });
         }
 
-        tracing::debug!("waiting for primary groups to finish");
+        tracing::debug!("waiting for experiments to finish");
 
         // collect the remaining results
         if !futs.is_empty() {
             while let Some((i, r)) = futs.next().await {
-                maxed_out_at[i] = r;
+                results[i] = r;
             }
         }
 
         // surface any errors. note that we do this _after_ we've awaited all the experiments, so
         // we don't termiante them early. if there are multiple errors, we reports just the first,
         // and that's fine.
-        let maxed_out_at = maxed_out_at.into_iter().collect::<Result<Vec<_>, _>>()?;
-
-        tracing::info!("all primary groups finished");
-
-        if *$ctx.exit.borrow() {
-            tracing::info!("exiting as instructed");
-            return Ok(());
+        for r in results {
+            let _ = r?;
         }
 
-        let mut need_to_run = std::collections::HashMap::new();
-        for (_, &last_good) in maxed_out_at.iter().enumerate() {
-            if last_good == 0 {
-                // it never got off the ground
-                continue;
-            }
-
-            // we need to run all the _other_ targets at this load
-            for (oi, &olast_good) in maxed_out_at.iter().enumerate() {
-                if (!$min && olast_good > last_good) || ($min && olast_good < last_good) {
-                    // this other target maxed out at an "easier" number than we did
-                    // so it did _not_ run this particular iteration step
-                    tracing::debug!(parameters = ?targets[oi], load = last_good, "found missing data point");
-                    need_to_run.entry(oi).or_insert_with(Vec::new).push(last_good);
-                }
-            }
-        }
-
-        // now run all the missing datapoints
-        let mut results = Vec::new();
-        let mut futs = futures_util::stream::futures_unordered::FuturesUnordered::new();
-        for (i, mut loads) in need_to_run {
-            // make sure we don't run the same load twice
-            loads.sort_unstable();
-            loads.dedup();
-
-            if futs.len() >= 3 {
-                // same deal again -- don't overwhelm ec2
-                results.push(futs.next().await.expect(".len() > 0"));
-            }
-
-            let mut ctx = $ctx.clone();
-            if let Some(false) = ctx.exit.recv().await {
-            } else {
-                tracing::info!("exiting as instructed");
-                results.into_iter().collect::<Result<Vec<_>, _>>()?;
-                return Ok(());
-            }
-
-
-            let fut = tokio::spawn($one(targets[i], Some(loads), ctx).in_current_span());
-            futs.push(async move {
-                fut.await.expect("runtime went away?")
-            });
-        }
-
-        tracing::debug!("waiting for secondary groups to finish");
-
-        // surface errors again
-        if !futs.is_empty() {
-            while let Some(r) = futs.next().await {
-                results.push(r);
-            }
-        }
-        let _ = results.into_iter().collect::<Result<Vec<_>, _>>()?;
-
-        tracing::info!("all secondary groups finished");
-
-        // aaaand finally we're done!
+        tracing::info!("all experiments finished");
         Ok(())
     }};
 
