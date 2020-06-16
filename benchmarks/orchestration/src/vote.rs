@@ -11,16 +11,18 @@ use tsunami::Tsunami;
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
         [
-            //(20, "skewed", 1, true),
-            //(20, "skewed", 1, false),
-            //(2, "skewed", 6, true),
-            //(2, "skewed", 6, false),
-            (20, "skewed", 6, true),
-            (20, "skewed", 6, false),
-            (20, "uniform", 6, true),
-            (20, "uniform", 6, false),
-            (1000, "skewed", 6, true),
-            (1000, "skewed", 6, false),
+            (20, "skewed", 6, true, 0),
+            (20, "skewed", 6, false, 0),
+            (20, "uniform", 6, true, 0),
+            (20, "uniform", 6, false, 0),
+            (1000, "skewed", 6, true, 0),
+            (1000, "skewed", 6, false, 0),
+            (20, "skewed", 6, true, 64 * 1024 * 1024),
+            (20, "skewed", 6, true, 128 * 1024 * 1024),
+            (20, "skewed", 6, true, 256 * 1024 * 1024),
+            (20, "skewed", 6, true, 512 * 1024 * 1024),
+            (20, "skewed", 6, true, 768 * 1024 * 1024),
+            (20, "skewed", 6, true, 1 * 1024 * 1024 * 1024),
         ],
         one,
         ctx,
@@ -30,11 +32,11 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
 
 #[instrument(err, skip(ctx))]
 pub(crate) async fn one(
-    parameters: (usize, &'static str, usize, bool),
+    parameters: (usize, &'static str, usize, bool, usize),
     loads: Option<Vec<usize>>,
     mut ctx: Context,
 ) -> Result<usize, Report> {
-    let (write_every, distribution, nclients, partial) = parameters;
+    let (write_every, distribution, nclients, partial, memlimit) = parameters;
     let mut last_good_target = 0;
 
     let mut aws = crate::launcher();
@@ -97,8 +99,8 @@ pub(crate) async fn one(
                     tracing::info!("start benchmark target");
                     let backend = if partial { "partial" } else { "full" };
                     let prefix = format!(
-                        "{}.5000000a.{}t.{}r.{}c.0m.{}",
-                        backend, target, write_every, nclients, distribution,
+                        "{}.5000000a.{}t.{}r.{}c.{}m.{}",
+                        backend, target, write_every, nclients, memlimit, distribution,
                     );
 
                     tracing::trace!("starting noria server");
@@ -110,6 +112,8 @@ pub(crate) async fn one(
                         .arg("--durability=memory")
                         .arg("--no-reuse")
                         .arg("--shards=0")
+                        .arg("-m")
+                        .arg(memlimit.to_string())
                         .spawn()
                         .wrap_err("failed to start noria-server")?;
 
