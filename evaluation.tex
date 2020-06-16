@@ -12,8 +12,8 @@ belief is warranted through analysis of the following questions:
 
 \begin{enumerate}
  \item What impact does partial state have on memory use? \S\ref{s:eval:mem}
- \item How dependent is partial state on application access patterns? \S\ref{s:eval:patterns}
  \item What is the cost of using partial state? \S\ref{s:eval:cost}
+ \item How dependent is partial state on application access patterns? \S\ref{s:eval:patterns}
  \item How does partial state compare to existing solutions? \S\ref{s:eval:existing}
 \end{enumerate}
 
@@ -60,22 +60,98 @@ that Noria would provide if used as the backend for Lobsters as it scales up.
 Figure~\ref{f:lobsters-memory} shows the memory use with and without partial
 materialization at a scale-up factor of 4000%
 \footnote{When Noria runs without partial, this is the highest factor that still
-fits in the 128GB of memory of the host machine.}
-times normal Lobsters load. The figure also shows the lowest memory limit Noria
-can sustain without (COMPROMISING LATENCY?) when eviction is enabled.
+fits in the 128GB of memory of the host machine.} times normal Lobsters load. It
+also shows the lowest memory limit Noria can sustain without when eviction is
+enabled. I run Noria with a progressively more aggressive eviction policy, and
+stop once the 95th percentile exceeds XXXms.
 
-\begin{figure}[t]
+\begin{figure}[h]
   \centering
   \includegraphics{graphs/lobsters-memory.pdf}
   \caption{Lobsters memory use full/partial (many things not accessed) and partial/evict (many things infrequently accessed).}
   \label{f:lobsters-memory}
 \end{figure}
 
+\begin{inprogress}
 Note difference between value here and VMRSS!
+\end{inprogress}
 
-Note that evict is necessary because, over time, more and more of the
-tail will be sampled. Without eviction, eventually the entire tail would
-be kept in memory (so == full).
+This experiment exposes one of the fundamental trade-offs when using partial
+state: memory use versus tail latency. The more memory you provide the partial
+system with, the more of your tail will be pre-computed, and the more of your
+requests will be fast. Conversely, you can use less memory if you are willing
+for more of your tail to be computed on demand.
+
+Figure~\ref{f:lobsters-mem-latency} explores this trade-off in more detail; as
+the memory limit shrinks, the fraction of requests in the tail that must be
+computed increases, and thus tail latency increases.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\textwidth]{example-image-golden}
+  % should this be a cdf? each line is a memlimit. what to do about diff. pages?
+  \caption{Lobsters mem limit vs latency [mean/50/95/99].}
+  \label{f:lobsters-mem-latency}
+\end{figure}
+
+\section{What is the cost of using partial state?}
+\label{s:eval:cost}
+
+% NOTE: _could_ also talk about the cost of _materialization_ here (moving work
+% to the write side), but that seems orthogonal?
+
+Partial state's main drawback compared to traditional materialized views is
+that the results for an application's query may not be known. When this happens,
+the system must upquery the missing state, which takes time and consumes
+resources otherwise dedicated to writes.
+
+\subsection{Upqueries}
+
+There are two reasons why the results for a query may not be known: either the
+query as a whole has not been seen before and must be incorporated
+(\S\ref{s:eval:cost:mig}), or the results for the application's particular
+parameter values are missing from the materialized view. This can occur either
+because that particular set of parameter values have never been requested
+before, or because those results have since been evicted. In either case, Noria
+must execute an upquery before it can respond to the application's request.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\textwidth]{example-image-golden}
+  \caption{Lobsters latency cdf [ops] in steady-state at some memlimit.}
+  \label{f:lobsters-latency-steady}
+\end{figure}
+
+\begin{inprogress}
+Figure~\ref{f:lobsters-latency-steady} shows upqueries in tail, which is much
+slower than main body of requests. Order of magnitude? More? Also show vote?
+\end{inprogress}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\textwidth]{example-image-golden}
+  \caption{Lobsters throughput-latency in steady-state at some memlimit full vs partial.}
+  \label{f:lobsters-throughput-latency-steady-full-partial}
+\end{figure}
+
+\begin{inprogress}
+Figure~\ref{f:lobsters-throughput-latency-steady-full-partial} shows that
+partial has a higher tail latency because some miss. Same median (?).
+\end{inprogress}
+
+\begin{inprogress}
+Maybe good place to have comparison with Redis?
+Fig.: throughput vs latency w/wo partial in vote?
+Note that the reason vote falls over when it does is single-core write
+processing (since only one query, so one data-flow path).
+\end{inprogress}
+
+\subsection{Migrations}
+\label{s:eval:cost:mig}
+
+When the application issues a query that Noria has never seen before, Noria must
+instantiate the dataflow for that query, along with any materializations it
+might need.
 
 Partial state also enables efficient migrations in many cases. Any view
 that can be made partial (ref section + later eval) is immediately
@@ -83,28 +159,36 @@ available, and does not compute until requested.
 
 Fig.: vote-migration skewed partial vs full
 
+Upqueries are particularly frequent immediately after a new view is added, since
+it starts out entirely empty.
+
+Fig.: Latency timeline to show that early accesses are slow.
+
+\begin{inprogress}
+Maybe show vote uniform numbers? Talk about ``warmup''?
+\end{inprogress}
+
 \section{How dependent is partial state on application access patterns?}
 \label{s:eval:patterns}
 
-Materialization is generally useful when reads are more common than
-writes, since it shifts the computation from reads to writes.
-But, without partial state, materialization is an ``off/on'' option —
-either you materialize all the results for a query, or none [TODO: not
-quite true — more subtlety here — depends what you mean by ``query''
-(e.g., parameterized or not)].
+Partial state is mainly useful if accesses are skewed towards particular queries
+and particular data. When this is the case, caching a small number of the
+application's computed state speeds up a significant fraction of requests. If
+this is not the case, the likelihood of missing in the cache is inversely
+proportional to the size of the cache, and you would need to cache most of the
+data to have a decent cache hit rate.
 
-Partial state (and caching in general) enables \textbf{selective}
-materialization. This makes sense if most application accesses are for
-a particular subset of the dataset. That is, accesses are \textit{skewed}
-towards particular data. In applications with skewed access patterns
-(common — ref log-normal + Lobsters above), you can choose to only
-materialize commonly-accessed results, rather than all. This uses
-potentially far less memory (as indicated above), while still giving you
-a speedup for \textbf{most} accesses. The more memory you provide the partial
-system with, the more of your tail will be pre-computed, and the more of
-your requests will be fast.
+\begin{inprogress}
+The memory use for partial with and without eviction from earlier suggest that
+this skew is indeed present in normal applications. As do other papers on the
+subject (ref such papers).
+\end{inprogress}
 
-Fig.: mem limit vs latency [mean/50/95/99] in Lobsters.
+\begin{inprogress}
+Note that eviction is necessary because, over time, more and more of the
+tail will be sampled. Without eviction, eventually the entire tail would
+be kept in memory (so == full).
+\end{inprogress}
 
 Deciding what memory limit to set is challenging, in part because it
 may change over time as the access patterns change, and in part because
@@ -139,21 +223,6 @@ studies on log-normal/zipf/skew.
    \end{itemize}
  \item TopK
 \end{itemize}
-
-\section{What is the cost of using partial state?}
-\label{s:eval:cost}
-
-Migrations maybe? Latency timeline to show that early accesses are slow.
-Maybe good place to have comparison with Redis? Maybe show vote uniform
-numbers? Talk about ``warmup''.
-
-Fig.: throughput vs latency w/wo partial in vote.
-
-Note latency diff for lobsters, and that full fell over due to mem, and
-no bigger machine w/o more cores available.
-
-Note that the reason vote falls over when it does is single-core write
-processing (since only one query, so one data-flow path).
 
 \section{How does partial state compare to existing solutions?}
 \label{s:eval:existing}
@@ -202,3 +271,7 @@ Redis is single threaded, which necessarily limits its performance. If we assume
 perfect sharding, Redis should be able to support 16 times the load on a 16-core
 machine. We see that 16x Redis ~= Noria (??), which suggests that Noria is
 competitive with manual caching schemes.
+
+\begin{inprogress}
+Why on earth is Noria (full) \textbf{so} much faster than Noria (partial)?!
+\end{inprogress}

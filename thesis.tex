@@ -1,8 +1,5 @@
 \documentclass[fontsize=12pt,paper=letter,draft=true]{scrbook}
 
-% enumerate* and itemize*
-\usepackage[inline]{enumitem}
-
 % for 1.5 line spacing
 \usepackage{setspace}
 \onehalfspacing
@@ -11,6 +8,9 @@
 
 % recompute page layout based on the above
 \recalctypearea
+
+% more colors (like RedOrange)
+\usepackage[dvipsnames]{xcolor}
 
 % so we can splice in PDFs
 \usepackage{pdfpages}
@@ -30,6 +30,9 @@
   maxbibnames=99]{biblatex}
 \addbibresource{bibliography.bib}
 
+% enumerate* and itemize*
+\usepackage[inline]{enumitem}
+
 % for \begin{comment}
 \usepackage{verbatim}
 
@@ -45,6 +48,11 @@
   % TODO: double check before final version
   \setcounter{page}{\p+1+(\p-\p/2*2)}%
  }
+
+% an environment for todos
+\newenvironment{inprogress}
+  {\color{RedOrange} \begin{tabular}{||p{0.9\textwidth}}}
+  {\end{tabular}}
 
 % for handy reference
 %
@@ -99,6 +107,13 @@ DB view materialization (like DBToaster) ``all or nothing''.
 Commercial DB view materialization limited and slow (ref OSDI paper).
 By folding the cache into the database, database knows how to keep it up
 to date\,---\,avoids having that logic threaded through the application.
+Partial state (and caching in general) enables \textbf{selective} materialization.
+Materialization is generally useful when reads are more common than
+writes, since it shifts the computation from reads to writes.
+But, without partial state, materialization is an ``off/on'' option —
+either you materialize all the results for a query, or none [TODO: not
+quite true — more subtlety here — depends what you mean by ``query''
+(e.g., parameterized or not)].
 
 \section{Challenges}
 \section{Approach}
@@ -111,6 +126,12 @@ to date\,---\,avoids having that logic threaded through the application.
 \chapter{Noria}
 
 \chapter{Related Work}
+
+\begin{inprogress}
+I need to explain \textbf{somewhere} the various ways in which fully
+materialized systems can approximate partial. Primarily: a lookup key join table
+(like DD), or fully materializing complete queries (i.e., w/o parameters).
+\end{inprogress}
 
 \chapter{A Model of Partial State}
 
