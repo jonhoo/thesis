@@ -138,6 +138,7 @@ matplotlib.rc('lines', linewidth=2)
 mkfunc = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.0fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
 kfmt = matplotlib.ticker.FuncFormatter(mkfunc)
 
+# https://colorbrewer2.org/#type=qualitative&scheme=Dark2&n=3
 colors = {
     'full': '#7570b3',
     'partial': '#1b9e77',
