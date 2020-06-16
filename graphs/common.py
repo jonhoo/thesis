@@ -22,6 +22,7 @@ lobsters = lobsters.query("until <= 512")
 lobsters["vmrss"] = lobsters["vmrss"] / (1024 * 1024 * 1024)
 lobsters["basemem"] = lobsters["basemem"] / (1024 * 1024 * 1024)
 lobsters["opmem"] = lobsters["opmem"] / (1024 * 1024 * 1024)
+lobsters["fopmem"] = lobsters["fopmem"] / (1024 * 1024 * 1024)
 lobsters["rmem"] = lobsters["rmem"] / (1024 * 1024 * 1024)
 
 # compute derivatives
@@ -68,6 +69,7 @@ vote = vote.query("until <= 512")
 vote["vmrss"] = vote["vmrss"] / (1024 * 1024 * 1024)
 vote["basemem"] = vote["basemem"] / (1024 * 1024 * 1024)
 vote["opmem"] = vote["opmem"] / (1024 * 1024 * 1024)
+vote["fopmem"] = vote["fopmem"] / (1024 * 1024 * 1024)
 vote["rmem"] = vote["rmem"] / (1024 * 1024 * 1024)
 
 # compute derivatives
@@ -134,13 +136,38 @@ matplotlib.rc('figure', figsize=(figwidth, figwidth / golden_ratio))
 matplotlib.rc('legend', fontsize=11)
 matplotlib.rc('axes', linewidth=1)
 matplotlib.rc('lines', linewidth=2)
+plt.tick_params(top='off', right='off', which='both')
 
 mkfunc = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.0fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
 kfmt = matplotlib.ticker.FuncFormatter(mkfunc)
 
+def bts(b):
+    if b >= 1024 * 1024 * 1024:
+        return '%1.0fGB' % (b / 1024 / 1024 / 1024)
+    if b >= 1024 * 1024:
+        return '%1.0fMB' % (b / 1024 / 1024)
+    if b >= 1024:
+        return '%1.0fkB' % (b / 1024)
+    return '%1.0fb' % b
+
 # https://colorbrewer2.org/#type=qualitative&scheme=Dark2&n=3
 colors = {
-    'full': '#7570b3',
-    'partial': '#1b9e77',
-    'evict': '#d95f02',
+    'full': '#a95aa1',
+    'partial': '#85c0f9',
+    'evict': '#0f2080',
+    'redis': '#f5793a',
 }
+
+# https://colorbrewer2.org/#type=sequential&scheme=YlOrRd&n=9
+memlimit_colors = [
+    '#ffffcc', # highest limit, least aggressive
+    '#ffeda0',
+    '#fed976',
+    '#feb24c',
+    '#fd8d3c',
+    '#fc4e2a',
+    '#e31a1c',
+    '#bd0026',
+    '#800026',
+    '#400026',
+]

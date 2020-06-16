@@ -13,14 +13,25 @@ proposal.pdf: 000-proposal.tex bibliography.bib \
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
 	    evaluation.tex \
-	    graphs/lobsters-memory.pdf
+	    graphs/lobsters-memory.pdf \
+	    graphs/lobsters-memlimit-cdf.pdf \
+	    graphs/lobsters-partial-overhead.pdf \
+	    graphs/vote-memlimit-cdf.pdf \
+	    graphs/vote-throughput-memlimit.pdf \
+	    graphs/vote-redis.pdf
 	latexmk -pdf thesis.tex
 
 graphs/source.pickle: graphs/memoize.py \
-                      $(wildcard benchmarks/orchestration/ex/*.log) \
-                      $(wildcard benchmarks/orchestration/ex/*.hist) \
-                      $(wildcard benchmarks/orchestration/ex/*.json)
-	graphs/memoize.py benchmarks/orchestration/ex/ $@
+                      $(wildcard benchmarks/orchestration/*.log) \
+                      $(wildcard benchmarks/orchestration/*.hist) \
+                      $(wildcard benchmarks/orchestration/*.json)
+	graphs/memoize.py benchmarks/orchestration/ $@
+
+graphs/vote-memlimit-cdf.pdf: graphs/source.pickle graphs/common.py graphs/vote-memlimit-cdf.py
+	python graphs/vote-memlimit-cdf.py graphs/source.pickle benchmarks/orchestration/ graphs/vote-memlimit-cdf
+
+graphs/lobsters-memlimit-cdf.pdf: graphs/source.pickle graphs/common.py graphs/lobsters-memlimit-cdf.py
+	python graphs/lobsters-memlimit-cdf.py graphs/source.pickle benchmarks/orchestration/ graphs/lobsters-memlimit-cdf
 
 graphs/%.pdf: graphs/source.pickle graphs/common.py graphs/%.py
 	python graphs/$*.py graphs/source.pickle graphs/$*

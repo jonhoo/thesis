@@ -17,19 +17,44 @@ else:
 data = data.set_index(["scale", "partial"])
 
 fig, ax = plt.subplots()
-xs = ["Full", "Partial", "Eviction"]
+
+# plot the "bottom" part of the bars
+xs = ["Full", "Partial", "w/ eviction"]
 xticks = [x for x in range(len(xs))]
-ys = [data.query("partial == False")["opmem"].item(),
-      data.query("partial == True")["opmem"].item(),
-      data.query("partial == 'prune'")["opmem"].item()]
+ys = [data.query("partial == False")["fopmem"].item(),
+      data.query("partial == True")["fopmem"].item(),
+      data.query("partial == 'prune'")["fopmem"].item()]
 bars = ax.bar(xticks, ys)
-ax.set_xticks(xticks)
-ax.set_xticklabels(xs)
+bars[0].set_color(common.colors['full'])
+bars[1].set_color(common.colors['full'])
+bars[2].set_color(common.colors['full'])
+
+# plot the "top" part of the bars
+tops = [data.query("partial == False")["opmem"].item() - data.query("partial == False")["fopmem"].item(),
+      data.query("partial == True")["opmem"].item() - data.query("partial == True")["fopmem"].item(),
+      data.query("partial == 'prune'")["opmem"].item() - data.query("partial == 'prune'")["fopmem"].item()]
+bars = ax.bar(xticks, tops, bottom=ys)
 bars[0].set_color(common.colors['full'])
 bars[1].set_color(common.colors['partial'])
 bars[2].set_color(common.colors['evict'])
-# ax = data["opmem"].plot.bar(title="Operator state only")
+
+ax.set_xticks(xticks)
+ax.set_xticklabels(xs)
+ax.set_ylim(0, data["opmem"].max() * 1.2) # also fit labels over bars
+
 ax.set_ylabel("memory use [GB]")
 
-plt.tick_params(top='off', right='off', which='both')
+def autolabel(rects):
+    """Attach a text label above each bar in *rects*, displaying its height."""
+    for rect in rects:
+        height = rect.get_height()
+        ax.annotate('%.1fGB' % (rect.get_y() + height),
+                    xy=(rect.get_x() + rect.get_width() / 2, rect.get_y() + height),
+                    xytext=(0, 3),  # 3 points vertical offset
+                    textcoords="offset points",
+                    ha='center', va='bottom')
+
+
+autolabel(bars)
+
 plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf", bbox_inches="tight", pad=0.001)

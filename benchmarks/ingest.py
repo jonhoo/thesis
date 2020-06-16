@@ -220,7 +220,7 @@ def vote(df, path):
         return df
 
     data = timelines(path)
-    ndomains, base_mem, other_mem, reader_mem = mem_stats(path)
+    ndomains, base_mem, other_mem, reader_mem, full_op_mem = mem_stats(path)
 
     meta = {
         'target': target,
@@ -243,6 +243,7 @@ def vote(df, path):
         'basemem': base_mem,
         'opmem': other_mem,
         'rmem': reader_mem,
+        'fopmem': full_op_mem,
     }
 
     for (k, v) in meta.items():
@@ -308,7 +309,7 @@ def lobsters_noria(df, path):
                 pass
 
     data = timelines(path)
-    ndomains, base_mem, other_mem, reader_mem = mem_stats(path)
+    ndomains, base_mem, other_mem, reader_mem, full_op_mem = mem_stats(path)
 
     meta = {
         'scale': scale,
@@ -327,6 +328,7 @@ def lobsters_noria(df, path):
         'basemem': base_mem,
         'opmem': other_mem,
         'rmem': reader_mem,
+        'fopmem': full_op_mem,
     }
     for (k, v) in meta.items():
         data[k] = v
@@ -349,16 +351,23 @@ def mem_stats(log_path):
     base_mem = 0
     other_mem = 0
     reader_mem = 0
+    full_op_mem = 0
     for domain, dinfo in domains.items():
         for node, ninfo in dinfo[1].items():
             if ninfo["desc"] == "B":
                 base_mem += ninfo["mem_size"]
-            elif ninfo["desc"] == "reader node":
-                reader_mem += ninfo["mem_size"]
-                other_mem += ninfo["mem_size"]
             else:
-                other_mem += ninfo["mem_size"]
-    return (ndomains, base_mem, other_mem, reader_mem)
+                if type(ninfo["materialized"]) is dict and "Partial" in ninfo["materialized"]:
+                    pass
+                else:
+                    full_op_mem += ninfo["mem_size"]
+
+                if ninfo["desc"] == "reader node":
+                    reader_mem += ninfo["mem_size"]
+                    other_mem += ninfo["mem_size"]
+                else:
+                    other_mem += ninfo["mem_size"]
+    return (ndomains, base_mem, other_mem, reader_mem, full_op_mem)
 
 def extract_hist(log_path, *args):
     if "lobsters" in os.path.basename(log_path):

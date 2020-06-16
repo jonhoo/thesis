@@ -26,8 +26,8 @@ latency.
 \label{s:eval:mem}
 
 The primary motivation behind reducing application memory use is to reduce cost.
-Higher memory use requires more memory, and more memory costs more, both in
-purchasing and in ongoing power consumption. An application that uses less
+Higher memory use requires more memory, and more memory costs more, both to
+purchase and in ongoing power consumption. An application that uses less
 memory can scale further on the same hardware, or, conversely, can run on
 smaller hardware than would otherwise be needed.
 
@@ -52,92 +52,145 @@ data and query access patterns.
 I then wrote a Noria implementation for each Lobsters page endpoint that
 queries the same data, and performs the same writes as the real Ruby-on-Rails
 application.%
-\footnote{I opted to do this rather than run the Ruby-on-Rails code directly to
-avoid measuring Ruby and Rails bottlenecks.}
+\footnote{I did not run the Ruby-on-Rails code directly to avoid measuring
+bottlenecks in Ruby and Rails.}
 Together, these allow me to measure the throughput, latency, and memory overhead
 that Noria would provide if used as the backend for Lobsters as it scales up.
 
-Figure~\ref{f:lobsters-memory} shows the memory use with and without partial
-materialization at a scale-up factor of 4000%
-\footnote{When Noria runs without partial, this is the highest factor that still
-fits in the 128GB of memory of the host machine.} times normal Lobsters load. It
-also shows the lowest memory limit Noria can sustain without when eviction is
-enabled. I run Noria with a progressively more aggressive eviction policy, and
-stop once the 95th percentile exceeds XXXms.
+Figure~\ref{f:lobsters-memory} shows the memory use%
+\footnote{Note that this counts the data set size, not the resident virtual
+memory.}
+of stateful operators with
+and without partial materialization at a scale-up factor of 4000 times normal
+Lobsters load. Note that the figure does not show the memory used by the base
+tables, as it is the same for all three configurations. 4000 was chosen as it is
+the highest scaling factor that can run in the 128GB of memory of the host
+machine without partial materialization.
+
+The figure also shows the lowest memory limit Noria can sustain without when
+eviction is enabled. Here, I run Noria with a progressively more aggressive
+eviction policy, and stop once the backend can no longer keep up with offered
+load. With partial materialization and eviction, Noria uses approximately
+20$\times$ less memory for operator state than full materialization does.
 
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/lobsters-memory.pdf}
-  \caption{Lobsters memory use full/partial (many things not accessed) and partial/evict (many things infrequently accessed).}
+  \caption{The effect of partial state and the eviction it enables on stateful
+  operator memory use. The savings from partial alone stem from many items never
+  being accessed. The savings from eviction come from items that are only
+  fetched infrequently, and need not be in memory.}
   \label{f:lobsters-memory}
-\end{figure}
-
-\begin{inprogress}
-Note difference between value here and VMRSS!
-\end{inprogress}
-
-This experiment exposes one of the fundamental trade-offs when using partial
-state: memory use versus tail latency. The more memory you provide the partial
-system with, the more of your tail will be pre-computed, and the more of your
-requests will be fast. Conversely, you can use less memory if you are willing
-for more of your tail to be computed on demand.
-
-Figure~\ref{f:lobsters-mem-latency} explores this trade-off in more detail; as
-the memory limit shrinks, the fraction of requests in the tail that must be
-computed increases, and thus tail latency increases.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\textwidth]{example-image-golden}
-  % should this be a cdf? each line is a memlimit. what to do about diff. pages?
-  \caption{Lobsters mem limit vs latency [mean/50/95/99].}
-  \label{f:lobsters-mem-latency}
 \end{figure}
 
 \section{What is the cost of using partial state?}
 \label{s:eval:cost}
 
-% NOTE: _could_ also talk about the cost of _materialization_ here (moving work
-% to the write side), but that seems orthogonal?
-
 Partial state's main drawback compared to traditional materialized views is
 that the results for an application's query may not be known. When this happens,
 the system must upquery the missing state, which takes time and consumes
-resources otherwise dedicated to writes.
+resources otherwise dedicated to writes. The fundamental trade-off here is that
+of memory use versus tail latency. The more memory you provide the partial
+system with, the more of your tail will be pre-computed, and the more of your
+requests will be fast. Conversely, you can use less memory if you are willing
+for more of your tail to be computed on demand.
 
-\subsection{Upqueries}
-
-There are two reasons why the results for a query may not be known: either the
-query as a whole has not been seen before and must be incorporated
-(\S\ref{s:eval:cost:mig}), or the results for the application's particular
-parameter values are missing from the materialized view. This can occur either
-because that particular set of parameter values have never been requested
-before, or because those results have since been evicted. In either case, Noria
-must execute an upquery before it can respond to the application's request.
+Figure~\ref{f:lobsters-mem-latency} explores this trade-off in more detail in
+the context of the Lobsters experiment from the previous section. You can see
+that as the memory limit shrinks, the fraction of requests in the tail that must
+be computed increases, and thus tail latency increases.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\textwidth]{example-image-golden}
-  \caption{Lobsters latency cdf [ops] in steady-state at some memlimit.}
-  \label{f:lobsters-latency-steady}
+  \includegraphics{graphs/lobsters-memlimit-cdf.pdf}
+  \caption{CDF of Lobsters page latency in steady-state at 3000 pages per second
+  as the memory use budget shrinks. The CDF is across all different page
+  requests.}
+  \label{f:lobsters-mem-latency}
 \end{figure}
 
 \begin{inprogress}
-Figure~\ref{f:lobsters-latency-steady} shows upqueries in tail, which is much
-slower than main body of requests. Order of magnitude? More? Also show vote?
+Why is is partial memory use ~400MB when memory limit is ~32MB?
 \end{inprogress}
+
+Even at a scale factor of 4000$\times$, Lobsters only serves about 3000 pages
+per second. While each page executes multiple queries, the absolute number of
+queries per second is fairly low, which allows the system to get away with much
+of the tail computed on-demand. To shed more light on the extremes of this
+trade-off, I next present results for a simplified version of one particular
+query from Lobsters: counting the number of votes for an article. The SQL
+equivalent of this query is:
+
+\begin{verbatim}
+SELECT articles.*, COUNT(votes.user_id)
+FROM articles
+LEFT JOIN votes ON (articles.id = votes.article_id)
+GROUP BY articles.id
+WHERE articles.id = ?
+\end{verbatim}
+
+Figure~\ref{f:vote-mem-latency} shows a similar latency CDF as for Lobsters, but
+for a benchmark stressing this particular query (``vote''). The benchmark issues
+requests distributed as 95\% reads and 5\% writes (inserts into \texttt{votes}).
+The access pattern is skewed (Zipf; $\alpha = 1.08$) across 5M articles.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\textwidth]{example-image-golden}
-  \caption{Lobsters throughput-latency in steady-state at some memlimit full vs partial.}
-  \label{f:lobsters-throughput-latency-steady-full-partial}
+  \includegraphics{graphs/vote-memlimit-cdf.pdf}
+  \caption{CDF of vote request latency in steady-state at 1.6M requests per
+  second as the memory use budget shrinks. The CDF is across all requests, reads
+  and writes.}
+  \label{f:vote-mem-latency}
 \end{figure}
 
+The figure demonstrates the trade-off clearly. As you lower the memory limit,
+more requests must be computed, and tail latency suffers. The difference between
+the figures for Lobsters and vote demonstrates another important aspect of this
+trade-off: as throughput increases, so must the memory budget. The intuition
+behind this is that the memory budget effectively dictates your hit rate. The
+more requests are issued per second, the more misses (in absolute terms) result
+from a given hit fraction. If those misses in the tail are distinct, Noria must
+satisfy \textbf{more} upqueries as load increases, while also handling that
+added load.
+
+Figure~\ref{f:vote-throughput-limit} demonstrates this effect in practice. It
+shows throughput-latency lines for the vote benchmark for different memory
+budgets. Each point along each line is a higher offered load; its x-coordinate
+is the achieved throughput, and its y-coordinate is the measured 90\%-ile
+latency. When the backend no longer keeps up, you see a ``boomerang'', where
+achieved throughput no longer increases, while latency spikes. The figure
+shows that as the offered load increases, Noria needs a larger memory budget to
+keep up.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/vote-throughput-memlimit.pdf}
+  \caption{Achieved throughput vs 90\%-ile latency in vote with different memory
+  budgets. Offered load increases along the points on each line. At higher
+  offered load, a higher memory budget is needed to keep up, or too many misses
+  must be handled.}
+  \label{f:vote-throughput-memlimit}
+\end{figure}
+
+\begin{comment}
 \begin{inprogress}
 Figure~\ref{f:lobsters-throughput-latency-steady-full-partial} shows that
 partial has a higher tail latency because some miss. Same median (?).
 \end{inprogress}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/lobsters-partial-overhead.pdf}
+  \caption{Lobsters throughput-latency in steady-state at some memlimit full vs partial.}
+  \label{f:lobsters-throughput-latency-steady-full-partial}
+\end{figure}
+\end{comment}
+
+\begin{inprogress}
+Figure~\ref{f:lobsters-mem-latency} shows upqueries in tail, which is much
+slower than main body of requests. Order of magnitude? More?
+\end{inprogress}
+
 
 \begin{inprogress}
 Maybe good place to have comparison with Redis?
@@ -195,7 +248,6 @@ may change over time as the access patterns change, and in part because
 it depends on load. The higher the load, the more requests will be in
 the tail (and miss). Of course, more requests will be in the head too.
 
-Fig.: throughput vs 95\%-ile latency [memlimits] in vote.
 
 For example, for Zipf distribution, we can compute \%s:
 
@@ -265,7 +317,12 @@ This is not a realistic use of Redis, but it allows us to ``assume the best''
 about the underlying caching strategy and system. The benchmark runs for four
 minutes, and then samples latencies for another two minutes.
 
-Fig.: throughput vs 95\%-ile latency [noria,redis]
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/vote-redis.pdf}
+  \caption{Throughput vs 90\%-ile latency.}
+  \label{f:vote-redis}
+\end{figure}
 
 Redis is single threaded, which necessarily limits its performance. If we assume
 perfect sharding, Redis should be able to support 16 times the load on a 16-core
