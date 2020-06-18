@@ -83,7 +83,7 @@ vote.sort_index(inplace = True)
 vote_experiments = vote.query('op == "all" & memlimit == 0 & write_every == 20 & achieved >= 0.95 * target & mean < 50').groupby([c for c in vote.index.names if c not in ["op", "until", "metric"]]).tail(1)
 
 # compute subset of data for memory-limited vote
-limited_vote_target = 1600000
+limited_vote_target = 800000
 limited_vote = vote.query('op == "all" & memlimit != 0 & target == %d' % limited_vote_target).groupby('memlimit').tail(1).reset_index()
 limited_vote_still_ok = limited_vote.query('achieved >= 0.99 * target')["memlimit"].min()
 limited_vote = vote.query('op == "all" & memlimit == %f & target == %d' % (limited_vote_still_ok, limited_vote_target)).tail(1).copy()
@@ -160,14 +160,11 @@ colors = {
 
 # https://colorbrewer2.org/#type=sequential&scheme=YlOrRd&n=9
 memlimit_colors = [
-    '#ffffcc', # highest limit, least aggressive
-    '#ffeda0',
-    '#fed976',
+    '#fed976', # highest limit, least aggressive
+    '#feb24c',
     '#feb24c',
     '#fd8d3c',
     '#fc4e2a',
     '#e31a1c',
-    '#bd0026',
-    '#800026',
-    '#400026',
+    '#b10026',
 ]

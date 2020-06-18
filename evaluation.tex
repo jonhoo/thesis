@@ -103,14 +103,52 @@ be computed increases, and thus tail latency increases.
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/lobsters-memlimit-cdf.pdf}
-  \caption{CDF of Lobsters page latency in steady-state at 3000 pages per second
-  as the memory use budget shrinks. The CDF is across all different page
-  requests.}
+  \caption{CDF of Lobsters page sojourn latency in steady-state at 3000 pages
+  per second as the memory use budget shrinks. The CDF is across all different
+  page requests.}
   \label{f:lobsters-mem-latency}
 \end{figure}
 
 \begin{inprogress}
-Why is is partial memory use ~400MB when memory limit is ~32MB?
+  This shows a memory limit far lower than 400MB. Why is memory use still 400MB?
+\end{inprogress}
+
+The figure also demonstrates how much costlier upqueries are than cached
+reads. Where a read that hits in cache only has to wait for serialization, an
+upquery must wait for the requested data to be fetched and computed before it
+finishes. If this happens to multiple queries the application issues for a
+particular page to be rendered, that latency accumulates, increasing the tail
+latency.
+
+\begin{inprogress}
+  Why on earth is tail latency here 10 \textbf{seconds}?
+  Note that the actual tail latency distribution looks a little
+  different\,---\,it's the sojourn time that gives the tail the curve towards
+  the max. If you instead look at processing time, only a very small fraction of
+  requests take that long, but later requests get queued up behind them (256
+  in-flight?)!
+\end{inprogress}
+
+The figure above includes data across all the different Lobsters pages the
+client requests over the course of the benchmark.
+Figure~\ref{f:lobsters-pages-latency} breaks this down by four fairly
+different page request types: viewing a story (most common), viewing the front
+page, voting for a comment, and submitting a new story (least common).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/lobsters-pages-cdf.pdf}
+  \caption{CDF of Lobsters page latency in steady-state at 3000 pages per second
+  for different pages without a memory limit. This does \textbf{not} measure
+  queueing time.}
+  \label{f:lobsters-pages-latency}
+\end{figure}
+
+\begin{inprogress}
+  When I get the tail under control, the horizontal distance here is
+  interesting, since it indicates fewer/more queries are issued. The tail is
+  also be interesting, since it indicates how affected the given page is to
+  evictions.
 \end{inprogress}
 
 Even at a scale factor of 4000$\times$, Lobsters only serves about 3000 pages
@@ -132,32 +170,43 @@ WHERE articles.id = ?
 Figure~\ref{f:vote-mem-latency} shows a similar latency CDF as for Lobsters, but
 for a benchmark stressing this particular query (``vote''). The benchmark issues
 requests distributed as 95\% reads and 5\% writes (inserts into \texttt{votes}).
-The access pattern is skewed (Zipf; $\alpha = 1.08$) across 5M articles.
+The access pattern is skewed (Zipf; $\alpha = 1.08$) across 5M articles. The
+figure demonstrates the trade-off clearly. As you lower the memory limit, more
+requests must be computed, and tail latency suffers.
 
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/vote-memlimit-cdf.pdf}
-  \caption{CDF of vote request latency in steady-state at 1.6M requests per
-  second as the memory use budget shrinks. The CDF is across all requests, reads
-  and writes.}
+  \caption{CDF of vote read request latency in steady-state at 800k requests per
+  second as the memory use budget shrinks.}
   \label{f:vote-mem-latency}
 \end{figure}
 
-The figure demonstrates the trade-off clearly. As you lower the memory limit,
-more requests must be computed, and tail latency suffers. The difference between
-the figures for Lobsters and vote demonstrates another important aspect of this
-trade-off: as throughput increases, so must the memory budget. The intuition
-behind this is that the memory budget effectively dictates your hit rate. The
-more requests are issued per second, the more misses (in absolute terms) result
-from a given hit fraction. If those misses in the tail are distinct, Noria must
-satisfy \textbf{more} upqueries as load increases, while also handling that
-added load.
+\begin{inprogress}
+  Writes are \textit{consistently} \textbf{much} slower with partial than
+  without. That seems like a problem that I should look into.
+\end{inprogress}
+
+\begin{inprogress}
+  Interestingly, overall latency improves. I though this might be due to
+  improved CPU cache utilization with fewer keys in the map (since this
+  effectively is a hashmap benchmark), but that doesn't explain why `full`
+  (which has all the keys) does so well. Maybe it's because partial must store
+  tombstones?
+\end{inprogress}
+
+Another important aspect of the partial trade-off is that as throughput
+increases, so must the memory budget. The intuition behind this is that the
+memory budget effectively dictates your hit rate. The more requests are issued
+per second, the more misses (in absolute terms) result from a given hit
+fraction. If those misses in the tail are distinct, Noria must satisfy
+\textbf{more} upqueries as load increases, while also handling that added load.
 
 Figure~\ref{f:vote-throughput-limit} demonstrates this effect in practice. It
 shows throughput-latency lines for the vote benchmark for different memory
 budgets. Each point along each line is a higher offered load; its x-coordinate
-is the achieved throughput, and its y-coordinate is the measured 90\%-ile
-latency. When the backend no longer keeps up, you see a ``boomerang'', where
+is the achieved throughput, and its y-coordinate is the measured median latency.
+When the backend no longer keeps up, you see a ``boomerang'', where
 achieved throughput no longer increases, while latency spikes. The figure
 shows that as the offered load increases, Noria needs a larger memory budget to
 keep up.
@@ -165,39 +214,12 @@ keep up.
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/vote-throughput-memlimit.pdf}
-  \caption{Achieved throughput vs 90\%-ile latency in vote with different memory
-  budgets. Offered load increases along the points on each line. At higher
-  offered load, a higher memory budget is needed to keep up, or too many misses
-  must be handled.}
+  \caption{Achieved throughput vs median request latency in vote with different
+  memory budgets. Offered load increases along the points on each line. At
+  higher offered load, a higher memory budget is needed to keep up, or too many
+  misses must be handled.}
   \label{f:vote-throughput-memlimit}
 \end{figure}
-
-\begin{comment}
-\begin{inprogress}
-Figure~\ref{f:lobsters-throughput-latency-steady-full-partial} shows that
-partial has a higher tail latency because some miss. Same median (?).
-\end{inprogress}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics{graphs/lobsters-partial-overhead.pdf}
-  \caption{Lobsters throughput-latency in steady-state at some memlimit full vs partial.}
-  \label{f:lobsters-throughput-latency-steady-full-partial}
-\end{figure}
-\end{comment}
-
-\begin{inprogress}
-Figure~\ref{f:lobsters-mem-latency} shows upqueries in tail, which is much
-slower than main body of requests. Order of magnitude? More?
-\end{inprogress}
-
-
-\begin{inprogress}
-Maybe good place to have comparison with Redis?
-Fig.: throughput vs latency w/wo partial in vote?
-Note that the reason vote falls over when it does is single-core write
-processing (since only one query, so one data-flow path).
-\end{inprogress}
 
 \subsection{Migrations}
 \label{s:eval:cost:mig}
@@ -330,5 +352,12 @@ machine. We see that 16x Redis ~= Noria (??), which suggests that Noria is
 competitive with manual caching schemes.
 
 \begin{inprogress}
-Why on earth is Noria (full) \textbf{so} much faster than Noria (partial)?!
+  Why on earth is Noria (full) \textbf{so} much faster than Noria (partial)?!
+  Maybe this is related to the fact that writes are much slower with partial
+  (why?), and we're basically bottlenecked by write performance...
+\end{inprogress}
+
+\begin{inprogress}
+  Note that the reason vote falls over when it does is single-core write
+  processing (since only one query, so one data-flow path).
 \end{inprogress}
