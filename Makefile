@@ -4,12 +4,13 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/lobsters-memory.pdf \
 	    graphs/lobsters-memlimit-cdf.pdf \
 	    graphs/lobsters-pages-cdf.pdf \
+	    graphs/lobsters-timeline.pdf \
 	    graphs/vote-migration.pdf \
 	    graphs/vote-migration-full.pdf \
 	    graphs/vote-memlimit-cdf.pdf \
 	    graphs/vote-throughput-memlimit.pdf \
 	    graphs/vote-redis.pdf
-	latexmk -pdf thesis.tex
+	latexmk -shell-escape -pdf thesis.tex
 
 proposal.pdf: 000-proposal.tex bibliography.bib \
               jfrg-thesis-proposal-agreement-robert.pdf \
@@ -23,7 +24,7 @@ proposal.pdf: 000-proposal.tex bibliography.bib \
 %.pdf: %.tex
 	latexmk -pdf $<
 
-graphs/source.pickle: graphs/ingest.py graphs/memoize.py \
+graphs/source.pickle: graphs/extract-hist/src/main.rs graphs/ingest.py graphs/memoize.py \
                       $(wildcard benchmarks/orchestration/*.log) \
                       $(wildcard benchmarks/orchestration/*.hist) \
                       $(wildcard benchmarks/orchestration/*.json)

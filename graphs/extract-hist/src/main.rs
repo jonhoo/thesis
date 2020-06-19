@@ -136,7 +136,7 @@ fn main() {
     timelines.insert("all".to_string(), all);
 
     if as_timeline {
-        println!("op\tuntil\tmetric\tmean\tmedian\tp25\tp90\tp95\tp99\tmax");
+        println!("op\tuntil\tmetric\tmean\tmedian\tmin\tp25\tp90\tp95\tp99\tmax");
         for (op, timeline) in timelines {
             for (i, h) in timeline.histograms.iter().enumerate() {
                 let start = Duration::from_secs((1 << i) >> 1);
@@ -153,12 +153,13 @@ fn main() {
                         continue;
                     }
                     println!(
-                        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                         op,
                         end.as_secs(),
                         metric,
                         h.mean() / 1000.0, /* use ms */
                         h.value_at_quantile(0.5) as f64 / 1000.0,
+                        h.min() as f64 / 1000.0,
                         h.value_at_quantile(0.25) as f64 / 1000.0,
                         h.value_at_quantile(0.90) as f64 / 1000.0,
                         h.value_at_quantile(0.95) as f64 / 1000.0,

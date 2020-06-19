@@ -125,4 +125,5 @@ ax.set_xlabel("Latency [ms]")
 ax.set_xscale('log')
 ax.legend()
 
-plt.savefig("{}.pdf".format(sys.argv[3]), format="pdf", bbox_inches="tight", pad=0.001)
+fig.tight_layout()
+plt.savefig("{}.pdf".format(sys.argv[3]), format="pdf")

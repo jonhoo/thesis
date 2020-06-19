@@ -21,4 +21,5 @@ ax.legend()
 ax.set_xlabel("Achieved throughput [requests per second]")
 ax.set_ylabel("Latency [ms]")
 
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf", bbox_inches="tight", pad=0.001)
+fig.tight_layout()
+plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")

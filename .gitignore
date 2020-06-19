@@ -9,4 +9,5 @@
 *.run.xml
 *.toc
 *.ipynb
+_minted-*/
 __pycache__/

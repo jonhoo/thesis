@@ -158,13 +158,23 @@ colors = {
     'redis': '#f5793a',
 }
 
-# https://colorbrewer2.org/#type=sequential&scheme=YlOrRd&n=9
-memlimit_colors = [
-    '#fed976', # highest limit, least aggressive
-    '#feb24c',
-    '#feb24c',
-    '#fd8d3c',
-    '#fc4e2a',
-    '#e31a1c',
-    '#b10026',
-]
+# https://colorbrewer2.org/#type=sequential&scheme=RdPu&n=8
+def memlimit_colors(n, bright=False):
+    if not bright and n > 3:
+        # off by one from the official colors, because #feebe2 is too hard to see
+        n += 1
+
+    if n <= 3:
+        return ['#c51b8a', '#fa9fb5', '#fde0dd']
+    elif n == 4:
+        return ['#ae017e', '#f768a1', '#fbb4b9', '#feebe2']
+    elif n == 5:
+        return ['#7a0177', '#c51b8a', '#f768a1', '#fbb4b9', '#feebe2']
+    elif n == 6:
+        return ['#7a0177', '#c51b8a', '#f768a1', '#fa9fb5', '#fcc5c0', '#feebe2']
+    elif n == 7:
+        return ['#7a0177', '#ae017e', '#dd3497', '#f768a1', '#fa9fb5', '#fcc5c0', '#feebe2']
+    elif n == 8:
+        return ['#7a0177', '#ae017e', '#dd3497', '#f768a1', '#fa9fb5', '#fcc5c0', '#fde0dd', '#fff7f3']
+    else:
+        return []

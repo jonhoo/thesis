@@ -57,4 +57,5 @@ def autolabel(rects):
 
 autolabel(bars)
 
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf", bbox_inches="tight", pad=0.001)
+fig.tight_layout()
+plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")

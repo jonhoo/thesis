@@ -73,7 +73,7 @@ eviction policy, and stop once the backend can no longer keep up with offered
 load. With partial materialization and eviction, Noria uses approximately
 20$\times$ less memory for operator state than full materialization does.
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics{graphs/lobsters-memory.pdf}
   \caption{The effect of partial state and the eviction it enables on stateful
@@ -100,7 +100,7 @@ the context of the Lobsters experiment from the previous section. You can see
 that as the memory limit shrinks, the fraction of requests in the tail that must
 be computed increases, and thus tail latency increases.
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics{graphs/lobsters-memlimit-cdf.pdf}
   \caption{CDF of Lobsters page sojourn latency in steady-state at 3000 pages
@@ -122,6 +122,14 @@ latency.
 
 \begin{inprogress}
   Why on earth is tail latency here 10 \textbf{seconds}?
+\end{inprogress}
+
+\begin{inprogress}
+  Why does the memory limit have basically no effect? Presumably related to
+  the fact that eviction only ever gets down to 400M..
+\end{inprogress}
+
+\begin{inprogress}
   Note that the actual tail latency distribution looks a little
   different\,---\,it's the sojourn time that gives the tail the curve towards
   the max. If you instead look at processing time, only a very small fraction of
@@ -135,12 +143,12 @@ Figure~\ref{f:lobsters-pages-latency} breaks this down by four fairly
 different page request types: viewing a story (most common), viewing the front
 page, voting for a comment, and submitting a new story (least common).
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics{graphs/lobsters-pages-cdf.pdf}
   \caption{CDF of Lobsters page latency in steady-state at 3000 pages per second
-  for different pages without a memory limit. This does \textbf{not} measure
-  queueing time.}
+  for different pages without eviction. This does \textbf{not} measure queueing
+  time.}
   \label{f:lobsters-pages-latency}
 \end{figure}
 
@@ -156,25 +164,29 @@ per second. While each page executes multiple queries, the absolute number of
 queries per second is fairly low, which allows the system to get away with much
 of the tail computed on-demand. To shed more light on the extremes of this
 trade-off, I next present results for a simplified version of one particular
-query from Lobsters: counting the number of votes for an article. The SQL
-equivalent of this query is:
+query from Lobsters shown in Listing~\ref{l:votes}. It just counts the number of
+votes for an article, and presents that alongside the article information.
 
-\begin{verbatim}
-SELECT articles.*, COUNT(votes.user_id)
-FROM articles
-LEFT JOIN votes ON (articles.id = votes.article_id)
-GROUP BY articles.id
-WHERE articles.id = ?
-\end{verbatim}
+\begin{listing}[ht]
+  \begin{minted}{sql}
+    SELECT articles.*, COUNT(votes.user_id)
+    FROM articles
+    LEFT JOIN votes ON (articles.id = votes.article_id)
+    GROUP BY articles.id
+    WHERE articles.id = ?
+  \end{minted}
+  \caption{Simplified query for vote counting in Lobsters.}
+  \label{l:votes}
+\end{listing}
 
 Figure~\ref{f:vote-mem-latency} shows a similar latency CDF as for Lobsters, but
-for a benchmark stressing this particular query (``vote''). The benchmark issues
-requests distributed as 95\% reads and 5\% writes (inserts into \texttt{votes}).
-The access pattern is skewed (Zipf; $\alpha = 1.08$) across 5M articles. The
-figure demonstrates the trade-off clearly. As you lower the memory limit, more
-requests must be computed, and tail latency suffers.
+for a benchmark stressing this particular query. The benchmark issues requests
+distributed as 95\% reads and 5\% writes (inserts into \texttt{votes}). The
+access pattern is skewed (Zipf; $\alpha = 1.08$) across 5M articles. The figure
+demonstrates the trade-off clearly. As you lower the memory limit, more requests
+must be computed, and tail latency suffers.
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics{graphs/vote-memlimit-cdf.pdf}
   \caption{CDF of vote read request latency in steady-state at 800k requests per
@@ -202,7 +214,7 @@ per second, the more misses (in absolute terms) result from a given hit
 fraction. If those misses in the tail are distinct, Noria must satisfy
 \textbf{more} upqueries as load increases, while also handling that added load.
 
-Figure~\ref{f:vote-throughput-limit} demonstrates this effect in practice. It
+Figure~\ref{f:vote-throughput-memlimit} demonstrates this effect in practice. It
 shows throughput-latency lines for the vote benchmark for different memory
 budgets. Each point along each line is a higher offered load; its x-coordinate
 is the achieved throughput, and its y-coordinate is the measured median latency.
@@ -211,7 +223,7 @@ achieved throughput no longer increases, while latency spikes. The figure
 shows that as the offered load increases, Noria needs a larger memory budget to
 keep up.
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics{graphs/vote-throughput-memlimit.pdf}
   \caption{Achieved throughput vs median request latency in vote with different
@@ -224,40 +236,147 @@ keep up.
 \subsection{Migrations}
 \label{s:eval:cost:mig}
 
+In the previous section, we looked at queries where partial lookups may miss due
+to evictions, or due to the key not yet having been computed. But there's
+another important use-case for partial that has a fairly different usage
+pattern: migrations.
+
 When the application issues a query that Noria has never seen before, Noria must
 instantiate the dataflow for that query, along with any materializations it
-might need.
+might need. Partial state enables those migrations to be instantaneous in many
+cases\,---\,if the new view can be made partial (ref section + later eval) it is
+instantiated as empty, and immediately made available, and will be filled on
+demand as the application submits reads.
 
-Partial state also enables efficient migrations in many cases. Any view
-that can be made partial (ref section + later eval) is immediately
-available, and does not compute until requested.
+In addition to memory use, the trade-off here also includes the migration time.
+With full materialization, the system must to a potentially large amount of work
+up-front to compute the full state for the new view, and any internal operator
+state it depends on. And during that time, the related segments of the dataflow
+must spend precious cycles on computing that new state, at the expense of other
+concurrent writes. The new view also cannot serve any reads until all the state
+is computed.
 
-\begin{figure}[h]
+\begin{listing}[t]
+  \begin{minted}{sql}
+    CREATE VIEW scores AS
+      -- same vote count (each vote is a 1 rating)
+      SELECT votes.article_id, COUNT(votes.user_id) AS score
+      FROM votes
+      GROUP BY votes.article_id
+    UNION
+      -- compute total rating score
+      SELECT ratings.article_id, SUM(ratings.rating) AS score
+      FROM ratings
+      GROUP BY ratings.article_id;
+
+    -- new view aggregates across votes and ratings
+    SELECT articles.*, SUM(scores.score)
+    FROM articles
+    LEFT JOIN scores ON (articles.id = scores.article_id)
+    GROUP BY articles.id
+    WHERE articles.id = ?;
+  \end{minted}
+  \caption{Updated query for ``rating'' counting in Lobsters.}
+  \label{l:ratings}
+\end{listing}
+
+To measure this, this next benchmark makes a modification to the ``vote''
+benchmark illustrated by Listing~\ref{l:votes}. It introduces a new table,
+\texttt{ratings}, which has ``ratings'' on a scale from 0 to 1 for each article
+instead of just a binary 0 or 1. It also add a new view, shown in
+Listing~\ref{l:ratings}, which combines the existing votes with the new ratings
+to compute a total article score%
+\footnote{By writing the query this way, votes and ratings can co-exist.}.
+The benchmarker inserts votes and issues the original vote query
+(Listing~\ref{l:votes}) for 90 seconds, and then introduces the new table and
+query (denoted as time 0). From then on, it issues both votes and ratings, and
+queries both views without blocking every 10 milliseconds.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics{graphs/vote-migration-full.pdf}
+  \caption{Time to set up a new view with full materialization. Access pattern
+  is skewed (Zipf; $\alpha = 1.08$) across 10M articles. Red lines denote start
+  and end time of the migration.}
+  \label{f:vote-migration-full}
+\end{figure}
+
+Figure~\ref{f:vote-migration-full} plots the write throughput for votes and
+ratings, as well as the cache hit rate for reads from the new view over time.
+This figure demonstrates the upfront cost of full materialization; when the new
+query is installed, Noria must expend significant resources to fully compute the
+new view, and sacrifice the performance of concurrent writes. Furthermore, the
+new view can only satisfy read requests once it has been fully computed. In the
+interim, the application must wait%
+\footnote{The dataflow must now process both votes and ratings, so each sees
+about half the write throughput prior to the migration.}.
+
+\begin{figure}[t]
   \centering
   \includegraphics{graphs/vote-migration.pdf}
   \caption{Partial. Reuse. Skewed. 10M articles.}
   \label{f:vote-migration}
 \end{figure}
 
-\begin{figure}[h]
+Figure~\ref{f:vote-migration} shows the same benchmark, but with partial
+materialization enabled. It exhibits very different behavior: the migration
+completes instantly, and there is no downtime for writes. The new view is
+available for reads immediately, though initially many reads miss. Those reads
+must wait for an upquery to finish, but the hit rate increases quickly due to
+the data skew.
+
+The figure also exposes another interesting effect of using partial
+materialization: increased write throughput. With full materialization, every
+write must be processed to completion, but with partial, writes for keys that
+have not been read can be discarded early. This produces an increase in
+throughput, with diminishing impact as more keys are read. With eviction, the
+increased write throughput would persist as the number of keys would plateau.
+
+\begin{inprogress}
+  Why do we only reach ~80\% hit rate? That suggests a decent number of reads
+  are still happening, but miss. I guess the read rate is pretty low, so that's
+  probably why.
+\end{inprogress}
+
+\begin{inprogress}
+  Should we show partial with eviction?
+  Uniform distribution?
+\end{inprogress}
+
+Like other caching systems, Noria suffers when hot keys are not in memory. When
+the application adds a new view, this will necessarily be the case, just as when
+an application adds a new cache entry in any other cache system. As in
+traditional systems, applications may want to ``warm'' the cache so that the
+hottest keys are present before all client load is shifted to the new view. How
+long that warming takes depends on the query in question, the size of the data
+that must be computed, and the skew in the data.
+
+Figure~\ref{f:vote-migration} shows that, for the vote query, the hit rate is
+75\% after about 20s, but this is a very limited sample. To get a better idea of
+how this time varies for a wider variety of situations, we return to the
+Lobsters experiment.
+
+Figure~\ref{f:lobsters-timeline} shows the latency profile seen by the Lobsters
+benchmark client over time, starting at the point when the first query is
+issued. Progressively brighter colors include more of the tail. The figure
+shows that latency is initially high, but after just a few seconds, the mean and
+90th percentile latency drop below 10 milliseconds. The 95th percentile follows
+suit after 20 seconds. By the time a minute has passed, most pages are satisfied
+in single-digit milliseconds, and 99th percentile latency is 20 milliseconds.
+
+\begin{figure}[t]
   \centering
-  \includegraphics{graphs/vote-migration-full.pdf}
-  \caption{Full. Reuse. Skewed. 10M articles.}
-  \label{f:vote-migration-full}
+  \includegraphics{graphs/lobsters-timeline.pdf}
+  \caption{Lobsters latency timeline at 3000 pages per second across all pages
+  without eviction. \textbf{Both axes use a logarithmic scale.} Latency does not
+  includes queueing time. Brighter colors include more of the tail.}
+  \label{f:lobsters-timeline}
 \end{figure}
 
 \begin{inprogress}
-  Should partial run with eviction here?
-  Would mean that write performance does not degrade over time!
-\end{inprogress}
-
-Upqueries are particularly frequent immediately after a new view is added, since
-it starts out entirely empty.
-
-Fig.: Latency timeline to show that early accesses are slow.
-
-\begin{inprogress}
-Maybe show vote uniform numbers? Talk about ``warmup''?
+  Why does last entry seemingly always have higher far-tail latency?
+  Why does tail initially increase?
+  log-log plot...
 \end{inprogress}
 
 \section{How dependent is partial state on application access patterns?}
@@ -356,7 +475,7 @@ This is not a realistic use of Redis, but it allows us to ``assume the best''
 about the underlying caching strategy and system. The benchmark runs for four
 minutes, and then samples latencies for another two minutes.
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics{graphs/vote-redis.pdf}
   \caption{Throughput vs 90\%-ile latency.}

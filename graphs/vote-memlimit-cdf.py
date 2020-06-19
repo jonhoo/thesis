@@ -110,24 +110,27 @@ for path in glob(os.path.join(sys.argv[2], '*.log')):
 data = data.set_index(["memlimit", "pct"]).sort_index()
 
 fig, ax = plt.subplots()
-limits.sort(reverse=True)
+limits.sort()
 print(limits)
-limits = [0, 768 * 1024 * 1024, 512 * 1024 * 1024, 448 * 1024 * 1024, 384 * 1024 * 1024, 256 * 1024 * 1024]
-limits.sort(reverse=True)
+limits = [768 * 1024 * 1024, 512 * 1024 * 1024, 448 * 1024 * 1024, 384 * 1024 * 1024, 256 * 1024 * 1024]
+colors = common.memlimit_colors(len(limits))
+limits.sort()
+limits = limits + [0]
 i = 0
 for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     if limit == 0:
         partial = d.query("partial == True")
         full = d.query("partial != True")
-        ax.plot(partial["latency"], partial["pct"], color = 'black', lw=1, alpha = 0.8, ls = "-", label = "unlimited")
-        ax.plot(full["latency"], full["pct"], color = 'black', lw=1, alpha = 0.8, ls = "--", label = "full")
+        ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = "unlimited")
+        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "full")
     else:
-        ax.plot(d["latency"], d["pct"], color = common.memlimit_colors[1 + i], lw=1, alpha = 0.8, label = common.bts(limit))
+        ax.plot(d["latency"], d["pct"], color = colors[i], label = common.bts(limit))
         i += 1
 ax.set_ylabel("CDF")
 ax.set_xlabel("Latency [ms]")
 ax.set_xscale('log')
 ax.legend()
 
-plt.savefig("{}.pdf".format(sys.argv[3]), format="pdf", bbox_inches="tight", pad=0.001)
+fig.tight_layout()
+plt.savefig("{}.pdf".format(sys.argv[3]), format="pdf")
