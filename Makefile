@@ -23,7 +23,7 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/vote-redis.pdf
 	latexmk -pdf thesis.tex
 
-graphs/source.pickle: graphs/memoize.py \
+graphs/source.pickle: graphs/ingest.py graphs/memoize.py \
                       $(wildcard benchmarks/orchestration/*.log) \
                       $(wildcard benchmarks/orchestration/*.hist) \
                       $(wildcard benchmarks/orchestration/*.json)
