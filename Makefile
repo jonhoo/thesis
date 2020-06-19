@@ -16,6 +16,8 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/lobsters-memory.pdf \
 	    graphs/lobsters-memlimit-cdf.pdf \
 	    graphs/lobsters-pages-cdf.pdf \
+	    graphs/vote-migration.pdf \
+	    graphs/vote-migration-full.pdf \
 	    graphs/vote-memlimit-cdf.pdf \
 	    graphs/vote-throughput-memlimit.pdf \
 	    graphs/vote-redis.pdf

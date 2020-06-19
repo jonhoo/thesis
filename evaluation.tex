@@ -232,7 +232,24 @@ Partial state also enables efficient migrations in many cases. Any view
 that can be made partial (ref section + later eval) is immediately
 available, and does not compute until requested.
 
-Fig.: vote-migration skewed partial vs full
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/vote-migration.pdf}
+  \caption{Partial. Reuse. Skewed. 10M articles.}
+  \label{f:vote-migration}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/vote-migration-full.pdf}
+  \caption{Full. Reuse. Skewed. 10M articles.}
+  \label{f:vote-migration-full}
+\end{figure}
+
+\begin{inprogress}
+  Should partial run with eviction here?
+  Would mean that write performance does not degrade over time!
+\end{inprogress}
 
 Upqueries are particularly frequent immediately after a new view is added, since
 it starts out entirely empty.
