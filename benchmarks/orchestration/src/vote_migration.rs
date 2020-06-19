@@ -52,7 +52,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
                     .arg("--migrate=90")
                     .arg("--runtime=180")
                     .arg("--do-it-all")
-                    .arg("--articles=2000000")
+                    .arg("--articles=10000000")
                     .stdout(std::process::Stdio::null());
                 let benchmark = crate::output_on_success(benchmark);
 
