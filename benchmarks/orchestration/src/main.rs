@@ -175,6 +175,10 @@ async fn main() {
 
     tracing::info!("running benchmarks");
     for benchmark in benchmarks {
+        if *ctx.exit.borrow() {
+            tracing::warn!("exiting early as instructed");
+        }
+
         let result = match benchmark {
             "vote-migration" => vote_migration::main(ctx.clone()).await,
             "vote" => vote::main(ctx.clone()).await,
