@@ -100,7 +100,7 @@ pub(crate) async fn one(
         let mut targets = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(100_000, 500_00))
+            Box::new(cliff::ExponentialCliffSearcher::until(100_000, 500_000))
         };
         let result: Result<(), Report> = try {
             let mut successful_target = None;
