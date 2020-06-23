@@ -37,8 +37,8 @@ fn main() {
                 );
             } else {
                 println!(
-                    "& & {} & {:.1} & {:.1} & {:.1} \\\\",
-                    human_rate, nines_p, one_s, thirty_s
+                    "& & {} & '' & {:.1} & {:.1} \\\\",
+                    human_rate, one_s, thirty_s
                 );
             }
             first = false;
