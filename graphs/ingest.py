@@ -45,7 +45,7 @@ def ingest(in_dir="."):
 
     return results
 
-vote_migration_fn = re.compile("vote-((?:no-)?partial)-(stupid|reuse)-([\d.]+)M.(uniform|zipf1.08).log")
+vote_migration_fn = re.compile("vote-((?:no-)?partial)-(stupid|reuse)-([\d.]+)M.(uniform|zipf1.15).log")
 def vote_migration(df, f):
     match = vote_migration_fn.fullmatch(os.path.basename(f))
     if match is None:

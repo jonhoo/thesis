@@ -182,7 +182,7 @@ votes for an article, and presents that alongside the article information.
 Figure~\ref{f:vote-mem-latency} shows a similar latency CDF as for Lobsters, but
 for a benchmark stressing this particular query. The benchmark issues requests
 distributed as 95\% reads and 5\% writes (inserts into \texttt{votes}). The
-access pattern is skewed (Zipf; $\alpha = 1.08$) across 5M articles. The figure
+access pattern is skewed (Zipf; $\alpha = 1.15$) across 5M articles. The figure
 demonstrates the trade-off clearly. As you lower the memory limit, more requests
 must be computed, and tail latency suffers.
 
@@ -217,19 +217,19 @@ fraction. If those misses in the tail are distinct, Noria must satisfy
 Figure~\ref{f:vote-throughput-memlimit} demonstrates this effect in practice. It
 shows throughput-latency lines for the vote benchmark for different memory
 budgets. Each point along each line is a higher offered load; its x-coordinate
-is the achieved throughput, and its y-coordinate is the measured median latency.
-When the backend no longer keeps up, you see a ``boomerang'', where
-achieved throughput no longer increases, while latency spikes. The figure
-shows that as the offered load increases, Noria needs a larger memory budget to
-keep up.
+is the achieved throughput, and its y-coordinate is the measured 90th percentile
+latency. When the backend no longer keeps up, you see a ``boomerang'', where
+achieved throughput no longer increases, while latency spikes. The figure shows
+that as the offered load increases, Noria needs a larger memory budget to keep
+up.
 
 \begin{figure}[ht]
   \centering
   \includegraphics{graphs/vote-throughput-memlimit.pdf}
-  \caption{Achieved throughput vs median request latency in vote with different
-  memory budgets. Offered load increases along the points on each line. At
-  higher offered load, a higher memory budget is needed to keep up, or too many
-  misses must be handled.}
+  \caption{Achieved throughput vs 90th \%-ile request latency in vote with
+  different memory budgets. Offered load increases along the points on each
+  line. At higher offered load, a higher memory budget is needed to keep up, or
+  too many misses must be handled.}
   \label{f:vote-throughput-memlimit}
 \end{figure}
 
@@ -296,7 +296,7 @@ queries both views without blocking every 10 milliseconds.
   \centering
   \includegraphics{graphs/vote-migration-full.pdf}
   \caption{Time to set up a new view with full materialization. Access pattern
-  is skewed (Zipf; $\alpha = 1.08$) across 10M articles. Red lines denote start
+  is skewed (Zipf; $\alpha = 1.15$) across 10M articles. Red lines denote start
   and end time of the migration.}
   \label{f:vote-migration-full}
 \end{figure}
@@ -468,17 +468,17 @@ that processes writes for the dataflow path for the vote query reaches capacity.
 \begin{figure}[ht]
   \centering
   \includegraphics{graphs/vote-redis.pdf}
-  \caption{Achieved throughput vs median request latency in vote with Redis and
-  Noria. Offered load increases along the points on each line.}
+  \caption{Achieved throughput vs 90th \%-ile request latency in vote with Redis
+  and Noria. Offered load increases along the points on each line.}
   \label{f:vote-redis}
 \end{figure}
 
 If we assume perfect sharding of both reads and writes, Redis should be able to
 support 16 times the load on the 16-core host machine, as shown by the dashed
-orange line at ~70Mops/s. Noria is about a factor of six short of that mark.
-However, beyond the simplifications above, Noria also does significantly more
-work than Redis: it allows rich SQL queries, transfers full rows, not just a
-single integer, and does not require sharding. Noria has also not seem the same
-amount of optimization as Redis has gone through over the years. Taken together,
-this suggests that Noria's performance, in absolute terms, is competitive with
-manual caching schemes.
+orange line at ~85Mops/s. Noria is about an order of magnitude short of that
+mark. However, beyond the simplifications above, Noria also does significantly
+more work than Redis: it allows rich SQL queries, transfers full rows, not just
+a single integer, and does not require sharding. Noria has also not seem the
+same amount of optimization as Redis has gone through over the years. Taken
+together, this suggests that Noria's performance, in absolute terms, is
+competitive with manual caching schemes.
