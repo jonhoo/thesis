@@ -1,17 +1,25 @@
 const NUM: usize = 5000000;
 
 fn main() {
-    for &(skew, exp) in &[("80/20", 0.886), ("80/5", 0.99), ("90/1", 1.15)] {
-        println!("\\hline");
+    println!("skew\talpha\tthroughput\tpercentage");
+    let rates = [
+        50_000, 100_000, 200_000, 400_000, 800_000, 1_600_000, 3_200_000, 6_400_000, 12_800_000,
+    ];
 
-        let mut first = true;
-        let harmonic = harmonic(NUM, exp);
-        for &rate in &[100_000, 1_000_000, 10_000_000] {
-            let pct = |pt| {
+    // How large a fraction is access in "one eviction period"?
+    // Noria evicts once per second, but keeping in mind that eviction may take some time
+    // and such, let's overestimate memory use so we don't overstate Noria's performance.
+    // So we use an eviction period of 2 seconds.
+    let period = 2;
+
+    for &(skew, alpha) in &[("80/20", 0.886), ("80/5", 0.99), ("90/1", 1.15)] {
+        let harmonic = harmonic(NUM, alpha);
+        for &rate in &rates {
+            let _pct = |pt| {
                 let mut p = 0.0;
                 let mut k = 1;
                 while p < pt && k <= NUM {
-                    p += zipf(k, exp, harmonic);
+                    p += zipf(k, alpha, harmonic);
                     k += 1;
                 }
                 // println!(
@@ -24,25 +32,21 @@ fn main() {
             };
 
             // let eighty_p = pct(0.8);
-            let nines_p = pct(0.99);
-            let one_s = 100.0 * (est(1, rate, exp) / (NUM as f64));
-            let thirty_s = 100.0 * (est(30, rate, exp) / (NUM as f64));
+            // let nines_p = pct(0.99);
 
-            let human_rate = format!("{}M/s", rate as f64 / 1_000_000.0);
-
-            if first {
-                println!(
-                    "{} & {:.2} & {} & {:.1} & {:.1} & {:.1} \\\\",
-                    skew, exp, human_rate, nines_p, one_s, thirty_s
-                );
-            } else {
-                println!(
-                    "& & {} & '' & {:.1} & {:.1} \\\\",
-                    human_rate, one_s, thirty_s
-                );
-            }
-            first = false;
+            let one_eviction_period = 100.0 * (est(period, rate, alpha) / (NUM as f64));
+            println!("{}\t{:.3}\t{}\t{}", skew, alpha, rate, one_eviction_period);
         }
+    }
+    for &rate in &rates {
+        let p = 1.0 - 1.0 / NUM as f64;
+        let p = p.powf((period * rate) as f64);
+        let one_eviction_period: f64 = (1..=NUM).map(|_| 1.0 - p).sum();
+        let one_eviction_period = 100.0 * one_eviction_period / (NUM as f64);
+        println!(
+            "{}\t{:.3}\t{}\t{}",
+            "uniform", "NA", rate, one_eviction_period
+        );
     }
 }
 

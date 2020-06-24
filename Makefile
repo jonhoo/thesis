@@ -5,6 +5,7 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/lobsters-memlimit-cdf.pdf \
 	    graphs/lobsters-pages-cdf.pdf \
 	    graphs/lobsters-timeline.pdf \
+	    graphs/vote-formula.pdf \
 	    graphs/vote-migration.pdf \
 	    graphs/vote-migration-full.pdf \
 	    graphs/vote-memlimit-cdf.pdf \
@@ -38,6 +39,9 @@ graphs/lobsters-pages-cdf.pdf: graphs/source.pickle graphs/common.py graphs/lobs
 
 graphs/lobsters-memlimit-cdf.pdf: graphs/source.pickle graphs/common.py graphs/lobsters-memlimit-cdf.py
 	python graphs/lobsters-memlimit-cdf.py graphs/source.pickle benchmarks/orchestration/ graphs/lobsters-memlimit-cdf
+
+graphs/vote-formula.pdf: graphs/source.pickle graphs/common.py formula/src/main.rs graphs/vote-formula.py
+	python graphs/vote-formula.py graphs/source.pickle graphs/vote-formula
 
 graphs/%.pdf: graphs/source.pickle graphs/common.py graphs/%.py
 	python graphs/$*.py graphs/source.pickle graphs/$*
