@@ -383,11 +383,34 @@ and caching strategies also suggest the same thing \textbf{MISSING CITES}
 (Twitter/Facebook/log-normal/zipf/skew).
 
 The degree of skew dictates how aggressively you can set the memory budget.
-For example, for the Zipf distribution used in the vote benchmark, we can
-probabilistically compute the access pattern the benchmark will experience as
-the throughput varies. Figure~\ref{f:vote-formula} shows ...
+For example, for the Zipf distribution used in the vote benchmark, it is
+possible to probabilistically compute the access pattern the benchmark will
+experience as the throughput varies. Given some number of elements $N$ and a
+skew parameter $\alpha$, the normalized frequency of the $k$th element in a Zipf
+distribution is given by
 
-\begin{figure}[ht]
+\begin{displaymath}
+  f(k;\alpha,N)={\frac {1/k^{\alpha}}{\sum \limits _{n=1}^{N}(1/n^{\alpha})}}
+\end{displaymath}
+
+The expected number of keys hit after a certain number of samples, $S$ (given by
+throughput $\times$ period), is then the sum of the probability that each
+element $k$ is sampled at least once during the benchmark, given by
+
+\begin{displaymath}
+  F(\alpha,N)={\sum \limits _{k=1}^{N} \left(1 - \left(1 - f(k; \alpha, N))^{S}\right)\right)}
+\end{displaymath}
+
+Figure~\ref{f:vote-formula} plots $F(\alpha, N)/N$ after one eviction cycle
+($\approx$ 2s) worth of samples for different degrees of skew ($\alpha$) with
+$N=5\text{M}$ as throughput varies. The result demonstrates how key the
+throughput is to determining the memory budget. As throughput increases, more
+keys are accessed during any given time period, and need to be cached to not
+impact the tail latency too severely. It also shows that eviction is critical;
+at high offered load, even very skewed distributions quickly hit much of the
+tail, which should therefore be cached, and memory use balloons as a result.
+
+\begin{figure}[h]
   \centering
   \includegraphics{graphs/vote-formula.pdf}
   \caption{Probabilistic model of the fraction of 5M keys that are accessed
@@ -397,13 +420,6 @@ the throughput varies. Figure~\ref{f:vote-formula} shows ...
   eviction, memory use will follow this curve.}
   \label{f:vote-formula}
 \end{figure}
-
-The figure demonstrates how key the throughput is to determining the memory
-budget; as the throughput increases, more keys are accessed during any given
-time period, and need to be cached to not impact the tail latency too severely.
-It also shows that eviction is critical; at high offered load, even very skewed
-distributions quickly sample (and thus cache) much of the tail, and memory use
-balloons as a result.
 
 \section{How does partial state compare to existing solutions?}
 \label{s:eval:existing}
