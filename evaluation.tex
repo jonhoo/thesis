@@ -294,46 +294,41 @@ queries both views without blocking every 10 milliseconds.
 
 \begin{figure}[t]
   \centering
-  \includegraphics{graphs/vote-migration-full.pdf}
-  \caption{Time to set up a new view with full materialization. Access pattern
-  is skewed (Zipf; $\alpha = 1.15$) across 10M articles. Red lines denote start
-  and end time of the migration.}
-  \label{f:vote-migration-full}
-\end{figure}
-
-Figure~\ref{f:vote-migration-full} plots the write throughput for votes and
-ratings, as well as the cache hit rate for reads from the new view over time.
-This figure demonstrates the upfront cost of full materialization; when the new
-query is installed, Noria must expend significant resources to fully compute the
-new view, and sacrifice the performance of concurrent writes. Furthermore, the
-new view can only satisfy read requests once it has been fully computed. In the
-interim, the application must wait%
-\footnote{The dataflow must now process both votes and ratings, so each sees
-about half the write throughput prior to the migration.}.
-
-\begin{figure}[t]
-  \centering
   \includegraphics{graphs/vote-migration.pdf}
-  \caption{Partial. Reuse. Skewed. 10M articles.}
+  \caption{Time to set up and access a new view. Access pattern is skewed (Zipf;
+  $\alpha = 1.15$) across 10M articles. Benchmark runs for 90s prior to
+  migration (orange line). Vertical lines denote start and end of the
+  migration.}
   \label{f:vote-migration}
 \end{figure}
 
-Figure~\ref{f:vote-migration} shows the same benchmark, but with partial
-materialization enabled. It exhibits very different behavior: the migration
-completes instantly, and there is no downtime for writes. The new view is
-available for reads immediately, though initially many reads miss. Those reads
-must wait for an upquery to finish, but the hit rate increases quickly due to
-the data skew.
+Figure~\ref{f:vote-migration} plots the cache hit rate for reads from the new
+view over time. This figure demonstrates the upfront cost of full
+materialization; when the new query is installed, Noria must expend significant
+resources to fully compute the new view. During this time, it also slows down
+concurrent writes, as it must use that part of the dataflow to compute the data
+needed for the new view. The new view can only satisfy read requests once it has
+been fully computed. In the interim, the application must wait.
 
+With partial materialization enabled, Noria exhibits very different behavior:
+the migration completes instantly, and there is no downtime for writes. The new
+view is available for reads immediately, though initially many reads miss. Those
+reads must wait for an upquery to finish, but the hit rate increases quickly due
+to the data skew.
+
+\begin{inprogress}
 The figure also exposes another interesting effect of using partial
 materialization: increased write throughput. With full materialization, every
 write must be processed to completion, but with partial, writes for keys that
 have not been read can be discarded early. This produces an increase in
 throughput, with diminishing impact as more keys are read. With eviction, the
 increased write throughput would persist as the number of keys would plateau.
+Since the dataflow must now process both votes and ratings, each write type sees
+about half the write throughput prior to the migration.
+\end{inprogress}
 
 \begin{inprogress}
-  Why do we only reach ~80\% hit rate? That suggests a decent number of reads
+  Why do we only reach ~90\% hit rate? That suggests a decent number of reads
   are still happening, but miss. I guess the read rate is pretty low, so that's
   probably why.
 \end{inprogress}
@@ -352,7 +347,7 @@ long that warming takes depends on the query in question, the size of the data
 that must be computed, and the skew in the data.
 
 Figure~\ref{f:vote-migration} shows that, for the vote query, the hit rate is
-75\% after about 20s, but this is a very limited sample. To get a better idea of
+85\% after about 20s, but this is a very limited sample. To get a better idea of
 how this time varies for a wider variety of situations, we return to the
 Lobsters experiment.
 

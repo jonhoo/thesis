@@ -7,7 +7,6 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/lobsters-timeline.pdf \
 	    graphs/vote-formula.pdf \
 	    graphs/vote-migration.pdf \
-	    graphs/vote-migration-full.pdf \
 	    graphs/vote-memlimit-cdf.pdf \
 	    graphs/vote-throughput-memlimit.pdf \
 	    graphs/vote-redis.pdf
