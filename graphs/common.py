@@ -150,7 +150,7 @@ def bts(b):
         return '%1.0fkB' % (b / 1024)
     return '%1.0fb' % b
 
-# https://colorbrewer2.org/#type=qualitative&scheme=Dark2&n=3
+# https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=5
 colors = {
     'full': '#a6cee3',
     'partial': '#1f78b4',
