@@ -97,12 +97,12 @@ pub(crate) mod server;
 #[tokio::main]
 async fn main() {
     let mut benchmarks = vec![
-        "vote-migration",
-        "vote",
-        "vote-memory",
         "vote-redis",
+        "vote-migration",
+        "vote-memory",
         "lobsters-noria",
         "lobsters-noria-memory",
+        "vote",
     ];
 
     let matches = App::new("Noria benchmark orchestrator")
