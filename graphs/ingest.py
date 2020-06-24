@@ -315,7 +315,10 @@ def lobsters_noria(df, path):
                 pass
 
     data = timelines(path)
-    ndomains, base_mem, other_mem, reader_mem, full_op_mem = mem_stats(path)
+    stats = mem_stats(path)
+    if stats is None:
+        return df
+    ndomains, base_mem, other_mem, reader_mem, full_op_mem = stats
 
     meta = {
         'scale': scale,
@@ -349,6 +352,10 @@ def lobsters_noria(df, path):
 
 def mem_stats(log_path):
     stats_path = os.path.splitext(log_path)[0] + '-statistics.json'
+    if os.stat(stats_path).st_size == 0:
+        print("empty stats", stats_path)
+        return None
+
     with open(stats_path, 'r') as f:
         stats = json.load(f)
     domains = stats["domains"]

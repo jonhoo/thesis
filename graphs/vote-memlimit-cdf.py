@@ -121,7 +121,7 @@ for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     if limit == 0:
         partial = d.query("partial == True")
-        full = d.query("partial != True")
+        full = d.query("partial == False")
         ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = "unlimited")
         ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "full")
     else:

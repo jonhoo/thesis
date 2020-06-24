@@ -160,7 +160,7 @@ colors = {
 
 # https://colorbrewer2.org/#type=sequential&scheme=RdPu&n=8
 def memlimit_colors(n, bright=False):
-    if not bright and n > 3:
+    if not bright:
         # off by one from the official colors, because #feebe2 is too hard to see
         n += 1
 
