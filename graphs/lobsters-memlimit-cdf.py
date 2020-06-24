@@ -101,7 +101,7 @@ data = data.set_index(["memlimit", "pct"]).sort_index()
 fig, ax = plt.subplots()
 limits.sort()
 print(limits)
-limits = [512 * 1024 * 1024, 256 * 1024 * 1024, 128 * 1024 * 1024, 64 * 1024 * 1024, 32 * 1024 * 1024]
+limits = [512 * 1024 * 1024, 256 * 1024 * 1024, 128 * 1024 * 1024]
 limits.sort()
 colors = common.memlimit_colors(len(limits))
 limits = limits + [0]

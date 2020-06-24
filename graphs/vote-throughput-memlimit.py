@@ -12,7 +12,7 @@ limits = data.groupby('memlimit').tail(1)
 limits = [l for l in limits["memlimit"]]
 limits.sort()
 print(limits)
-limits = [256 / 1024.0,  384 / 1024.0, 448 / 1024.0, 512 / 1024.0, 576 / 1024.0, 768 / 1024.0]
+limits = [256 / 1024.0,  384 / 1024.0, 512 / 1024.0, 768 / 1024.0]
 colors = common.memlimit_colors(len(limits))
 limits.sort()
 limits = limits + [0]
