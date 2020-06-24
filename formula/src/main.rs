@@ -34,15 +34,15 @@ fn main() {
             // let eighty_p = pct(0.8);
             // let nines_p = pct(0.99);
 
-            let one_eviction_period = 100.0 * (est(period, rate, alpha) / (NUM as f64));
+            let one_eviction_period = 100.0 * est(period, rate, alpha);
             println!("{}\t{:.3}\t{}\t{}", skew, alpha, rate, one_eviction_period);
         }
     }
     for &rate in &rates {
         let p = 1.0 - 1.0 / NUM as f64;
         let p = p.powf((period * rate) as f64);
-        let one_eviction_period: f64 = (1..=NUM).map(|_| 1.0 - p).sum();
-        let one_eviction_period = 100.0 * one_eviction_period / (NUM as f64);
+        let one_eviction_period: f64 = 1.0 - p;
+        let one_eviction_period = 100.0 * one_eviction_period;
         println!(
             "{}\t{:.3}\t{}\t{}",
             "uniform", "NA", rate, one_eviction_period
@@ -61,7 +61,10 @@ fn zipf(k: usize, s: f64, harmonic: f64) -> f64 {
 
 fn est(t: usize, rate: usize, exp: f64) -> f64 {
     let harmonic = harmonic(NUM, exp);
-    (1..=NUM)
-        .map(|k| 1.0 - (1.0 - zipf(k, exp, harmonic)).powf((t * rate) as f64))
-        .sum()
+    // NOTE: this _could_ use powi, but powf is twice as fast for some reason...
+    let samples = (t * rate) as f64;
+    let p: f64 = (1..=NUM)
+        .map(|k| (1.0 - zipf(k, exp, harmonic)).powf(samples))
+        .sum();
+    1.0 - p / (NUM as f64)
 }
