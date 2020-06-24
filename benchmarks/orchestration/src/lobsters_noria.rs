@@ -83,7 +83,7 @@ pub(crate) async fn one(
         let mut scales = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(500, 500))
+            Box::new(cliff::ExponentialCliffSearcher::until(1000, 500))
         };
         let result: Result<(), Report> = try {
             let mut successful_scale = None;
@@ -97,7 +97,7 @@ pub(crate) async fn one(
                 if (partial == false
                     && nshards == 0
                     && (scale == 8_000 || scale == 6_000 || scale == 5_000 || scale == 4_500))
-                    || (partial == true && nshards == 0 && scale == 8_000)
+                    || (partial == true && nshards == 0 && (scale == 8_000 || scale == 6_000))
                 {
                     // i happen to know that this fails
                     scales.overloaded();
