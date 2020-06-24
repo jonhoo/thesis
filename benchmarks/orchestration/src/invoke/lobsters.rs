@@ -250,6 +250,6 @@ fn lobsters_client<'c>(
         .arg("--scale")
         .arg(scale.to_string())
         .arg("--in-flight")
-        .arg(256.to_string());
+        .arg(8192.to_string());
     cmd
 }
