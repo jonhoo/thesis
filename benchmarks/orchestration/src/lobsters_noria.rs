@@ -9,16 +9,27 @@ use tsunami::Tsunami;
 /// lobsters-noria; requires two machines: a client and a server
 #[instrument(name = "lobsters-noria", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!([(0, true), (0, false)], one, ctx, false)
+    crate::explore!(
+        [
+            (0, true, 0),
+            (0, false, 0),
+            (0, true, 128 * 1024 * 1024),
+            (0, true, 256 * 1024 * 1024),
+            (0, true, 512 * 1024 * 1024)
+        ],
+        one,
+        ctx,
+        false
+    )
 }
 
 #[instrument(err, skip(ctx))]
 pub(crate) async fn one(
-    parameters: (usize, bool),
+    parameters: (usize, bool, usize),
     loads: Option<Vec<usize>>,
     mut ctx: Context,
 ) -> Result<usize, Report> {
-    let (nshards, partial) = parameters;
+    let (nshards, partial, memlimit) = parameters;
     let mut last_good_scale = 0;
 
     let mut aws = crate::launcher();
@@ -121,7 +132,7 @@ pub(crate) async fn one(
                     if !partial {
                         backend.push_str("_full");
                     }
-                    let prefix = format!("lobsters-{}-{}-0m", backend, scale);
+                    let prefix = format!("lobsters-{}-{}-{}m", backend, scale, memlimit);
 
                     tracing::trace!("starting noria server");
                     let mut noria_server = crate::server::build(s, server);
@@ -133,6 +144,8 @@ pub(crate) async fn one(
                         .arg("--no-reuse")
                         .arg("--shards")
                         .arg(nshards.to_string())
+                        .arg("-m")
+                        .arg(memlimit.to_string())
                         .spawn()
                         .wrap_err("failed to start noria-server")?;
 
