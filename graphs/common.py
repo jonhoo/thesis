@@ -152,10 +152,10 @@ def bts(b):
 
 # https://colorbrewer2.org/#type=qualitative&scheme=Dark2&n=3
 colors = {
-    'full': '#a95aa1',
-    'partial': '#85c0f9',
-    'evict': '#0f2080',
-    'redis': '#f5793a',
+    'full': '#a6cee3',
+    'partial': '#1f78b4',
+    'evict': '#33a02c',
+    'redis': '#fb9a99',
 }
 
 # https://colorbrewer2.org/#type=sequential&scheme=RdPu&n=8
