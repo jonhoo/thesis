@@ -138,8 +138,8 @@ matplotlib.rc('axes', linewidth=1)
 matplotlib.rc('lines', linewidth=2)
 plt.tick_params(top='off', right='off', which='both')
 
-mkfunc = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.0fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
-kfmt = matplotlib.ticker.FuncFormatter(mkfunc)
+kfmtfn = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.0fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
+kfmt = matplotlib.ticker.FuncFormatter(kfmtfn)
 
 def bts(b):
     if b >= 1024 * 1024 * 1024:
@@ -150,11 +150,12 @@ def bts(b):
         return '%1.0fkB' % (b / 1024)
     return '%1.0fb' % b
 
-# https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=5
+# https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=6
 colors = {
     'full': '#a6cee3',
     'partial': '#1f78b4',
     'evict': '#33a02c',
+    'mysql': '#e31a1c',
     'redis': '#fb9a99',
 }
 

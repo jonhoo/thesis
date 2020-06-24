@@ -76,10 +76,11 @@ load. With partial materialization and eviction, Noria uses approximately
 \begin{figure}[ht]
   \centering
   \includegraphics{graphs/lobsters-memory.pdf}
-  \caption{The effect of partial state and the eviction it enables on stateful
-  operator memory use. The savings from partial alone stem from many items never
-  being accessed. The savings from eviction come from items that are only
-  fetched infrequently, and need not be in memory.}
+  \caption{Effect of partial materialization on memory use and throughput. Noria
+  with eviction retains the increased throughput from materialization, but
+  substantially reduces memory use. The savings from partial alone stem from
+  many items never being accessed. \textcolor{red}{MySQL number is currently a
+  guess.}}
   \label{f:lobsters-memory}
 \end{figure}
 
@@ -109,10 +110,6 @@ be computed increases, and thus tail latency increases.
   \label{f:lobsters-mem-latency}
 \end{figure}
 
-\begin{inprogress}
-  This shows a memory limit far lower than 400MB. Why is memory use still 400MB?
-\end{inprogress}
-
 The figure also demonstrates how much costlier upqueries are than cached
 reads. Where a read that hits in cache only has to wait for serialization, an
 upquery must wait for the requested data to be fetched and computed before it
@@ -122,11 +119,6 @@ latency.
 
 \begin{inprogress}
   Why on earth is tail latency here 10 \textbf{seconds}?
-\end{inprogress}
-
-\begin{inprogress}
-  Why does the memory limit have basically no effect? Presumably related to
-  the fact that eviction only ever gets down to 400M..
 \end{inprogress}
 
 \begin{inprogress}
