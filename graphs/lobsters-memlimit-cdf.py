@@ -108,13 +108,15 @@ limits = limits + [0]
 i = 0
 for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
+    lookup_limit = limit / 1024 / 1024 / 1024
+    opmem = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == True & scale == %d & memlimit == %f' % (common.limited_lobsters_scale, lookup_limit))['opmem'].max()
     if limit == 0:
         partial = d.query("partial == True")
         full = d.query("partial != True")
-        ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = "unlimited")
+        ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = 'no eviction (%s)' % (common.bts(opmem)))
         ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "full")
     else:
-        ax.plot(d["latency"], d["pct"], color = colors[i], label = common.bts(limit))
+        ax.plot(d["latency"], d["pct"], color = colors[i], label = '%s limit (%s)' % (common.bts(limit), common.bts(opmem)))
         i += 1
 ax.set_ylabel("CDF")
 ax.set_xlabel("Latency [ms]")

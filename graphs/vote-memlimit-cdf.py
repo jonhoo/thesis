@@ -112,20 +112,22 @@ data = data.set_index(["memlimit", "pct"]).sort_index()
 fig, ax = plt.subplots()
 limits.sort()
 print(limits)
-limits = [640 * 1024 * 1024, 512 * 1024 * 1024, 384 * 1024 * 1024, 256 * 1024 * 1024]
+limits = [512 * 1024 * 1024, 384 * 1024 * 1024, 256 * 1024 * 1024]
 colors = common.memlimit_colors(len(limits))
 limits.sort()
 limits = limits + [0]
 i = 0
 for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
+    lookup_limit = limit / 1024 / 1024 / 1024
+    opmem = common.source['vote'].query('until == 1 & op == "all" & partial == True & articles == 5000000 & write_every == 20 & clients == 6 & distribution == "skewed" & target == %d & memlimit == %f' % (common.limited_vote_target, lookup_limit))['opmem'].max()
     if limit == 0:
         partial = d.query("partial == True")
         full = d.query("partial == False")
-        ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = "unlimited")
-        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "full")
+        ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = 'no eviction (%s)' % (common.bts(opmem)))
+        # ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "full")
     else:
-        ax.plot(d["latency"], d["pct"], color = colors[i], label = common.bts(limit))
+        ax.plot(d["latency"], d["pct"], color = colors[i], label = '%s limit (%s)' % (common.bts(limit), common.bts(opmem)))
         i += 1
 ax.set_ylabel("CDF")
 ax.set_xlabel("Latency [ms]")
