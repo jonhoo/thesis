@@ -40,6 +40,7 @@ pub(crate) async fn one(
                     aws::Setup::default()
                         .instance_type(&ctx.server_type)
                         .ami(crate::AMI, "ubuntu")
+                        .availability_zone(ctx.az.clone())
                         .setup(crate::noria_setup("noria-server", "noria-server")),
                 ),
                 (
@@ -47,6 +48,7 @@ pub(crate) async fn one(
                     aws::Setup::default()
                         .instance_type(&ctx.client_type)
                         .ami(crate::AMI, "ubuntu")
+                        .availability_zone(ctx.az.clone())
                         .setup(crate::noria_setup("noria-applications", "lobsters-noria")),
                 ),
             ],

@@ -11,6 +11,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     let Context {
         server_type,
         mut exit,
+        az,
         ..
     } = ctx;
 
@@ -27,6 +28,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
                 aws::Setup::default()
                     .instance_type(&server_type)
                     .ami(crate::AMI, "ubuntu")
+                    .availability_zone(az)
                     .setup(crate::noria_setup("noria-applications", "vote-migration")),
             )],
             None,

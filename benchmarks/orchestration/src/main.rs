@@ -15,6 +15,7 @@ struct Context {
     server_type: String,
     client_type: String,
     exit: tokio::sync::watch::Receiver<bool>,
+    az: aws::AvailabilityZoneSpec,
 }
 
 #[macro_export]
@@ -170,6 +171,7 @@ async fn main() {
         server_type,
         client_type,
         exit: rx,
+        az: aws::AvailabilityZoneSpec::Specify(String::from("us-east-1a")),
     };
 
     tracing::info!("running benchmarks");
