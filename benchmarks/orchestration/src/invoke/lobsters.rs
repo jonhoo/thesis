@@ -1,6 +1,5 @@
 use crate::Context;
-use color_eyre::Report;
-use eyre::WrapErr;
+use color_eyre::{eyre::WrapErr, Report};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     stream::StreamExt,
@@ -10,7 +9,7 @@ pub(crate) async fn run(
     prefix: &str,
     scale: usize,
     mut on_overloaded: impl FnMut(),
-    c: &tsunami::Session,
+    c: &openssh::Session,
     server: &tsunami::Machine<'_>,
     ctx: &mut Context,
 ) -> Result<(), Report> {
@@ -235,7 +234,7 @@ pub(crate) async fn run(
 }
 
 fn lobsters_client<'c>(
-    ssh: &'c tsunami::Session,
+    ssh: &'c openssh::Session,
     server: &'c tsunami::Machine<'c>,
     scale: usize,
 ) -> openssh::Command<'c> {

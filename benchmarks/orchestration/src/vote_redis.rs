@@ -1,6 +1,5 @@
 use crate::Context;
-use color_eyre::Report;
-use eyre::WrapErr;
+use color_eyre::{eyre, eyre::WrapErr, Report};
 use tracing::instrument;
 use tracing_futures::Instrument;
 use tsunami::providers::aws;
@@ -39,7 +38,7 @@ pub(crate) async fn one(
     aws.set_max_instance_duration(3);
 
     fn redis_setup<'r>(
-        _ssh: &'r mut tsunami::Session,
+        _ssh: &'r tsunami::Machine<'_>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Report>> + Send + 'r>> {
         Box::pin(async { Ok(()) }.in_current_span())
     }

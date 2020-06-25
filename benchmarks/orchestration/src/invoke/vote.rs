@@ -1,6 +1,5 @@
 use crate::Context;
-use color_eyre::Report;
-use eyre::WrapErr;
+use color_eyre::{eyre::WrapErr, Report};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     stream::StreamExt,
@@ -19,7 +18,7 @@ pub(crate) async fn run(
     distribution: &str,
     write_every: usize,
     mut on_overloaded: impl FnMut(),
-    cs: &[&tsunami::Session],
+    cs: &[&openssh::Session],
     server: &tsunami::Machine<'_>,
     backend: Backend,
     ctx: &mut Context,
@@ -276,7 +275,7 @@ pub(crate) async fn run(
 }
 
 fn vote_client<'c>(
-    ssh: &'c tsunami::Session,
+    ssh: &'c openssh::Session,
     server: &'c tsunami::Machine<'c>,
     backend: Backend,
     add_args: impl FnOnce(&mut openssh::Command<'_>),

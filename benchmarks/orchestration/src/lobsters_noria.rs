@@ -1,6 +1,5 @@
 use crate::Context;
-use color_eyre::Report;
-use eyre::WrapErr;
+use color_eyre::{eyre::WrapErr, Report};
 use tracing::instrument;
 use tracing_futures::Instrument;
 use tsunami::providers::aws;
@@ -39,27 +38,6 @@ pub(crate) async fn one(
     // try to ensure we do AWS cleanup
     let result: Result<_, Report> = try {
         tracing::info!("spinning up aws instances");
-
-        /*
-        fn c_setup_patch<'r>(
-            ssh: &'r mut tsunami::Session,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Report>> + Send + 'r>>
-        {
-            Box::pin(
-                async move {
-                    tracing::debug!("patch trawler");
-                    crate::output_on_success(ssh.shell("cd noria && cargo update -p trawler"))
-                        .await
-                        .wrap_err("cargo update -p trawler")?;
-
-                    crate::noria_setup("noria-applications", "lobsters-noria")(ssh).await?;
-
-                    Ok(())
-                }
-                .in_current_span(),
-            )
-        }
-        */
 
         aws.spawn(
             vec![

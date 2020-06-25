@@ -1,9 +1,8 @@
-use color_eyre::Report;
-use eyre::WrapErr;
+use color_eyre::{eyre, eyre::WrapErr, Report};
 use tracing::instrument;
 
 pub(crate) fn build<'s>(
-    ssh: &'s tsunami::Session,
+    ssh: &'s openssh::Session,
     host: &'s tsunami::Machine<'s>,
 ) -> openssh::Command<'s> {
     // Set up the Noria server process
@@ -17,7 +16,7 @@ pub(crate) fn build<'s>(
 
 #[instrument(level = "trace", skip(ssh, server))]
 pub(crate) async fn stop(
-    ssh: &tsunami::Session,
+    ssh: &openssh::Session,
     server: openssh::RemoteChild<'_>,
 ) -> Result<(), Report> {
     let srv_exit: Result<_, Report> = try {
@@ -142,7 +141,7 @@ pub(crate) async fn stop(
 
 #[instrument(level = "trace", skip(ssh, w))]
 pub(crate) async fn write_stats(
-    ssh: &tsunami::Session,
+    ssh: &openssh::Session,
     server: &tsunami::Machine<'_>,
     w: &mut (impl tokio::io::AsyncWrite + Unpin),
 ) -> Result<(), Report> {
@@ -175,7 +174,7 @@ pub(crate) async fn write_stats(
 }
 
 #[instrument(debug, skip(ssh))]
-pub(crate) async fn vmrss(ssh: &tsunami::Session) -> Result<usize, Report> {
+pub(crate) async fn vmrss(ssh: &openssh::Session) -> Result<usize, Report> {
     let pid = crate::output_on_success(ssh.command("pgrep").arg("-o").arg("noria-server"))
         .await
         .wrap_err("pgrep")?;

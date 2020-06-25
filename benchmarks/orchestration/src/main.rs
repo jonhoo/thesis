@@ -3,8 +3,7 @@
 const AMI: &str = "ami-01667d80807c23975";
 
 use clap::{App, Arg};
-use color_eyre::Report;
-use eyre::WrapErr;
+use color_eyre::{eyre, eyre::WrapErr, Report};
 use std::future::Future;
 use std::pin::Pin;
 use tracing::instrument;
@@ -223,19 +222,20 @@ fn noria_setup(
     binary: &'static str,
 ) -> Box<
     dyn for<'r> Fn(
-            &'r mut tsunami::Session,
+            &'r tsunami::Machine<'_>,
         ) -> Pin<Box<dyn Future<Output = Result<(), Report>> + Send + 'r>>
         + Send
         + Sync
         + 'static,
 > {
-    Box::new(move |ssh| {
+    Box::new(move |vm| {
         Box::pin(
             async move {
                 // first, make sure we have the latest release
                 tracing::debug!("setting up host");
                 tracing::trace!("git pull");
-                let updated = ssh
+                let updated = vm
+                    .ssh
                     .shell("git -C noria pull")
                     .status()
                     .await
@@ -246,7 +246,8 @@ fn noria_setup(
 
                 // then, we need to compile the target binary
                 tracing::trace!("cargo build");
-                let compiled = ssh
+                let compiled = vm
+                    .ssh
                     .shell(format!(
                         "cd noria && cargo b -p {} --bin {} --release",
                         package, binary
@@ -264,7 +265,8 @@ fn noria_setup(
                 if binary == "noria-server" {
                     // and then ensure that ZooKeeper is running
                     tracing::trace!("start zookeeper");
-                    let zk = ssh
+                    let zk = vm
+                        .ssh
                         .shell("sudo systemctl start zookeeper")
                         .status()
                         .await
@@ -283,7 +285,7 @@ fn noria_setup(
 }
 
 fn noria_bin<'s>(
-    ssh: &'s tsunami::Session,
+    ssh: &'s openssh::Session,
     package: &'static str,
     binary: &'static str,
 ) -> openssh::Command<'s> {
@@ -320,7 +322,7 @@ async fn output_on_success<'a, C: std::borrow::BorrowMut<openssh::Command<'a>>>(
 }
 
 #[instrument(debug, skip(ssh))]
-pub(crate) async fn noria_commit(ssh: &tsunami::Session) -> Result<String, Report> {
+pub(crate) async fn noria_commit(ssh: &openssh::Session) -> Result<String, Report> {
     let commit = crate::output_on_success(
         ssh.command("git")
             .arg("-C")
@@ -335,7 +337,7 @@ pub(crate) async fn noria_commit(ssh: &tsunami::Session) -> Result<String, Repor
 }
 
 #[instrument(debug, skip(ssh))]
-pub(crate) async fn load(ssh: &tsunami::Session) -> Result<(f64, f64), Report> {
+pub(crate) async fn load(ssh: &openssh::Session) -> Result<(f64, f64), Report> {
     let load = crate::output_on_success(
         ssh.command("awk")
             .arg("{print $1\" \"$2}")
