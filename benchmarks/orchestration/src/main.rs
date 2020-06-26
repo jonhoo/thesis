@@ -1,6 +1,6 @@
 #![feature(try_blocks, label_break_value)]
 
-const AMI: &str = "ami-01667d80807c23975";
+const AMI: &str = "ami-049ba7230b32a1d8f";
 
 use clap::{App, Arg};
 use color_eyre::{eyre, eyre::WrapErr, Report};
@@ -83,6 +83,7 @@ macro_rules! explore {
     };
 }
 
+mod lobsters_mysql;
 mod lobsters_noria;
 mod lobsters_noria_mem;
 mod vote;
@@ -100,6 +101,7 @@ async fn main() {
         "vote-redis",
         "vote-migration",
         "vote-memory",
+        "lobsters-mysql",
         "lobsters-noria",
         "lobsters-noria-memory",
         "vote",
@@ -185,6 +187,7 @@ async fn main() {
             "vote" => vote::main(ctx.clone()).await,
             "vote-memory" => vote_mem::main(ctx.clone()).await,
             "vote-redis" => vote_redis::main(ctx.clone()).await,
+            "lobsters-mysql" => lobsters_mysql::main(ctx.clone()).await,
             "lobsters-noria" => lobsters_noria::main(ctx.clone()).await,
             "lobsters-noria-memory" => lobsters_noria_mem::main(ctx.clone()).await,
             _ => unreachable!("{}", benchmark),

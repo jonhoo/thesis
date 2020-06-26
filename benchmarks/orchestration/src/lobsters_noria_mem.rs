@@ -130,6 +130,7 @@ pub(crate) async fn one(
                         c,
                         &server,
                         &mut ctx,
+                        true,
                     )
                     .await?;
 

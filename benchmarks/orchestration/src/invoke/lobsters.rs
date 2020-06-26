@@ -5,6 +5,8 @@ use tokio::{
     stream::StreamExt,
 };
 
+pub(crate) const IN_FLIGHT: usize = 8192;
+
 pub(crate) async fn run(
     prefix: &str,
     scale: usize,
@@ -12,6 +14,7 @@ pub(crate) async fn run(
     c: &openssh::Session,
     server: &tsunami::Machine<'_>,
     ctx: &mut Context,
+    noria: bool,
 ) -> Result<(), Report> {
     let Context {
         ref server_type,
@@ -22,7 +25,7 @@ pub(crate) async fn run(
     let s = &server.ssh;
 
     tracing::debug!("prime");
-    let mut prime = lobsters_client(c, server, scale);
+    let mut prime = lobsters_client(c, server, scale, noria);
     let prime = prime
         .arg("--runtime=0")
         .arg("--prime")
@@ -50,7 +53,7 @@ pub(crate) async fn run(
 
     tracing::trace!("priming succeeded");
     tracing::debug!("benchmark");
-    let mut bench = lobsters_client(c, server, scale)
+    let mut bench = lobsters_client(c, server, scale, noria)
         .arg("--runtime=384")
         .arg("--histogram=benchmark.hist")
         .stdout(std::process::Stdio::piped())
@@ -186,12 +189,14 @@ pub(crate) async fn run(
     results
         .write_all(format!("# server load: {} {}\n", sload1, sload5).as_bytes())
         .await?;
-    let vmrss = crate::server::vmrss(s)
-        .await
-        .wrap_err("failed to get server memory use")?;
-    results
-        .write_all(format!("# server memory (kB): {}\n", vmrss).as_bytes())
-        .await?;
+    if noria {
+        let vmrss = crate::server::vmrss(s)
+            .await
+            .wrap_err("failed to get server memory use")?;
+        results
+            .write_all(format!("# server memory (kB): {}\n", vmrss).as_bytes())
+            .await?;
+    }
     let (cload1, cload5) = crate::load(c).await.wrap_err("failed to get client load")?;
     results
         .write_all(format!("# client load: {} {}\n", cload1, cload5).as_bytes())
@@ -215,15 +220,16 @@ pub(crate) async fn run(
             .wrap_err("failed to save remote histogram")?;
         drop(results);
 
-        tracing::trace!("saving server stats");
-        let mut results = tokio::fs::File::create(format!("{}-statistics.json", prefix))
-            .await
-            .wrap_err("failed to create local stats file")?;
-        crate::server::write_stats(s, server, &mut results)
-            .await
-            .wrap_err("failed to save server stats")?;
-        results.flush().await?;
-        drop(results);
+        if noria {
+            tracing::trace!("saving server stats");
+            let mut results = tokio::fs::File::create(format!("{}-statistics.json", prefix))
+                .await
+                .wrap_err("failed to create local stats file")?;
+            crate::server::write_stats(s, server, &mut results)
+                .await
+                .wrap_err("failed to save server stats")?;
+            results.flush().await?;
+        }
 
         tracing::debug!("all results saved");
     } else {
@@ -237,18 +243,29 @@ fn lobsters_client<'c>(
     ssh: &'c openssh::Session,
     server: &'c tsunami::Machine<'c>,
     scale: usize,
+    noria: bool,
 ) -> openssh::Command<'c> {
-    let mut cmd = crate::noria_bin(ssh, "noria-applications", "lobsters-noria");
-    cmd.arg("--deployment")
-        .arg("benchmark")
-        .arg("-z")
-        .arg(format!(
-            "{}:2181",
+    let mut cmd = if noria {
+        let mut cmd = crate::noria_bin(ssh, "noria-applications", "lobsters-noria");
+        cmd.arg("--deployment")
+            .arg("benchmark")
+            .arg("-z")
+            .arg(format!(
+                "{}:2181",
+                server.private_ip.as_ref().expect("private ip unknown")
+            ));
+        cmd
+    } else {
+        let mut cmd = crate::noria_bin(ssh, "noria-applications", "lobsters-mysql");
+        cmd.arg("--queries").arg("original").arg(format!(
+            "mysql://lobsters@{}/soup",
             server.private_ip.as_ref().expect("private ip unknown")
-        ))
-        .arg("--scale")
+        ));
+        cmd
+    };
+    cmd.arg("--scale")
         .arg(scale.to_string())
         .arg("--in-flight")
-        .arg(8192.to_string());
+        .arg(IN_FLIGHT.to_string());
     cmd
 }
