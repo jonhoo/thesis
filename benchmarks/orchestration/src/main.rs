@@ -32,7 +32,7 @@ macro_rules! explore {
         for (i, target) in targets.iter().enumerate() {
             results.push(Ok(0));
 
-            if futs.len() >= 3 {
+            if futs.len() >= 2 {
                 // don't overwhelm ec2
                 let (i, r) = futs.next().await.expect(".len() > 0");
                 results[i] = r;
