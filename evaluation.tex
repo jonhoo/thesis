@@ -79,8 +79,8 @@ load. With partial materialization and eviction, Noria uses approximately
   \caption{Effect of partial materialization on memory use and throughput. Noria
   with eviction retains the increased throughput from materialization, but
   substantially reduces memory use. The savings from partial alone stem from
-  many items never being accessed. \textcolor{red}{MySQL number is currently a
-  guess.}}
+  many items never being accessed. With full materialization, Noria runs out of
+  memory at ~3K pages/second (†).}
   \label{f:lobsters-memory}
 \end{figure}
 

@@ -92,7 +92,8 @@ throughput.set_ylabel("Pages/s")
 fmtfn = lambda x: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.1fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
 for rect in bars:
     height = rect.get_height()
-    throughput.annotate(fmtfn(rect.get_y() + height),
+    y = fmtfn(rect.get_y() + height)
+    throughput.annotate("%s\\textsuperscript{†}" % y if rect.get_x() == 1.6 else y,
                 xy=(rect.get_x() + rect.get_width() / 2, rect.get_y() + height),
                 xytext=(0, 3),  # 3 points vertical offset
                 textcoords="offset points",
