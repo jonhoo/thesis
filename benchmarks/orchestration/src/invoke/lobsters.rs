@@ -38,6 +38,7 @@ pub(crate) async fn run(
             r.wrap_err("failed to prime")?
         }
         _ = exit.recv() => {
+            tracing::warn!("exiting priming early as requested");
             return Ok(())
         }
     };
@@ -147,6 +148,7 @@ pub(crate) async fn run(
             let _ = r?;
         }
         _ = exit.recv() => {
+            tracing::warn!("exiting benchmark early as requested");
             return Ok(());
         }
     };
