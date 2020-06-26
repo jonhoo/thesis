@@ -35,7 +35,7 @@ lobsters.sort_index(inplace = True)
 lobsters_experiments = lobsters.query('op == "all" & memlimit == 0 & achieved >= 0.95 * requested & mean < 100').groupby([c for c in lobsters.index.names if c not in ["op", "until", "metric"]]).tail(1)
 
 # compute subset of data for memory-limited lobsters
-limited_lobsters_scale = 4000
+limited_lobsters_scale = lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.95 * requested & mean < 100').reset_index()['scale'].max()
 limited_lobsters = lobsters.query('op == "all" & memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
 limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested')["memlimit"].min()
 limited_lobsters = lobsters.query('op == "all" & memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
@@ -100,7 +100,7 @@ for target in data.reset_index()["target"]:
         shared_target = target
 print('Shared vote target is %d ops/s (%d/%d rows)' % (shared_target, shared_target_cnt, len(data)))
 
-# compute maximum scale across all redis experiments
+# compute maximum scale across all vote experiments
 mx1 = vote["achieved"].max()
 mx2 = vote.reset_index()["target"].max()
 max_target = max([mx1, mx2]) * 1.1

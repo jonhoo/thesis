@@ -44,7 +44,7 @@ for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
     scale = int(match.group(3))
     memlimit = float(int(match.group(4)))
 
-    if shards != 0 or scale != common.limited_lobsters_scale or memlimit != 0:
+    if shards != 0 or scale != 4000 or memlimit != 0:
         continue
     
     # check achieved load so we don't consider one that didn't keep up
