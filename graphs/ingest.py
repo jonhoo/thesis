@@ -12,6 +12,7 @@ def ingest(in_dir="."):
     results = {
         'vote': pd.DataFrame(),
         'redis': pd.DataFrame(),
+        'mysql': pd.DataFrame(),
         'vote-migration': [],
         'lobsters-noria': pd.DataFrame(),
     }
@@ -23,6 +24,8 @@ def ingest(in_dir="."):
             vote_migration(results['vote-migration'], experiment)
         elif base.startswith("redis."):
             results['redis'] = redis(results['redis'], experiment)
+        elif base.startswith("lobsters-mysql-"):
+            results['mysql'] = lobsters_mysql(results['mysql'], experiment)
         elif base.startswith("full.") or base.startswith("partial."):
             results['vote'] = vote(results['vote'], experiment)
         elif base.startswith("lobsters-"):
@@ -348,6 +351,65 @@ def lobsters_noria(df, path):
 
     # set the correct index
     data.set_index(["scale", "partial", "memlimit", "op", "until", "metric"], inplace=True)
+    return df.append(data)
+
+lobsters_mysql_fn = re.compile("lobsters-mysql-(\d+)-0m.log")
+def lobsters_mysql(df, path):
+    match = lobsters_mysql_fn.fullmatch(os.path.basename(path))
+    if match is None:
+        print(match, path)
+        return df
+    if os.stat(path).st_size == 0:
+        print("empty", path)
+        return df
+
+    scale = int(match.group(1))
+    target = 0.0
+    generated = 0.0
+    sload1 = 0.0
+    sload5 = 0.0
+    cload1 = 0.0
+    cload5 = 0.0
+
+    data = []
+    with open(path, 'r') as f:
+        for line in f.readlines():
+            if line.startswith("#"):
+                if "generated ops/s" in line:
+                    generated += float(line.split()[-1])
+                elif "target ops/s" in line:
+                    target += float(line.split()[-1])
+                elif "server load" in line:
+                    fields = line.split()
+                    sload1 += float(fields[-2])
+                    sload5 += float(fields[-1])
+                elif "client load" in line:
+                    fields = line.split()
+                    cload1 += float(fields[-2])
+                    cload5 += float(fields[-1])
+
+    data = timelines(path)
+
+    meta = {
+        'scale': scale,
+
+        'requested': target,
+        'achieved': generated,
+
+        'sload1': sload1,
+        'sload5': sload5,
+        'cload1': cload1,
+        'cload5': cload5,
+    }
+    for (k, v) in meta.items():
+        data[k] = v
+
+
+    # get string types right
+    data["op"] = data["op"].astype("string")
+
+    # set the correct index
+    data.set_index(["scale", "op", "until", "metric"], inplace=True)
     return df.append(data)
 
 def mem_stats(log_path):

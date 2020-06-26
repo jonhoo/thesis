@@ -10,14 +10,11 @@ import sys
 # memory use at various lobsters scales
 #
 
-data = common.lobsters_experiments.query('scale == %d' % (common.shared_scale)).reset_index()
-if common.shared_scale == common.limited_lobsters_scale:
-    limited = common.limited_lobsters.reset_index()
-    limited.partial = "prune"
-    data = pd.concat([data.reset_index(), limited])
-else:
-    print('No pruning result at this scale')
-data = data.set_index(["scale", "partial"])
+prune = common.limited_lobsters
+partial_scale = common.lobsters_experiments.query('partial == True').reset_index()['scale'].max()
+partial = common.lobsters_experiments.query('partial == True & scale == %d' % (partial_scale))
+full_scale = common.lobsters_experiments.query('partial == False').reset_index()['scale'].max()
+full = common.lobsters_experiments.query('partial == False & scale == %d' % (full_scale))
 
 fig, (mem, throughput) = plt.subplots(2, 1, sharex = True)
 
@@ -25,18 +22,18 @@ fig, (mem, throughput) = plt.subplots(2, 1, sharex = True)
 xs = ["Noria w/eviction", "Noria, partial", "Noria, full", "MySQL"]
 xticks = [x for x in range(len(xs))]
 ys = [
-    data.query("partial == 'prune'")["fopmem"].item(),
-    data.query("partial == True")["fopmem"].item(),
-    data.query("partial == False")["fopmem"].item(),
+    prune["fopmem"].item(),
+    partial["fopmem"].item(),
+    full["fopmem"].item(),
     0,
 ]
 bars = mem.bar(xticks, ys, color=common.colors['full'])
 
 # plot the "top" part of the bars
 tops = [
-    data.query("partial == 'prune'")["opmem"].item() - data.query("partial == 'prune'")["fopmem"].item(),
-    data.query("partial == True")["opmem"].item() - data.query("partial == True")["fopmem"].item(),
-    data.query("partial == False")["opmem"].item() - data.query("partial == False")["fopmem"].item(),
+    prune["opmem"].item() - prune["fopmem"].item(),
+    partial["opmem"].item() - partial["fopmem"].item(),
+    full["opmem"].item() - full["fopmem"].item(),
     0
 ]
 bars = mem.bar(xticks, tops, bottom=ys)
@@ -47,7 +44,7 @@ bars[3].set_color(common.colors['mysql'])
 
 mem.set_xticks(xticks)
 mem.set_xticklabels(xs)
-mem.set_ylim(0, data["opmem"].max() * 1.3) # also fit labels over bars
+mem.set_ylim(0, full["opmem"].max() * 1.3) # also fit labels over bars
 
 mem.set_ylabel("Memory [GB]")
 
@@ -68,13 +65,13 @@ for rect in bars:
 tys = []
 for x in xs:
     if x == "Noria w/eviction":
-        achieved = common.limited_lobsters['achieved'].max()
+        achieved = prune['achieved'].max()
     elif x == "Noria, partial":
-        achieved = common.lobsters_experiments.query('partial == True')['achieved'].max()
+        achieved = partial['achieved'].max()
     elif x == "Noria, full":
-        achieved = common.lobsters_experiments.query('partial == False')['achieved'].max()
+        achieved = full['achieved'].max()
     elif x == "MySQL":
-        achieved = 500
+        achieved = common.mysql_experiments['achieved'].max()
     tys.append(achieved)
 
 # plot the "bottom" part of the bars

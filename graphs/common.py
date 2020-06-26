@@ -125,6 +125,24 @@ max_redis_target = max([mx1, mx2]) * 1.1
 print("Max redis target is", max_redis_target)
 
 #
+# mysql
+#
+
+# extract and tidy
+mysql = source['mysql'].copy()
+mysql = mysql.query("until <= 512")
+mysql.sort_index(inplace = True)
+
+# find subset that corresponds to the "main" experiment
+mysql_experiments = mysql.query('op == "all" & achieved >= 0.95 * requested & mean < 100').groupby([c for c in mysql.index.names if c not in ["op", "until", "metric"]]).tail(1)
+
+# compute maximum scale across all mysql experiments
+mx1 = mysql["achieved"].max()
+mx2 = mysql.reset_index()["requested"].max()
+max_mysql_target = max([mx1, mx2]) * 1.1
+print("Max mysql target is", max_mysql_target)
+
+#
 # next, set up general matplotlib styles so all figures look the same.
 #
 
