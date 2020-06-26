@@ -16,7 +16,6 @@ from memoize import source
 
 # extract
 lobsters = source['lobsters-noria'].copy()
-lobsters = lobsters.query("until <= 512")
 
 # adjust units
 lobsters["vmrss"] = lobsters["vmrss"] / (1024 * 1024 * 1024)
@@ -63,7 +62,6 @@ print("Max scale is %f (%f pages per second)" % (max_scale, max_pps))
 
 # extract
 vote = source['vote'].copy()
-vote = vote.query("until <= 512")
 
 # adjust units
 vote["vmrss"] = vote["vmrss"] / (1024 * 1024 * 1024)
@@ -112,7 +110,6 @@ print("Max vote target is", max_target)
 
 # extract and tidy
 redis = source['redis'].copy()
-redis = redis.query("until <= 512")
 redis.sort_index(inplace = True)
 
 # find subset that corresponds to the "main" experiment
@@ -130,7 +127,6 @@ print("Max redis target is", max_redis_target)
 
 # extract and tidy
 mysql = source['mysql'].copy()
-mysql = mysql.query("until <= 512")
 mysql.sort_index(inplace = True)
 
 # find subset that corresponds to the "main" experiment

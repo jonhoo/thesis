@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 
-d = common.lobsters.query('until <= 256 & op == "all" & scale == %d & memlimit == 0 & partial == True & metric == "processing"' % common.shared_scale).reset_index().set_index("partial")
+d = common.lobsters.query('until <= 256 & op == "all" & scale == 4000 & memlimit == 0 & partial == True & metric == "processing"').reset_index().set_index("partial")
 colors = {
     'processing': ['#e34a33', '#fdbb84', '#fee8c8'],
 }
