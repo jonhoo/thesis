@@ -110,24 +110,16 @@ be computed increases, and thus tail latency increases.
   \label{f:lobsters-mem-latency}
 \end{figure}
 
+\begin{inprogress}
+  \textbf{Why on earth is tail latency here 10 seconds?}
+\end{inprogress}
+
 The figure also demonstrates how much costlier upqueries are than cached
 reads. Where a read that hits in cache only has to wait for serialization, an
 upquery must wait for the requested data to be fetched and computed before it
 finishes. If this happens to multiple queries the application issues for a
 particular page to be rendered, that latency accumulates, increasing the tail
 latency.
-
-\begin{inprogress}
-  Why on earth is tail latency here 10 \textbf{seconds}?
-\end{inprogress}
-
-\begin{inprogress}
-  Note that the actual tail latency distribution looks a little
-  different\,---\,it's the sojourn time that gives the tail the curve towards
-  the max. If you instead look at processing time, only a very small fraction of
-  requests take that long, but later requests get queued up behind them (256
-  in-flight?)!
-\end{inprogress}
 
 The figure above includes data across all the different Lobsters pages the
 client requests over the course of the benchmark.
