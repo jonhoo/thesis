@@ -156,7 +156,7 @@ matplotlib.rc('axes', linewidth=1)
 matplotlib.rc('lines', linewidth=2)
 plt.tick_params(top='off', right='off', which='both')
 
-kfmtfn = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.0fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
+kfmtfn = lambda x, pos: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.0fk' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
 kfmt = matplotlib.ticker.FuncFormatter(kfmtfn)
 
 def bts(b):

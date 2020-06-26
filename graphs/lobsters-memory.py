@@ -89,7 +89,7 @@ throughput.yaxis.set_major_formatter(common.kfmt)
 throughput.set_ylabel("Pages/s")
 
 # Attach a text label above each bar with its value.
-fmtfn = lambda x: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.1fK' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
+fmtfn = lambda x: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.1fk' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
 for rect in bars:
     height = rect.get_height()
     y = fmtfn(rect.get_y() + height)
