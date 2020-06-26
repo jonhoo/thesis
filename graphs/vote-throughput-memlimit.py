@@ -7,7 +7,7 @@ import pandas as pd
 import sys
 
 fig, ax = plt.subplots()
-data = common.source['vote'].query('op == "all" & clients == 6 & write_every == 20 & until > 256 & distribution == "skewed" & metric == "sojourn"').sort_index().reset_index()
+data = common.source['vote'].query('op == "all" & clients == 6 & write_every == 20 & until == 256 & distribution == "skewed" & metric == "sojourn"').sort_index().reset_index()
 limits = data.groupby('memlimit').tail(1)
 limits = [l for l in limits["memlimit"]]
 limits.sort()

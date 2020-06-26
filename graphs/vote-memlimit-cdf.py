@@ -81,7 +81,7 @@ for path in glob(os.path.join(sys.argv[2], '*.log')):
 
             time = hist.get_end_time_stamp() - hreader.base_time_sec * 1000.0
 
-            if time <= 256000:
+            if time != 256000:
                 # only consider steady-state
                 continue
 
