@@ -21,11 +21,11 @@ for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     if limit == 0:
         dd = d.query("partial == True")
-        ax.plot(dd["achieved"], dd["p90"], '.-', color = 'black', label = "unlimited")
+        ax.plot(dd["achieved"], dd["p90"], '.-', lw=0.7, color = 'black', label = "unlimited")
         # dd = d.query("partial == False")
         # ax.plot(dd["achieved"], dd["p90"], '.--', color = 'black', lw=1, alpha = 0.8, label = "full")
     else:
-        ax.plot(d["achieved"], d["p90"], '.-', color = colors[i], label = common.bts(limit * 1024 * 1024 * 1024))
+        ax.plot(d["achieved"], d["p90"], '.-', lw=0.7, color = colors[i], label = common.bts(limit * 1024 * 1024 * 1024))
         i += 1
 
 ax.xaxis.set_major_formatter(common.kfmt)
