@@ -124,6 +124,20 @@ async fn main() {
                 .help("Run the noria server on an instance of this type"),
         )
         .arg(
+            Arg::with_name("az")
+                .long("az")
+                .takes_value(true)
+                .possible_values(&[
+                    "us-east-1a",
+                    "us-east-1b",
+                    "us-east-1c",
+                    "us-east-1d",
+                    "us-east-1e",
+                    "us-east-1f",
+                ])
+                .help("Spin up instances in the given availability zone"),
+        )
+        .arg(
             Arg::with_name("client")
                 .long("client-instance")
                 .default_value("m5.4xlarge")
@@ -169,11 +183,16 @@ async fn main() {
     });
 
     // wrap all the contextual benchmark info in a Context
+    let az = if let Some(az) = matches.value_of("az") {
+        aws::AvailabilityZoneSpec::Specify(String::from(az))
+    } else {
+        aws::AvailabilityZoneSpec::Any
+    };
     let ctx = Context {
         server_type,
         client_type,
         exit: rx,
-        az: aws::AvailabilityZoneSpec::Specify(String::from("us-east-1a")),
+        az,
     };
 
     tracing::info!("running benchmarks");
