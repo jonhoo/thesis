@@ -114,7 +114,7 @@ for limit in limits:
         partial = d.query("partial == True")
         full = d.query("partial == False")
         ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = 'no eviction (%s)' % (common.bts(opmem)))
-        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "full")
+        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "no partial")
     else:
         ax.plot(d["latency"], d["pct"], color = colors[i], label = '%s limit (%s)' % (common.bts(limit), common.bts(opmem)))
         i += 1
