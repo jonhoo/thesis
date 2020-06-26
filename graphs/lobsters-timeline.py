@@ -34,7 +34,7 @@ ax.step(
 ax.set_ylabel('Page latency [ms]')
 ax.set_xlabel('Time after start [s]')
 ax.set_xlim(0.5, 256)
-ax.set_ylim(1, 10000)
+ax.set_ylim(1, 500000)
 ax.set_xscale('log')
 ax.set_yscale('log')
 # use normal numbers on x axis
