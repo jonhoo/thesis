@@ -17,7 +17,7 @@ ax.xaxis.set_major_formatter(common.kfmt)
 mx = data.query("achieved >= 0.99 * target & p90 < 100")["achieved"].max()
 print(mx, 16 * mx)
 mx = 16 * mx
-ax.axvline(mx, ls='--', color=common.colors['redis'], label="Redis, 16 cores (extrapolated)")
+# ax.axvline(mx, ls='--', color=common.colors['redis'], label="Redis, 16 cores (extrapolated)")
 ax.set_ylim(0, 100)
 # ax.set_xlim(0, 15000000)
 ax.legend()
