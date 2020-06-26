@@ -361,8 +361,11 @@ in single-digit milliseconds, and 99th percentile latency is 20 milliseconds.
 \end{figure}
 
 \begin{inprogress}
-  Why does last entry seemingly always have higher far-tail latency?
-  Why does tail initially increase?
+  Tail latency increases towards the right due to log-time; as we go right in
+  the plot, we're sampling for twice as long, and we see more of tail.
+\end{inprogress}
+
+\begin{inprogress}
   log-log plot...
 \end{inprogress}
 
