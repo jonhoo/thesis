@@ -112,7 +112,7 @@ data = data.set_index(["memlimit", "pct"]).sort_index()
 fig, ax = plt.subplots()
 limits.sort()
 print(limits)
-limits = [512 * 1024 * 1024, 384 * 1024 * 1024, 256 * 1024 * 1024]
+limits = [512 * 1024 * 1024, 384 * 1024 * 1024, 320 * 1024 * 1024]
 colors = common.memlimit_colors(len(limits))
 limits.sort()
 limits = limits + [0]
@@ -132,6 +132,7 @@ for limit in limits:
 ax.set_ylabel("CDF")
 ax.set_xlabel("Latency [ms]")
 ax.set_xscale('log')
+ax.set_xlim(0.1, 10000)
 ax.legend()
 
 fig.tight_layout()
