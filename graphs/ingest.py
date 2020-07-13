@@ -26,7 +26,7 @@ def ingest(in_dir="."):
             results['redis'] = redis(results['redis'], experiment)
         elif base.startswith("lobsters-mysql-"):
             results['mysql'] = lobsters_mysql(results['mysql'], experiment)
-        elif base.startswith("full.") or base.startswith("partial."):
+        elif base.startswith("full") or base.startswith("partial"):
             results['vote'] = vote(results['vote'], experiment)
         elif base.startswith("lobsters-"):
             results['lobsters-noria'] = lobsters_noria(results['lobsters-noria'], experiment)
@@ -176,7 +176,7 @@ def redis(df, path):
     data = data.sort_index()
     return df.append(data)
 
-vote_fn = re.compile("(full|partial)\.(\d+)a\.(\d+)t\.(\d+)r\.(\d+)c\.(\d+)m\.(uniform|skewed)\.log")
+vote_fn = re.compile("(full|partial)(_nj)?\.(\d+)a\.(\d+)t\.(\d+)r\.(\d+)c\.(\d+)m\.(uniform|skewed)\.log")
 def vote(df, path):
     match = vote_fn.fullmatch(os.path.basename(path))
     if match is None:
@@ -187,12 +187,13 @@ def vote(df, path):
         return df
 
     partial = match.group(1) == "partial"
-    articles = int(match.group(2))
-    target = int(match.group(3))
-    write_every = int(match.group(4))
-    clients = int(match.group(5))
-    memlimit = float(int(match.group(6))) / 1024.0 / 1024.0 / 1024.0
-    distribution = match.group(7)
+    join = match.group(2) != "_nj"
+    articles = int(match.group(3))
+    target = int(match.group(4))
+    write_every = int(match.group(5))
+    clients = int(match.group(6))
+    memlimit = float(int(match.group(7))) / 1024.0 / 1024.0 / 1024.0
+    distribution = match.group(8)
     generated = 0.0
     actual = 0.0
     sload1 = 0.0
@@ -234,6 +235,7 @@ def vote(df, path):
     meta = {
         'target': target,
         'partial': partial,
+        'join': join,
         'articles': articles,
         'clients': clients,
         'distribution': distribution,
@@ -263,7 +265,7 @@ def vote(df, path):
     data["distribution"] = data["distribution"].astype("string")
 
     # set the correct index
-    data.set_index(["target", "partial", "distribution", "write_every", "clients", "articles", "memlimit", "op", "until", "metric"], inplace=True)
+    data.set_index(["target", "partial", "join", "distribution", "write_every", "clients", "articles", "memlimit", "op", "until", "metric"], inplace=True)
     data = data.sort_index()
     return df.append(data)
 

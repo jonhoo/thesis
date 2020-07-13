@@ -8,7 +8,7 @@ use tracing_futures::Instrument;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Backend {
-    Netsoup,
+    Netsoup { join: bool },
     Redis,
 }
 
@@ -207,7 +207,7 @@ pub(crate) async fn run(
         .write_all(format!("# server load: {} {}\n", sload1, sload5).as_bytes())
         .await?;
 
-    if let Backend::Netsoup = backend {
+    if let Backend::Netsoup { .. } = backend {
         let vmrss = crate::server::vmrss(s)
             .await
             .wrap_err("failed to get server memory use")?;
@@ -255,7 +255,7 @@ pub(crate) async fn run(
     }
 
     if all_ok {
-        if let Backend::Netsoup = backend {
+        if let Backend::Netsoup { .. } = backend {
             tracing::trace!("saving server stats");
             let mut results = tokio::fs::File::create(format!("{}-statistics.json", prefix))
                 .await
@@ -284,7 +284,7 @@ fn vote_client<'c>(
     // vote args need to go _before_ the backend arguments
     add_args(&mut cmd);
     match backend {
-        Backend::Netsoup => {
+        Backend::Netsoup { join } => {
             cmd.arg("netsoup")
                 .arg("--deployment")
                 .arg("benchmark")
@@ -293,6 +293,9 @@ fn vote_client<'c>(
                     "{}:2181",
                     server.private_ip.as_ref().expect("private ip unknown")
                 ));
+            if !join {
+                cmd.arg("--no-join");
+            }
         }
         Backend::Redis => {
             cmd.arg("redis")

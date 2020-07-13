@@ -19,7 +19,7 @@ pcts = [x for x in range(10, 75, 10)] + [x for x in range(75, 101, 1)]
 vote_fn = re.compile("(full|partial)\.(\d+)a\.(\d+)t\.(\d+)r\.(\d+)c\.(\d+)m\.(uniform|skewed)\.log")
 for path in glob(os.path.join(sys.argv[2], '*.log')):
     base = os.path.basename(path)
-    if not (base.startswith('full') or base.startswith('partial')):
+    if not (base.startswith('full.') or base.startswith('partial.')):
         continue
 
     match = vote_fn.fullmatch(base)

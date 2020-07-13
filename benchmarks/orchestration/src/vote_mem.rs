@@ -129,7 +129,7 @@ pub(crate) async fn one(
                         },
                         &cs[..],
                         &server,
-                        crate::invoke::vote::Backend::Netsoup,
+                        crate::invoke::vote::Backend::Netsoup { join: true },
                         &mut ctx,
                     )
                     .await?;

@@ -1,6 +1,6 @@
 #![feature(try_blocks, label_break_value)]
 
-const AMI: &str = "ami-049ba7230b32a1d8f";
+const AMI: &str = "ami-0e9ca458d66a65f55";
 
 use clap::{App, Arg};
 use color_eyre::{eyre, eyre::WrapErr, Report};
