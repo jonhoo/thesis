@@ -87,6 +87,7 @@ mod lobsters_mysql;
 mod lobsters_noria;
 mod lobsters_noria_mem;
 mod vote;
+mod vote_hybrid;
 mod vote_mem;
 mod vote_migration;
 mod vote_redis;
@@ -99,6 +100,7 @@ pub(crate) mod server;
 async fn main() {
     let mut benchmarks = vec![
         "vote-redis",
+        "vote-hybrid",
         "vote-migration",
         "vote-memory",
         "lobsters-mysql",
@@ -206,6 +208,7 @@ async fn main() {
             "vote" => vote::main(ctx.clone()).await,
             "vote-memory" => vote_mem::main(ctx.clone()).await,
             "vote-redis" => vote_redis::main(ctx.clone()).await,
+            "vote-hybrid" => vote_hybrid::main(ctx.clone()).await,
             "lobsters-mysql" => lobsters_mysql::main(ctx.clone()).await,
             "lobsters-noria" => lobsters_noria::main(ctx.clone()).await,
             "lobsters-noria-memory" => lobsters_noria_mem::main(ctx.clone()).await,

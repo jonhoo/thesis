@@ -10,6 +10,7 @@ use tracing_futures::Instrument;
 pub(crate) enum Backend {
     Netsoup { join: bool },
     Redis,
+    Hybrid,
 }
 
 pub(crate) async fn run(
@@ -300,6 +301,16 @@ fn vote_client<'c>(
         Backend::Redis => {
             cmd.arg("redis")
                 .arg("--address")
+                .arg(server.private_ip.as_ref().expect("private ip unknown"));
+        }
+        Backend::Hybrid => {
+            cmd.arg("hybrid")
+                .arg("--mysql-address")
+                .arg(format!(
+                    "vote@{}/soup",
+                    server.private_ip.as_ref().expect("private ip unknown")
+                ))
+                .arg("--redis-address")
                 .arg(server.private_ip.as_ref().expect("private ip unknown"));
         }
     }

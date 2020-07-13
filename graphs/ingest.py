@@ -12,6 +12,7 @@ def ingest(in_dir="."):
     results = {
         'vote': pd.DataFrame(),
         'redis': pd.DataFrame(),
+        'hybrid': pd.DataFrame(),
         'mysql': pd.DataFrame(),
         'vote-migration': [],
         'lobsters-noria': pd.DataFrame(),
@@ -24,6 +25,8 @@ def ingest(in_dir="."):
             vote_migration(results['vote-migration'], experiment)
         elif base.startswith("redis."):
             results['redis'] = redis(results['redis'], experiment)
+        elif base.startswith("hybrid."):
+            results['hybrid'] = hybrid(results['hybrid'], experiment)
         elif base.startswith("lobsters-mysql-"):
             results['mysql'] = lobsters_mysql(results['mysql'], experiment)
         elif base.startswith("full") or base.startswith("partial"):
@@ -147,6 +150,89 @@ def redis(df, path):
         return df
 
     data = timelines(path)
+    if data is None:
+        print("skipping file without histograms", path)
+        return df
+
+    meta = {
+        'target': target,
+        'articles': articles,
+        'clients': clients,
+        'distribution': distribution,
+        'write_every': write_every,
+
+        'generated': generated,
+        'achieved': actual,
+
+        'sload1': sload1,
+        'sload5': sload5,
+        'cload1': cload1,
+        'cload5': cload5,
+    }
+
+    for (k, v) in meta.items():
+        data[k] = v
+
+    # get string types right
+    data["op"] = data["op"].astype("string")
+    data["distribution"] = data["distribution"].astype("string")
+
+    # set the correct index
+    data.set_index(["target", "distribution", "write_every", "clients", "articles", "op", "until", "metric"], inplace=True)
+    data = data.sort_index()
+    return df.append(data)
+
+hybrid_fn = re.compile("hybrid\.(\d+)a\.(\d+)t\.(\d+)r\.(\d+)c(\.\d+m)?\.(uniform|skewed)\.log")
+def hybrid(df, path):
+    match = hybrid_fn.fullmatch(os.path.basename(path))
+    if match is None:
+        print(match, path)
+        return df
+    if os.stat(path).st_size == 0:
+        print("empty", path)
+        return df
+
+    articles = int(match.group(1))
+    target = int(match.group(2))
+    write_every = int(match.group(3))
+    clients = int(match.group(4))
+    distribution = match.group(6)
+    generated = 0.0
+    actual = 0.0
+    sload1 = 0.0
+    sload5 = 0.0
+    cload1 = 0.0
+    cload5 = 0.0
+
+    client = 0
+    with open(path, 'r') as f:
+        for line in f.readlines():
+            if line.startswith("#"):
+                if "generated ops/s" in line:
+                    generated += float(line.split()[-1])
+                    client += 1
+                elif "actual ops/s" in line:
+                    actual += float(line.split()[-1])
+                elif "server load" in line:
+                    fields = line.split()
+                    sload1 += float(fields[-2])
+                    sload5 += float(fields[-1])
+                elif "client[0] load" in line:
+                    fields = line.split()
+                    cload1 += float(fields[-2])
+                    cload5 += float(fields[-1])
+            else:
+                # we'll get cdfs straight from the histograms
+                pass
+
+    if client == 0:
+        print("skipping empty file", path)
+        return df
+
+    data = timelines(path)
+    if data is None:
+        print("skipping file without histograms", path)
+        return df
 
     meta = {
         'target': target,
