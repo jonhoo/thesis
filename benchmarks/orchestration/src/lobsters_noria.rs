@@ -87,7 +87,11 @@ pub(crate) async fn one(
 
                 if (partial == false
                     && nshards == 0
-                    && (scale == 8_000 || scale == 6_000 || scale == 5_000 || scale == 4_500))
+                    && (scale == 8_000
+                        || scale == 6_000
+                        || scale == 5_000
+                        || scale == 4_500
+                        || scale == 4_000))
                     || (partial == true && nshards == 0 && (scale == 8_000 || scale == 6_000))
                 {
                     // i happen to know that this fails
