@@ -316,8 +316,10 @@ fn noria_bin<'s>(
     package: &'static str,
     binary: &'static str,
 ) -> openssh::Command<'s> {
-    let mut cmd = ssh.command("cargo");
-    cmd.arg("+nightly")
+    let mut cmd = ssh.command("env");
+    cmd.arg("RUST_BACKTRACE=1")
+        .arg("cargo")
+        .arg("+nightly")
         .arg("run")
         .arg("--manifest-path=noria/Cargo.toml")
         .arg("-p")
