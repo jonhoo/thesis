@@ -15,6 +15,14 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
         ..
     } = ctx;
 
+    // make sure we shouldn't already be exiting.
+    // this also sets it up so that _any_ recv from exit means we should exit.
+    if let Some(false) = exit.recv().await {
+    } else {
+        tracing::info!("exiting as instructed");
+        return Ok(());
+    }
+
     let mut aws = crate::launcher();
     // shouldn't take _that_ long
     aws.set_max_instance_duration(1);
@@ -57,10 +65,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
                     .stdout(std::process::Stdio::null());
                 let benchmark = crate::output_on_success(benchmark);
 
-                // make sure we shouldn't already be exiting.
-                // this also sets it up so that _any_ recv from exit means we should exit.
-                if let Some(false) = exit.recv().await {
-                } else {
+                if *exit.borrow() {
                     tracing::info!("exiting as instructed");
                     break 'run;
                 }
