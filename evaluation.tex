@@ -349,6 +349,25 @@ in single-digit milliseconds, and 99th percentile latency is 20 milliseconds.
   \label{f:lobsters-timeline}
 \end{figure}
 
+\begin{figure}[t]
+  \centering
+  \includegraphics{graphs/lobsters-timeline-evict.pdf}
+  \caption{Lobsters latency timeline at 1.5k pages per second across all pages
+  with eviction. \textbf{Both axes use a logarithmic scale.} Brighter colors
+  include more of the tail.}
+  \label{f:lobsters-timeline-evict}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics{graphs/vote-timeline.pdf}
+  \caption{Vote read latency timeline at 800k operations per second without
+  eviction. \textbf{Both axes use a logarithmic scale.} Brighter colors include
+  more of the tail. Note that y axis is one order of magnitude lower than for
+  the Lobsters plots.}
+  \label{f:vote-timeline}
+\end{figure}
+
 \begin{inprogress}
   Tail latency increases towards the right due to log-time; as we go right in
   the plot, we're sampling for twice as long, and we see more of tail.
