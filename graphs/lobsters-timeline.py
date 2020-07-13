@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 
-d = common.lobsters.query('until <= 256 & op == "all" & scale == 4000 & memlimit == 0 & partial == True & metric == "processing"').reset_index().set_index("partial")
+d = common.lobsters.query('until <= 256 & op == "all" & scale == 4000 & memlimit == 0 & partial == True & metric == "sojourn"').reset_index().set_index("partial")
 colors = {
-    'processing': ['#e34a33', '#fdbb84', '#fee8c8'],
+    'sojourn': ['#e34a33', '#fdbb84', '#fee8c8'],
 }
 fig, ax = plt.subplots()
 colors = common.memlimit_colors(5, True)
 
-# inject a point at until=0 that's == until=1, so make until=1 more visible
+# inject a point at until=0 that's == until=1, to make until=1 more visible
 zero = d.query('until == 1').copy()
 zero['until'] = 0
 d = pd.concat([zero, d])
@@ -35,7 +35,8 @@ ax.set_ylabel('Page latency [ms]')
 ax.set_xlabel('Time after start [s]')
 ax.set_xlim(0.5, 256)
 ax.set_ylim(1, 500000)
-ax.set_xscale('log')
+ax.set_xscale('log', basex=2)
+ax.set_xticks([1, 2, 4, 8, 16, 32, 64, 128, 256])
 ax.set_yscale('log')
 # use normal numbers on x axis
 ax.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
