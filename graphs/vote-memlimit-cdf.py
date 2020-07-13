@@ -58,7 +58,7 @@ for path in glob(os.path.join(sys.argv[2], '*.log')):
 
     # time to fetch the cdf
     hist_paths = glob(os.path.splitext(path)[0] + '-client*.hist')
-    write = True
+    write = False
     for hist_path in hist_paths:
         hreader = HistogramLogReader(hist_path, HdrHistogram(1, 60000000, 3))
         histograms = {}
