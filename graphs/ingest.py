@@ -316,6 +316,10 @@ def vote(df, path):
         return df
 
     data = timelines(path)
+    if data is None:
+        print("skipping file without histograms", path)
+        return df
+
     ndomains, base_mem, other_mem, reader_mem, full_op_mem = mem_stats(path)
 
     meta = {
@@ -406,8 +410,13 @@ def lobsters_noria(df, path):
                 pass
 
     data = timelines(path)
+    if data is None:
+        print("skipping file without histograms", path)
+        return df
+
     stats = mem_stats(path)
     if stats is None:
+        print("skipping file without stats", path)
         return df
     ndomains, base_mem, other_mem, reader_mem, full_op_mem = stats
 
@@ -477,6 +486,9 @@ def lobsters_mysql(df, path):
                     cload5 += float(fields[-1])
 
     data = timelines(path)
+    if data is None:
+        print("skipping file without histograms", path)
+        return df
 
     meta = {
         'scale': scale,
@@ -539,6 +551,10 @@ def extract_hist(log_path, *args):
     else:
         hist_paths = glob(os.path.splitext(log_path)[0] + '-client*.hist')
 
+    hist_paths = [p for p in hist_paths if os.path.exists(p) and os.stat(p).st_size != 0]
+    if len(hist_paths) == 0:
+        return None
+
     extract_hist_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extract-hist")
     extract_hist_cargo = os.path.join(extract_hist_path, "Cargo.toml")
     print(["cargo", "r", "--release", "--manifest-path", extract_hist_cargo, "--", *args, *hist_paths])
@@ -547,6 +563,8 @@ def extract_hist(log_path, *args):
 
 def cdfs(log_path):
     cdf = extract_hist(log_path)
+    if cdf is None:
+        return None
 
     # flip processing/sojourn to be columns
     cdf = cdf.set_index(["op", "pct", "metric"])["time"].unstack()
