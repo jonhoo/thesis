@@ -26,7 +26,7 @@ ax.set_ylim(0, 50)
 ax.legend()
 
 ax.set_xlabel("Achieved throughput [requests per second]")
-ax.set_ylabel("Latency [ms]")
+ax.set_ylabel("90th \\%-ile latency [ms]")
 
 fig.tight_layout()
 plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")

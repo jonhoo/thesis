@@ -21,21 +21,21 @@ for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     if limit == 0:
         dd = d.query("partial == True")
-        ax.plot(dd["achieved"], dd["p90"], '.-', lw=0.7, color = 'black', label = "unlimited")
+        ax.plot(dd["achieved"], dd["median"], '.-', lw=0.7, color = 'black', label = "unlimited")
         # dd = d.query("partial == False")
-        # ax.plot(dd["achieved"], dd["p90"], '.--', color = 'black', lw=1, alpha = 0.8, label = "full")
+        # ax.plot(dd["achieved"], dd["median"], '.--', color = 'black', lw=1, alpha = 0.8, label = "full")
     else:
-        ax.plot(d["achieved"], d["p90"], '.-', lw=0.7, color = colors[i], label = common.bts(limit * 1024 * 1024 * 1024))
+        ax.plot(d["achieved"], d["median"], '.-', lw=0.7, color = colors[i], label = common.bts(limit * 1024 * 1024 * 1024))
         i += 1
 
 ax.xaxis.set_major_formatter(common.kfmt)
-ax.set_ylim(0, 100)
+ax.set_ylim(0, 60)
 # leave some space for legend:
-ax.set_xlim(0, 8000000 * 1.1)
+ax.set_xlim(0, 6000000 * 1.1)
 ax.legend()
 
 ax.set_xlabel("Achieved throughput [requests per second]")
-ax.set_ylabel("Latency [ms]")
+ax.set_ylabel("Median latency [ms]")
 
 fig.tight_layout()
 plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")
