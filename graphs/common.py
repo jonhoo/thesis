@@ -31,14 +31,7 @@ lobsters["mem"] = lobsters["basemem"] + lobsters["opmem"]
 lobsters.sort_index(inplace = True)
 
 # find subset that corresponds to the "main" experiment
-lobsters_experiments = lobsters.query('op == "all" & memlimit == 0 & achieved >= 0.95 * requested & mean < 100').groupby([c for c in lobsters.index.names if c not in ["op", "until", "metric"]]).tail(1)
-
-# compute subset of data for memory-limited lobsters
-limited_lobsters_scale = lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.95 * requested & mean < 100').reset_index()['scale'].max()
-limited_lobsters = lobsters.query('op == "all" & memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
-limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested')["memlimit"].min()
-limited_lobsters = lobsters.query('op == "all" & memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
-print('Using %.0fMB memory limit as representative for lobsters (%d pages/s)' % (limited_lobsters_still_ok * 1024, limited_lobsters["achieved"].min()))
+lobsters_experiments = lobsters.query('op == "all" & memlimit == 0 & achieved >= 0.99 * requested & mean < 100').groupby([c for c in lobsters.index.names if c not in ["op", "until", "metric"]]).tail(1)
 
 # find scale that is shared among the most lobsters configurations
 data = lobsters_experiments

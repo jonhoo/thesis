@@ -10,7 +10,14 @@ import sys
 # memory use at various lobsters scales
 #
 
-prune = common.limited_lobsters
+# compute subset of data for memory-limited lobsters
+limited_lobsters_scale = common.lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.99 * requested & mean < 100').reset_index()['scale'].max()
+limited_lobsters = common.lobsters.query('op == "all" & memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
+limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested & median < 100')["memlimit"].min()
+limited_lobsters = common.lobsters.query('op == "all" & memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
+print('Using %.0fMB memory limit as representative for lobsters (%d pages/s)' % (limited_lobsters_still_ok * 1024, limited_lobsters["achieved"].min()))
+
+prune = limited_lobsters
 partial_scale = common.lobsters_experiments.query('partial == True').reset_index()['scale'].max()
 partial = common.lobsters_experiments.query('partial == True & scale == %d' % (partial_scale))
 full_scale = common.lobsters_experiments.query('partial == False').reset_index()['scale'].max()

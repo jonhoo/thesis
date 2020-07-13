@@ -110,9 +110,10 @@ labels = {
     'story': 'View Story',
     'frontpage': 'Frontpage',
     'comment_vote': 'Vote for Comment',
+    'story_vote': 'Vote for Story',
     'submit': 'Submit Story',
 }
-for op in ["story", "frontpage", "comment_vote", "submit"]:
+for op in ["story", "frontpage", "comment_vote", "story_vote", "submit"]:
     d = data.query('partial == True & op == "%s"' % op).reset_index()
     #if limit == 0:
     #    partial = d.query("partial == True")
@@ -123,6 +124,7 @@ for op in ["story", "frontpage", "comment_vote", "submit"]:
 ax.set_ylabel("CDF")
 ax.set_xlabel("Latency [ms]")
 ax.set_xscale('log')
+ax.set_xlim(0.1, 10000)
 ax.legend()
 
 fig.tight_layout()
