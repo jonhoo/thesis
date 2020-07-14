@@ -5,7 +5,6 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/lobsters-memlimit-cdf.pdf \
 	    graphs/lobsters-pages-cdf.pdf \
 	    graphs/lobsters-timeline.pdf \
-	    graphs/lobsters-timeline-evict.pdf \
 	    graphs/vote-timeline.pdf \
 	    graphs/vote-formula.pdf \
 	    graphs/vote-migration.pdf \
