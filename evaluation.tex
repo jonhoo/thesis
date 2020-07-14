@@ -1,31 +1,52 @@
-The work in this thesis is built on the belief that materialization is useful,
-and that partial materialization is necessary to make it practical for an
-important class of applications. Without materialization, queries must either be
-manually cached, which is labor-intensive and error-prone, or be computed on
-demand, which is slow. And with full state materialization, all queries are
-fast, but the memory cost is prohibitive for any but the smallest applications.
-Whereas partial state allows you to trade off application tail latency for
-reduced memory use.
+This thesis is built on the belief that view materialization is useful, but
+prohibitively costly to use with current solutions. It presents partial state as
+a solution to this problem, which allows retaining the benefits of view
+materialization at a fraction of the cost. Section \ref{s:eval:why} evaluates
+the validity of this assumption, and the efficacy of partial state as a
+solution.
+
+Partial state enables a trade-off between memory use (cache size) and tail
+latency (miss rate). Since many applications operate with a latency budget, the
+parameters of this trade-off is important. Section \ref{s:eval:cost} explores
+the trade-off space.
+
+With partial state, applications can introduce new views without materializing
+that entire view all up-front. Instead, with partial state, the view is
+gradually materialized on-demand. This enables fast migrations, but also means
+that queries to new views may take a while to be satisfied. Section
+\ref{s:eval:warmup} looks at the post-migration period in detail to shed light
+on this on-demand process.
+
+The efficacy of partial state as a solution to the view materialization memory
+use problem depends on appliation access patterns being sufficiently skewed that
+keeping only some results cached reduces latency for a significant fraction of
+requests. While it is impossible to predict the skew for an arbitrary
+application's data and queries, section \ref{s:eval:patterns} gives a simple
+theoretical model to help with estimation.
+
+The experiments in this chapter revolve primarily around the Lobsters
+news aggregator application. This application, the nature of the generated
+workloads, and the experimental setup is covered in section \ref{s:eval:setup}.
+
+\section{Experimental Setup}
+\label{s:eval:setup}
+
+\section{Benefits and Costs of View Materialization}
+\label{s:eval:why}
+
+% The work in this thesis is built on the belief that materialization is useful,
+% and that partial materialization is necessary to make it practical for an
+% important class of applications. Without materialization, queries must either be
+% manually cached, which is labor-intensive and error-prone, or be computed on
+% demand, which is slow. And with full state materialization, all queries are
+% fast, but the memory cost is prohibitive for any but the smallest applications.
+% Whereas partial state allows you to trade off application tail latency for
+% reduced memory use.
 
 In this section, I provide experimental and qualitative evidence that this
 belief is warranted through analysis of the following questions:
 
-\begin{enumerate}
- \item What impact does partial state have on memory use? \S\ref{s:eval:mem}
- \item What is the cost of using partial state? \S\ref{s:eval:cost}
- \item How dependent is partial state on application access patterns? \S\ref{s:eval:patterns}
- \item How does partial state compare to existing solutions? \S\ref{s:eval:existing}
-\end{enumerate}
-
-The high-level take-away from this section is that partial state allows
-read-heavy applications with skewed access patterns to operate using
-significantly less memory, with marginal impact on system throughput and
-latency.
-
-\section{What impact does partial state have on memory use?}
-\label{s:eval:mem}
-
-\begin{figure}[ht]
+\begin{figure}[h]
   \centering
   \includegraphics{graphs/lobsters-memory.pdf}
   \caption{Effect of partial materialization on memory use and throughput. Noria
