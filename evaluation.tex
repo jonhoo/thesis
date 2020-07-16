@@ -172,10 +172,10 @@ and 95th percentile latency drop below 10 milliseconds. By the time a minute has
 passed, the 99th percentile has followed suit.
 
 \begin{inprogress}
-  Tail latency increases towards the right \emph{either} due to log-time; as we
-  go right in the plot, we're sampling for twice as long, and we see more of
-  tail \emph{or} because of the still-remaining non-amortized resizes. Probably
-  the latter actually.
+  I believe much of the remaining tail latency is due to some remaining
+  non-amortized resizes. Just visually, it seems like they might be worth
+  fixing. It \emph{could} also be due to log-time; as we go right in the plot,
+  we're sampling for twice as long, and we see more of tail.
 \end{inprogress}
 
 This particular curve is likely to be a common one\,---\,initially, all the
@@ -472,29 +472,64 @@ increases dramatically.
 \section{Rolling Your Own}
 \label{s:eval:existing}
 
-\begin{inprogress}
-  HERE
-\end{inprogress}
+Many applications already require lower latency and higher throughput than
+straightforward SQL queries against traditional relational databases can
+provide. Developers often jump through hoops to squeeze out the performance they
+need, usually through a mix of manual query optimization and intricate caching
+logic. For example, in Lobsters, it would be prohibitively expensive to compute
+the ``hotness'' of a story directly in the queries, especially in the context of
+computing the front page view. Instead, the Lobsters developers add a computed
+column, \texttt{hotness}, to the \texttt{story} table. This form of manual
+materialization is common in web applications. It is necessary to make reads
+fast, but also requires that the developers remember to update the computed
+column whenever relevant data changes. In Lobsters, this means whenever:
 
-This is a difficult question to answer. High-performance solutions are
-often developed specifically for a given application, and not available
-as general-purpose tools (ref facebook memcache, need cites here).
-And applying the general-purpose tools that \textbf{are} available (memcache,
-redis) effectively requires significant effort on the part of the application
-authors (or the evaluators). To manually add caching support to Lobsters' ~80
-queries, including thundering herd mitigation and incremental updates, would be
-a massive undertaking.
+\begin{itemize}
+    \item a story is upvoted or downvoted.
+    \item a comment is added to a story.
+    \item a comment on a story is upvoted or downvoted.
+    \item a comment or vote is deleted.
+    \item one story is merged into another.
+\end{itemize}
 
-In some sense, this alone is an argument for Noria's approach. Since the
-database uses information that is already present (in the form of application
-queries) to automatically optimize accesses through materialization, it is
-relatively easy to take advantage of the benefits that Noria provides.
+There are several such computed columns in Lobsters, and all write paths must
+ensure that they correctly update all related computed values. This process is
+manual and error-prone, and is entirely unnecessary with Noria.
 
-Nonetheless, to shed some light on the absolute performance that Noria provides
-against a caching system, I include below a performance comparison between Noria
-and Redis. To approximate how a carefully planned and optimized application
-caching deployment might perform, it runs a workload that is idealized for a
-caching system:
+Lobsters does not include a separate caching layer, which would also require
+similar logic to update or invalidate results in the cache as appropriate. Since
+caches are usually separate from the database, such dedicated caching layers
+also introduce additional, complex race conditions. For example, consider a
+write-back cache system where a client that misses in the cache reads from the
+database and writes back into the cache afterwards. If the data is updated after
+the client reads from the database, but before it writes back its (now stale)
+result, then the value in cache may now be permanently stale.
+
+Solving this issue, and related issues like ``thundering herds'', requires
+highly sophisticated machinery~\cite{facebook-memcache, transactional-cache,
+orm-cache, sql-cache} which developers may not even think to employ. A survey
+from 2016 found that 0.3-3.0\% of application code spread across 2.1-10.8\% of
+the application's source files is caching-related, and that cache-related issues
+make up 1-5\% of all issues~\cite{caching-is-hard}. By integrating the cache
+with the database, Noria does not suffer the same problems\,---\,the cache is
+maintained directly by the database, and does not need to be managed by
+application code.
+
+Despite how error-prone the approach is, ad-hoc, per-application caching is
+still common in practice. And while Noria eliminates most of the developer
+burden of getting caching right, it must offer competitive performance with
+manually constructed caching solutions to present a viable alternative.
+Unfortunately, this is difficult to evaluate, since high-performance solutions
+are often developed specifically for a given application, and not available as
+general-purpose tools. And effectively applying the general-purpose tools that
+\textbf{are} available, like memcache and redis, requires significant effort on
+the part of the application authors (or the evaluators). To manually add caching
+support to Lobsters' ~80 queries, including thundering herd mitigation and
+incremental updates, would be a massive undertaking.
+
+In an attempt to approximate how a carefully planned and optimized application
+caching deployment might perform, the next experiment runs the vote benchmark
+against Redis~\cite{redis} with the following modifications:
 
 \begin{itemize}
  \item Every access hits in cache, to emulate perfect thundering herd mitigation
@@ -505,35 +540,40 @@ caching system:
    perfect cache coverage. Request access keys are chosen according to a Zipfian
     distribution with $\alpha = 1.15$, so that 1\% of keys make up 90\% of
     requests.
+ \item Data is not stored anywhere except Redis.
  \item Accesses are batched to reduce serialization cost and increase
    throughput. Specifically, reads are \texttt{MGET}s, and writes are pipelined
     \texttt{INCRBY}s.
 \end{itemize}
 
-This is not a realistic use of Redis, but it allows us to ``assume the best''
-about the underlying caching strategy and system. The benchmark runs for four
-minutes, and then samples latencies for another two minutes.
+This is not a realistic use of Redis as a cache, and ignores the complexities of
+integrating the cache with the application, but it allows us to ``assume the
+best'' about the underlying caching strategy and system. The benchmark runs for
+four minutes, and then samples latencies for another two minutes.
 
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/vote-redis.pdf}
-  \caption{Achieved throughput vs 90th \%-ile request latency in vote with Redis
-  and Noria. Offered load increases along the points on each line.}
+  \caption{Achieved throughput vs 90th \%-ile request latency in cache-optimized
+  vote. Offered load increases along the points on each line. Vertical
+  lines are $16\times$ the cliff of the corresponding experiment.}
   \label{f:vote-redis}
 \end{figure}
 
-Figure~\ref{f:vote-redis} shows a throughput-latency that explores the
-performance profiles of Redis and Noria under these experimental conditions.
-Noria scales much further, primarily because Redis is single-threaded, which
-necessarily limits its performance. Noria stops scaling when the single core
-that processes writes for the dataflow path for the vote query reaches capacity.
+Figure~\ref{f:vote-redis} shows a throughput-latency plot that explores the
+performance profiles of Redis and Noria under these experimental conditions%
+\footnote{Noria runs with the same modified access patterns as outlined for
+Redis.}. For comparison, it also includes a MySQL + Redis implementation that
+stores votes and articles in MySQL, and uses the na\"ive write-back cache
+strategy outlined above. Since Redis is not multi-threaded, and so can only use
+one of the server's 16 cores, the figure also includes the Redis performance
+extrapolated to 16 cores. To achieve this performance in practice, the
+application's already-perfect caching scheme would also need to shard perfectly.
 
-If we assume perfect sharding of both reads and writes, Redis should be able to
-support 16 times the load on the 16-core host machine, as shown by the dashed
-orange line at ~85Mops/s. Noria is about an order of magnitude short of that
-mark. However, beyond the simplifications above, Noria also does significantly
-more work than Redis: it allows rich SQL queries, transfers full rows, not just
-a single integer, and does not require sharding. Noria has also not seem the
-same amount of optimization as Redis has gone through over the years. Taken
-together, this suggests that Noria's performance, in absolute terms, is
-competitive with manual caching schemes.
+Due to the simplifications in this particular benchmark, the experimental
+results serve primarily to determine upper bounds for possible performance:
+Noria achieves 25\% of the theoretical best you could ever do with Redis. Since
+the caching is unlikely to be perfect as in these experiments, Noria's
+performance is likely to be close to what a ``real'' caching system achieves.
+And Noria does this while providing rich SQL queries without application caching
+logic.
