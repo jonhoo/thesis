@@ -3,7 +3,7 @@ const NUM: usize = 5000000;
 fn main() {
     println!("skew\talpha\tthroughput\tpercentage");
     let rates = [
-        50_000, 100_000, 200_000, 400_000, 800_000, 1_600_000, 3_200_000, 6_400_000, 12_800_000,
+        5_000, 10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 750_000, 1_000_000, 2_000_000,
     ];
 
     // How large a fraction is access in "one eviction period"?

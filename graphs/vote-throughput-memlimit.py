@@ -12,7 +12,7 @@ limits = data.groupby('memlimit').tail(1)
 limits = [l for l in limits["memlimit"]]
 limits.sort()
 print(limits)
-limits = [256 / 1024.0,  384 / 1024.0, 512 / 1024.0, 768 / 1024.0]
+limits = [256 / 1024.0,  384 / 1024.0, 512 / 1024.0]
 colors = common.memlimit_colors(len(limits))
 limits.sort()
 limits = limits + [0]
@@ -21,7 +21,7 @@ for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     if limit == 0:
         dd = d.query("partial == True")
-        ax.plot(dd["achieved"], dd["median"], '.-', lw=0.7, color = 'black', label = "unlimited")
+        ax.plot(dd["achieved"], dd["median"], '.-', lw=0.7, color = 'black', label = "no eviction")
         # dd = d.query("partial == False")
         # ax.plot(dd["achieved"], dd["median"], '.--', color = 'black', lw=1, alpha = 0.8, label = "full")
     else:

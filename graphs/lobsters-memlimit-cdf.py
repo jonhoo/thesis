@@ -16,8 +16,7 @@ plot_offset = 256000
 
 data = pd.DataFrame()
 limits = []
-# only show third quartile
-pcts = [x for x in range(10, 75, 10)] + [x for x in range(75, 101, 1)]
+pcts = [1, 5] + [x for x in range(10, 74, 10)] + [x for x in range(74, 101, 2)]
 
 lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?-(\d+)-(\d+)m.log")
 for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
