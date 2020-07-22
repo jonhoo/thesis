@@ -148,6 +148,8 @@ pub(crate) async fn write_stats(
     let mut curl = ssh
         .command("curl")
         .arg("-v")
+        .arg("--max-time")
+        .arg("30") // in case the server is stuck somehow
         .arg(format!(
             "http://{}:6033/get_statistics",
             server.private_ip.as_ref().expect("private ip unknown")
