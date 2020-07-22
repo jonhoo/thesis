@@ -180,6 +180,7 @@ pub(crate) async fn run(
     results
         .write_all(format!("# client type: {}\n", client_type).as_bytes())
         .await?;
+    tracing::trace!("saving commit");
     let commit = crate::noria_commit(s)
         .await
         .wrap_err("failed to get noria commit")?;
