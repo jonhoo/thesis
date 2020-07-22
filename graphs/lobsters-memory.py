@@ -9,11 +9,12 @@ import sys
 #
 # memory use at various lobsters scales
 #
+fmtfn = lambda x : '%1.1fGB' % (x * 1e-9) if x >= 1e9 else '%1.0fMB' % (x * 1e-6) if x >= 1e6 else '%1.10kB' % (x * 1e-3) if x >= 1e3 else '%1.0fB' % x if x > 0 else "No overhead"
 
 # compute subset of data for memory-limited lobsters
-limited_lobsters_scale = common.lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.99 * requested & mean < 100').reset_index()['scale'].max()
+limited_lobsters_scale = common.lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.99 * requested & mean < 50').reset_index()['scale'].max()
 limited_lobsters = common.lobsters.query('op == "all" & memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
-limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested & median < 100')["memlimit"].min()
+limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested & median < 50')["memlimit"].min()
 limited_lobsters = common.lobsters.query('op == "all" & memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
 print('Using %.0fMB memory limit as representative for lobsters (%d pages/s)' % (limited_lobsters_still_ok * 1024, limited_lobsters["achieved"].min()))
 
@@ -23,47 +24,42 @@ partial = common.lobsters_experiments.query('partial == True & scale == %d' % (p
 full_scale = common.lobsters_experiments.query('partial == False').reset_index()['scale'].max()
 full = common.lobsters_experiments.query('partial == False & scale == %d' % (full_scale))
 
-fig, (mem, throughput) = plt.subplots(2, 1, sharex = True)
+# find closest scale for prune, and show vmrss
+candidates = common.lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.99 * requested & mean < 50')
+candidate = limited_lobsters_scale
+for scale in candidates.reset_index()['scale']:
+    if abs(scale - full_scale) < abs(candidate - full_scale):
+        candidate = scale
+mem_at_candidate = candidates.query('scale == %d' % candidate)['vmrss'].min()
+nxt = candidates.query('scale > %d' % candidate).reset_index()['scale'].min()
+mem_at_nxt = candidates.query('scale == %d' % nxt)['vmrss'].min()
+# linear iterpolation
+a = (mem_at_nxt - mem_at_candidate) / (nxt - candidate)
+b = mem_at_candidate - a * candidate
+mem_at_full_apx = a * full_scale + b
+print("VmRSS for prune @ full-ish (%d-%d vs %d): %s" % (candidate, nxt, full_scale, fmtfn(mem_at_full_apx * 1024 * 1024 * 1024)))
 
-# plot the "bottom" part of the bars
-xs = ["Noria w/eviction", "Noria, partial", "Noria, full", "MySQL"]
+fig, throughput = plt.subplots(1, 1)
+
+xs = [
+    "Noria",
+    # "Noria, partial",
+    "Noria, no partial",
+    "MySQL"
+]
 xticks = [x for x in range(len(xs))]
-ys = [
-    prune["fopmem"].item(),
-    partial["fopmem"].item(),
-    full["fopmem"].item(),
-    0,
-]
-bars = mem.bar(xticks, ys, color=common.colors['full'])
 
-# plot the "top" part of the bars
-tops = [
-    prune["opmem"].item() - prune["fopmem"].item(),
-    partial["opmem"].item() - partial["fopmem"].item(),
-    full["opmem"].item() - full["fopmem"].item(),
-    0
-]
-bars = mem.bar(xticks, tops, bottom=ys)
-bars[0].set_color(common.colors['evict'])
-bars[1].set_color(common.colors['partial'])
-bars[2].set_color(common.colors['full'])
-bars[3].set_color(common.colors['mysql'])
+print("%s base mem: %s" % (xs[0], fmtfn(prune['basemem'].item() * 1024 * 1024 * 1024)))
+print("%s base mem: %s" % ("partial", fmtfn(partial['basemem'].item() * 1024 * 1024 * 1024)))
+print("%s base mem: %s" % (xs[1], fmtfn(full['basemem'].item() * 1024 * 1024 * 1024)))
 
-mem.set_xticks(xticks)
-mem.set_xticklabels(xs)
-mem.set_ylim(0, full["opmem"].max() * 1.3) # also fit labels over bars
+print("%s opmem: %s" % (xs[0], fmtfn(prune['opmem'].item() * 1024 * 1024 * 1024)))
+print("%s opmem: %s" % ("partial", fmtfn(partial['opmem'].item() * 1024 * 1024 * 1024)))
+print("%s opmem: %s" % (xs[1], fmtfn(full['opmem'].item() * 1024 * 1024 * 1024)))
 
-mem.set_ylabel("Memory [GB]")
-
-# Attach a text label above each bar with its value.
-fmtfn = lambda x : '%1.1fGB' % (x * 1e-9) if x >= 1e9 else '%1.0fMB' % (x * 1e-6) if x >= 1e6 else '%1.10kB' % (x * 1e-3) if x >= 1e3 else '%1.0fB' % x if x > 0 else "No overhead"
-for rect in bars:
-    height = rect.get_height()
-    mem.annotate(fmtfn((rect.get_y() + height) * 1024 * 1024 * 1024),
-                xy=(rect.get_x() + rect.get_width() / 2, rect.get_y() + height),
-                xytext=(0, 3),  # 3 points vertical offset
-                textcoords="offset points",
-                ha='center', va='bottom')
+print("%s vmrss: %s" % (xs[0], fmtfn(prune['vmrss'].item() * 1024 * 1024 * 1024)))
+print("%s vmrss: %s" % ("partial", fmtfn(partial['vmrss'].item() * 1024 * 1024 * 1024)))
+print("%s vmrss: %s" % (xs[1], fmtfn(full['vmrss'].item() * 1024 * 1024 * 1024)))
 
 #
 # throughput achieved
@@ -71,26 +67,25 @@ for rect in bars:
 
 tys = []
 for x in xs:
-    if x == "Noria w/eviction":
+    if x == "Noria":
         achieved = prune['achieved'].max()
     elif x == "Noria, partial":
         achieved = partial['achieved'].max()
-    elif x == "Noria, full":
+    elif x == "Noria, no partial":
         achieved = full['achieved'].max()
     elif x == "MySQL":
         achieved = common.mysql_experiments['achieved'].max()
     tys.append(achieved)
 
-# plot the "bottom" part of the bars
 bars = throughput.bar(xticks, tys)
 bars[0].set_color(common.colors['evict'])
-bars[1].set_color(common.colors['partial'])
-bars[2].set_color(common.colors['full'])
-bars[3].set_color(common.colors['mysql'])
+# bars[1].set_color(common.colors['partial'])
+bars[1].set_color(common.colors['full'])
+bars[2].set_color(common.colors['mysql'])
 
 throughput.set_xticks(xticks)
 throughput.set_xticklabels(xs)
-throughput.set_ylim(0, common.lobsters_experiments['achieved'].max() * 1.3) # also fit labels over bars
+throughput.set_ylim(0, max(tys) * 1.15) # also fit labels over bars
 throughput.yaxis.set_major_formatter(common.kfmt)
 
 throughput.set_ylabel("Pages/s")
@@ -100,7 +95,7 @@ fmtfn = lambda x: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.1fk' % (x * 1e-3) i
 for rect in bars:
     height = rect.get_height()
     y = fmtfn(rect.get_y() + height)
-    throughput.annotate("%s\\textsuperscript{†}" % y if rect.get_x() == 1.6 else y,
+    throughput.annotate(y,
                 xy=(rect.get_x() + rect.get_width() / 2, rect.get_y() + height),
                 xytext=(0, 3),  # 3 points vertical offset
                 textcoords="offset points",

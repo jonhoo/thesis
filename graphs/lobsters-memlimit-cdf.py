@@ -115,15 +115,18 @@ for limit in limits:
     if limit == 0:
         partial = d.query("partial == True")
         full = d.query("partial == False")
-        ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = 'no eviction (%s)' % (common.bts(opmem)))
-        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = "no partial")
+        opmem_full = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == False & scale == %d & memlimit == 0' % (plot_scale))['opmem'].max()
+        ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
+        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = '%s (full mat.)' % (common.bts(opmem_full)))
     else:
-        ax.plot(d["latency"], d["pct"], color = colors[i], label = '%s limit (%s)' % (common.bts(limit), common.bts(opmem)))
+        ax.plot(d["latency"], d["pct"], color = colors[i], label = '%s' % (common.bts(opmem)))
         i += 1
-ax.set_ylabel("CDF")
-ax.set_xlabel("Latency [ms]")
+ax.set_ylabel("CDF [\\%]")
+ax.set_xlabel("Latency")
 ax.set_xscale('log')
-ax.set_xlim(0.1, 10000)
+ax.set_xlim(0.1, 1000)
+ax.set_xticks([0.1, 1, 10, 100, 1000])
+ax.set_xticklabels(["100µs", "1ms", "10ms", "100ms", "1s"])
 ax.legend()
 
 fig.tight_layout()

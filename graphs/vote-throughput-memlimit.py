@@ -21,17 +21,19 @@ for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     if limit == 0:
         dd = d.query("partial == True")
-        ax.plot(dd["achieved"], dd["median"], '.-', lw=0.7, color = 'black', label = "no eviction")
+        opmem = dd["opmem"].max()
+        ax.plot(dd["achieved"], dd["median"], '.-', lw=0.7, color = 'black', label = "%s (no eviction)" % common.bts(opmem))
         # dd = d.query("partial == False")
         # ax.plot(dd["achieved"], dd["median"], '.--', color = 'black', lw=1, alpha = 0.8, label = "full")
     else:
-        ax.plot(d["achieved"], d["median"], '.-', lw=0.7, color = colors[i], label = common.bts(limit * 1024 * 1024 * 1024))
+        opmem = d["opmem"].max()
+        ax.plot(d["achieved"], d["median"], '.-', lw=0.7, color = colors[i], label = '%s' % (common.bts(opmem)))
         i += 1
 
 ax.xaxis.set_major_formatter(common.kfmt)
 ax.set_ylim(0, 60)
 # leave some space for legend:
-ax.set_xlim(0, 6000000 * 1.1)
+ax.set_xlim(0, 6000000 * 1.2)
 ax.legend()
 
 ax.set_xlabel("Achieved throughput [requests per second]")

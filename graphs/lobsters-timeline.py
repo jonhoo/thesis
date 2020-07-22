@@ -31,13 +31,15 @@ ax.step(
     label="Mean"
 )
 
-ax.set_ylabel('Page latency [ms]')
+ax.set_ylabel('Page latency')
 ax.set_xlabel('Time after start [s]')
 ax.set_xlim(0.5, 256)
 ax.set_ylim(1, 500000)
 ax.set_xscale('log', basex=2)
 ax.set_xticks([1, 2, 4, 8, 16, 32, 64, 128, 256])
 ax.set_yscale('log')
+ax.set_yticks([1, 10, 100, 1000, 10000])
+ax.set_yticklabels(["1ms", "10ms", "100ms", "1s", "10s"])
 # use normal numbers on x axis
 ax.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
 ax.xaxis.get_major_formatter().set_scientific(False)
