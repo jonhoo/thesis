@@ -34,8 +34,7 @@ pub(crate) async fn one(
     let mut last_good_target = 0;
 
     let mut aws = crate::launcher();
-    // vote exploration generally take less than two hours, but make it 3
-    aws.set_max_instance_duration(3);
+    aws.set_mode(aws::LaunchMode::on_demand());
 
     fn redis_setup<'r>(
         _ssh: &'r tsunami::Machine<'_>,

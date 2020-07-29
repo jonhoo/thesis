@@ -24,8 +24,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     }
 
     let mut aws = crate::launcher();
-    // shouldn't take _that_ long
-    aws.set_max_instance_duration(1);
+    aws.set_mode(aws::LaunchMode::on_demand());
 
     // try to ensure we do AWS cleanup
     let result: Result<(), Report> = try {

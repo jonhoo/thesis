@@ -32,7 +32,7 @@ macro_rules! explore {
         for (i, target) in targets.iter().enumerate() {
             results.push(Ok(0));
 
-            if futs.len() >= 2 {
+            if futs.len() >= 3 {
                 // don't overwhelm ec2
                 let (i, r) = futs.next().await.expect(".len() > 0");
                 results[i] = r;
@@ -52,6 +52,9 @@ macro_rules! explore {
             futs.push(async move {
                 (i, fut.await.expect("runtime went away?"))
             });
+
+            // don't overwhelm ec2 by issuing all the requests at once
+            tokio::time::delay_for(std::time::Duration::from_secs(10)).await;
         }
 
         tracing::debug!("waiting for experiments to finish");
@@ -122,7 +125,7 @@ async fn main() {
         .arg(
             Arg::with_name("server")
                 .long("server-instance")
-                .default_value("r5.4xlarge")
+                .default_value("r5n.4xlarge")
                 .help("Run the noria server on an instance of this type"),
         )
         .arg(
@@ -142,7 +145,7 @@ async fn main() {
         .arg(
             Arg::with_name("client")
                 .long("client-instance")
-                .default_value("m5.4xlarge")
+                .default_value("m5n.4xlarge")
                 .help("Run the benchmark clients on instances of this type"),
         )
         .get_matches();

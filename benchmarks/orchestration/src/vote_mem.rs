@@ -31,8 +31,7 @@ pub(crate) async fn one(
     let mut last_good_limit = 0;
 
     let mut aws = crate::launcher();
-    // vote exploration generally take less than an hour, but make it 2
-    aws.set_max_instance_duration(2);
+    aws.set_mode(aws::LaunchMode::on_demand());
 
     // try to ensure we do AWS cleanup
     let result: Result<_, Report> = try {
