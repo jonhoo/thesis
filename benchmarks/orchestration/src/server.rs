@@ -4,6 +4,7 @@ use tracing::instrument;
 pub(crate) fn build<'s>(
     ssh: &'s openssh::Session,
     host: &'s tsunami::Machine<'s>,
+    dir: Option<&'static str>,
 ) -> openssh::Command<'s> {
     // Set up the Noria server process
     let mut cmd = crate::noria_bin(ssh, "noria-server");
@@ -11,6 +12,9 @@ pub(crate) fn build<'s>(
         .arg("benchmark")
         .arg("--address")
         .arg(host.private_ip.as_ref().expect("private ip unknown"));
+    if let Some(dir) = dir {
+        cmd.arg("-C").arg(dir);
+    }
     cmd
 }
 

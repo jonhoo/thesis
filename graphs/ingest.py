@@ -359,7 +359,7 @@ def vote(df, path):
     data = data.sort_index()
     return df.append(data)
 
-lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?-(\d+)-(\d+)m.log")
+lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?(_durable)?-(\d+)-(\d+)m.log")
 def lobsters_noria(df, path):
     match = lobsters_noria_fn.fullmatch(os.path.basename(path))
     if match is None:
@@ -371,8 +371,9 @@ def lobsters_noria(df, path):
 
     shards = int(match.group(1)) if match.group(1) else 0
     partial = match.group(2) is None
-    scale = int(match.group(3))
-    memlimit = float(int(match.group(4))) / 1024.0 / 1024.0 / 1024.0
+    durable = match.group(3) is not None
+    scale = int(match.group(4))
+    memlimit = float(int(match.group(5))) / 1024.0 / 1024.0 / 1024.0
     target = 0.0
     generated = 0.0
     sload1 = 0.0
@@ -423,6 +424,7 @@ def lobsters_noria(df, path):
     meta = {
         'scale': scale,
         'partial': partial,
+        'durable': durable,
         'memlimit': memlimit,
 
         'requested': target,

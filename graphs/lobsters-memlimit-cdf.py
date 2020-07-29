@@ -18,7 +18,7 @@ data = pd.DataFrame()
 limits = []
 pcts = [1, 5] + [x for x in range(10, 74, 10)] + [x for x in range(74, 101, 2)]
 
-lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?-(\d+)-(\d+)m.log")
+lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?(_durable)?-(\d+)-(\d+)m.log")
 for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
     base = os.path.basename(path)
     match = lobsters_noria_fn.fullmatch(base)
@@ -31,10 +31,11 @@ for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
 
     shards = int(match.group(1)) if match.group(1) else 0
     partial = match.group(2) is None
-    scale = int(match.group(3))
-    memlimit = float(int(match.group(4)))
+    durable = match.group(3) is None
+    scale = int(match.group(4))
+    memlimit = float(int(match.group(5)))
 
-    if shards != 0 or scale != plot_scale:
+    if shards != 0 or durable or scale != plot_scale:
         continue
     
     # check achieved load so we don't consider one that didn't keep up

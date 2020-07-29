@@ -10,11 +10,15 @@ use tsunami::Tsunami;
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
         [
-            (0, true, 0),
-            (0, false, 0),
-            (0, true, 128 * 1024 * 1024),
-            (0, true, 256 * 1024 * 1024),
-            (0, true, 512 * 1024 * 1024)
+            (0, false, 0, false),
+            (0, true, 0, false),
+            (0, true, 128 * 1024 * 1024, false),
+            (0, true, 256 * 1024 * 1024, false),
+            (0, true, 384 * 1024 * 1024, false),
+            (0, true, 0, true),
+            (0, true, 128 * 1024 * 1024, true),
+            (0, true, 256 * 1024 * 1024, true),
+            (0, false, 0, true),
         ],
         one,
         ctx,
@@ -24,11 +28,11 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
 
 #[instrument(err, skip(ctx))]
 pub(crate) async fn one(
-    parameters: (usize, bool, usize),
+    parameters: (usize, bool, usize, bool),
     loads: Option<Vec<usize>>,
     mut ctx: Context,
 ) -> Result<usize, Report> {
-    let (nshards, partial, memlimit) = parameters;
+    let (nshards, partial, memlimit, durable) = parameters;
     let mut last_good_scale = 0;
 
     let mut aws = crate::launcher();
@@ -70,13 +74,19 @@ pub(crate) async fn one(
         let c = &client.ssh;
         tracing::debug!("connected");
 
+        if durable {
+            tracing::debug!("mount ramdisk");
+            crate::output_on_success(s.shell("sudo mount -t tmpfs -o size=60G tmpfs /mnt"))
+                .await
+                .wrap_err("mount ramdisk")?;
+        }
+
         let mut scales = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        } else if durable {
+            Box::new(cliff::LoadIterator::from(vec![6000])) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(
-                1000,
-                if partial { 250 } else { 100 },
-            ))
+            Box::new(cliff::ExponentialCliffSearcher::until(2000, 250))
         };
         let result: Result<(), Report> = try {
             let mut successful_scale = None;
@@ -87,18 +97,16 @@ pub(crate) async fn one(
                 }
                 successful_scale = Some(scale);
 
-                if (partial == false
-                    && nshards == 0
-                    && (scale == 8_000
-                        || scale == 6_000
-                        || scale == 5_000
-                        || scale == 4_500
-                        || scale == 4_000))
-                    || (partial == true && nshards == 0 && (scale == 8_000 || scale == 6_000))
-                {
-                    // i happen to know that this fails
+                if !partial && !durable && nshards == 0 && scale >= 6_250 {
+                    // this runs out of memory
                     scales.overloaded();
-                    tracing::warn!(%scale, "skipping known-bad scale");
+                    tracing::warn!(%scale, "skipping scale that runs out of memory");
+                    continue;
+                }
+                if partial && nshards == 0 && scale >= 13_000 {
+                    // this falls over entirely
+                    scales.overloaded();
+                    tracing::warn!(%scale, "skipping scale that just fails");
                     continue;
                 }
 
@@ -118,15 +126,36 @@ pub(crate) async fn one(
                     if !partial {
                         backend.push_str("_full");
                     }
+                    if durable {
+                        backend.push_str("_durable");
+                    }
                     let prefix = format!("lobsters-{}-{}-{}m", backend, scale, memlimit);
 
+                    if durable {
+                        tracing::debug!("remount ramdisk");
+                        crate::output_on_success(s.shell("sudo umount /mnt"))
+                            .await
+                            .wrap_err("unmount ramdisk")?;
+                        crate::output_on_success(
+                            s.shell("sudo mount -t tmpfs -o size=60G tmpfs /mnt"),
+                        )
+                        .await
+                        .wrap_err("remount ramdisk")?;
+                    }
+
                     tracing::trace!("starting noria server");
+                    let dir = if durable { Some("/mnt") } else { None };
                     let mut noria_server = crate::server::build(s, server, dir);
                     if !partial {
                         noria_server.arg("--no-partial");
                     }
+                    let durability = if durable {
+                        "--durability=persistent"
+                    } else {
+                        "--durability=memory"
+                    };
                     let noria_server = noria_server
-                        .arg("--durability=memory")
+                        .arg(durability)
                         .arg("--no-reuse")
                         .arg("--shards")
                         .arg(nshards.to_string())
