@@ -1,5 +1,6 @@
 use crate::Context;
 use color_eyre::{eyre::WrapErr, Report};
+use std::time::Instant;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     stream::StreamExt,
@@ -26,6 +27,7 @@ pub(crate) async fn run(
 
     tracing::debug!("prime");
     let mut prime = lobsters_client(c, server, scale, noria);
+    let prime_start = Instant::now();
     let prime = prime
         .arg("--runtime=0")
         .arg("--prime")
@@ -42,6 +44,7 @@ pub(crate) async fn run(
             return Ok(())
         }
     };
+    let prime_took = prime_start.elapsed();
 
     if !prime.status.success() {
         tracing::warn!(
@@ -52,7 +55,8 @@ pub(crate) async fn run(
         return Ok(());
     }
 
-    tracing::trace!("priming succeeded");
+    tracing::trace!(time = ?prime_took, "priming succeeded");
+
     tracing::debug!("benchmark");
     let mut bench = lobsters_client(c, server, scale, noria)
         .arg("--runtime=384")
@@ -179,6 +183,9 @@ pub(crate) async fn run(
         .await?;
     results
         .write_all(format!("# client type: {}\n", client_type).as_bytes())
+        .await?;
+    results
+        .write_all(format!("# prime time: {}\n", prime_took.as_secs_f64()).as_bytes())
         .await?;
     tracing::trace!("saving commit");
     let commit = crate::noria_commit(s)
