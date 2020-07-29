@@ -93,7 +93,6 @@ pub(crate) async fn run(
     let fin = async {
         for bench in &mut benches {
             let mut stdout = tokio::io::BufReader::new(bench.stdout().take().unwrap()).lines();
-            let mut min_median = None;
             while let Some(line) = stdout.next().await {
                 let line = line.wrap_err("failed to read client output")?;
                 results.write_all(line.as_bytes()).await?;
@@ -111,14 +110,13 @@ pub(crate) async fn run(
                         if let (Ok(pct), Ok(sjrn)) = (pct, sjrn) {
                             got_lines = true;
 
-                            if pct == 50 {
-                                if let Some((_, t)) = min_median {
-                                    if sjrn < t {
-                                        min_median = Some((field.to_string(), sjrn));
-                                    }
-                                } else {
-                                    min_median = Some((field.to_string(), sjrn));
-                                }
+                            if pct == 90 && sjrn > 20_000 {
+                                tracing::error!(
+                                    endpoint = field,
+                                    latency = sjrn,
+                                    "high sojourn latency"
+                                );
+                                on_overloaded();
                             }
                             continue;
                         }
@@ -132,17 +130,6 @@ pub(crate) async fn run(
                         tracing::error!(%rate, bar = %target_per_client, "low throughput");
                         on_overloaded();
                     }
-                }
-            }
-
-            if let Some((field, sjrn)) = min_median {
-                if sjrn > 50_000 || sjrn == 0 {
-                    tracing::error!(
-                        endpoint = &*field,
-                        latency = sjrn,
-                        "high min. sojourn latency"
-                    );
-                    on_overloaded();
                 }
             }
         }
@@ -207,6 +194,10 @@ pub(crate) async fn run(
     results
         .write_all(format!("# server load: {} {}\n", sload1, sload5).as_bytes())
         .await?;
+    if sload1 > 15.5 {
+        tracing::warn!(%sload1, "high server load -- assuming overloaded");
+        on_overloaded();
+    }
 
     let vmrss_for = match backend {
         Backend::Netsoup { .. } => "noria-server",
