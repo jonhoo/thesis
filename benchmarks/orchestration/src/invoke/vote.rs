@@ -311,7 +311,7 @@ fn vote_client<'c>(
     backend: Backend,
     add_args: impl FnOnce(&mut openssh::Command<'_>),
 ) -> openssh::Command<'c> {
-    let mut cmd = crate::noria_bin(ssh, "noria-applications", "vote");
+    let mut cmd = crate::noria_bin(ssh, "vote");
     // vote args need to go _before_ the backend arguments
     add_args(&mut cmd);
     match backend {

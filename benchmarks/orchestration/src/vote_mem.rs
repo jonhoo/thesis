@@ -104,7 +104,7 @@ pub(crate) async fn one(
                     );
 
                     tracing::trace!("starting noria server");
-                    let mut noria_server = crate::server::build(s, server);
+                    let mut noria_server = crate::server::build(s, server, None);
                     if !partial {
                         noria_server.arg("--no-partial");
                     }

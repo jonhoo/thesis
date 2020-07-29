@@ -6,7 +6,7 @@ pub(crate) fn build<'s>(
     host: &'s tsunami::Machine<'s>,
 ) -> openssh::Command<'s> {
     // Set up the Noria server process
-    let mut cmd = crate::noria_bin(ssh, "noria-server", "noria-server");
+    let mut cmd = crate::noria_bin(ssh, "noria-server");
     cmd.arg("--deployment")
         .arg("benchmark")
         .arg("--address")
@@ -121,7 +121,7 @@ pub(crate) async fn stop(
     // Clean ZooKeeper state
     // note that we do this no matter how the server exited
     tracing::trace!("clean zookeeper state");
-    let clean = crate::noria_bin(ssh, "noria-server", "noria-zk")
+    let clean = crate::noria_bin(ssh, "noria-zk")
         .arg("--clean")
         .arg("--deployment")
         .arg("benchmark")

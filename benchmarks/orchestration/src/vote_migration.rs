@@ -55,7 +55,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
         async {
             'run: {
                 tracing::trace!("launching remote process");
-                let mut benchmark = crate::noria_bin(ssh, "noria-applications", "vote-migration");
+                let mut benchmark = crate::noria_bin(ssh, "vote-migration");
                 benchmark
                     .arg("--migrate=90")
                     .arg("--runtime=240")

@@ -121,7 +121,7 @@ pub(crate) async fn one(
                     let prefix = format!("lobsters-{}-{}-{}m", backend, scale, memlimit);
 
                     tracing::trace!("starting noria server");
-                    let mut noria_server = crate::server::build(s, server);
+                    let mut noria_server = crate::server::build(s, server, dir);
                     if !partial {
                         noria_server.arg("--no-partial");
                     }

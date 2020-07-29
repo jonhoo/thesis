@@ -274,7 +274,7 @@ fn lobsters_client<'c>(
     noria: bool,
 ) -> openssh::Command<'c> {
     let mut cmd = if noria {
-        let mut cmd = crate::noria_bin(ssh, "noria-applications", "lobsters-noria");
+        let mut cmd = crate::noria_bin(ssh, "lobsters-noria");
         cmd.arg("--deployment")
             .arg("benchmark")
             .arg("-z")
@@ -284,7 +284,7 @@ fn lobsters_client<'c>(
             ));
         cmd
     } else {
-        let mut cmd = crate::noria_bin(ssh, "noria-applications", "lobsters-mysql");
+        let mut cmd = crate::noria_bin(ssh, "lobsters-mysql");
         cmd.arg("--queries").arg("original").arg(format!(
             "mysql://lobsters@{}/soup",
             server.private_ip.as_ref().expect("private ip unknown")

@@ -1,6 +1,6 @@
 #![feature(try_blocks, label_break_value)]
 
-const AMI: &str = "ami-0e9ca458d66a65f55";
+const AMI: &str = "ami-058fe287315d60321";
 
 use clap::{App, Arg};
 use color_eyre::{eyre, eyre::WrapErr, Report};
@@ -248,7 +248,7 @@ fn launcher() -> aws::Launcher<rusoto_sts::StsAssumeRoleSessionCredentialsProvid
 /// Note that we _generate_ a setup function, so that the setup can differ per experiment.
 #[instrument(debug)]
 fn noria_setup(
-    package: &'static str,
+    _package: &'static str,
     binary: &'static str,
 ) -> Box<
     dyn for<'r> Fn(
@@ -279,8 +279,8 @@ fn noria_setup(
                 let compiled = vm
                     .ssh
                     .shell(format!(
-                        "cd noria && cargo b -p {} --bin {} --release",
-                        package, binary
+                        "cd noria && cargo build --bin {} --release",
+                        binary
                     ))
                     .output()
                     .await
@@ -314,23 +314,10 @@ fn noria_setup(
     })
 }
 
-fn noria_bin<'s>(
-    ssh: &'s openssh::Session,
-    package: &'static str,
-    binary: &'static str,
-) -> openssh::Command<'s> {
+fn noria_bin<'s>(ssh: &'s openssh::Session, binary: &'static str) -> openssh::Command<'s> {
     let mut cmd = ssh.command("env");
     cmd.arg("RUST_BACKTRACE=1")
-        .arg("cargo")
-        .arg("+nightly")
-        .arg("run")
-        .arg("--manifest-path=noria/Cargo.toml")
-        .arg("-p")
-        .arg(package)
-        .arg("--release")
-        .arg("--bin")
-        .arg(binary)
-        .arg("--");
+        .arg(format!("target/release/{}", binary));
     cmd
 }
 
