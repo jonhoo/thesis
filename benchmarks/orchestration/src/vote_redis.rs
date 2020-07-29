@@ -35,7 +35,7 @@ pub(crate) async fn one(
         let mut instances = vec![(
             String::from("server"),
             aws::Setup::default()
-                .instance_type(&ctx.server_type)
+                .instance_type("r5n.large")
                 .ami(crate::AMI, "ubuntu")
                 .availability_zone(ctx.az.clone())
                 .setup(redis_setup),
