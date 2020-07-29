@@ -30,12 +30,14 @@ pub(crate) async fn run(
         ref mut exit,
         ..
     } = *ctx;
+
     let s = &server.ssh;
     let target_per_client = (target as f64 / cs.len() as f64).ceil() as usize;
 
     tracing::debug!("prime");
     let prime = vote_client(cs[0], server, backend, |cmd| {
-        cmd.arg("--runtime=0")
+        cmd.arg("--runtime=60")
+            .arg("--target=500000") // also warm a bit
             .arg("-d")
             .arg(distribution)
             .arg("--articles=10000000")
