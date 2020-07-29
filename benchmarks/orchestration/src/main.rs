@@ -35,6 +35,9 @@ macro_rules! explore {
             if futs.len() >= 3 {
                 // don't overwhelm ec2
                 let (i, r) = futs.next().await.expect(".len() > 0");
+                if let Err(ref e) = r {
+                    eprintln!("{:?}", e);
+                }
                 results[i] = r;
             }
 
@@ -43,9 +46,8 @@ macro_rules! explore {
             // we need to do this for _every_ clone of exit
             if let Some(false) = ctx.exit.recv().await {
             } else {
-                tracing::info!("exiting as instructed");
-                results.into_iter().collect::<Result<Vec<_>, _>>()?;
-                return Ok(());
+                tracing::info!("exiting early as instructed");
+                break;
             }
 
             let fut = tokio::spawn($one(target.clone(), None, ctx).in_current_span());
@@ -62,15 +64,11 @@ macro_rules! explore {
         // collect the remaining results
         if !futs.is_empty() {
             while let Some((i, r)) = futs.next().await {
+                if let Err(ref e) = r {
+                    eprintln!("{:?}", e);
+                }
                 results[i] = r;
             }
-        }
-
-        // surface any errors. note that we do this _after_ we've awaited all the experiments, so
-        // we don't termiante them early. if there are multiple errors, we reports just the first,
-        // and that's fine.
-        for r in results {
-            let _ = r?;
         }
 
         tracing::info!("all experiments finished");
