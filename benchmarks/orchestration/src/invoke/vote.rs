@@ -70,7 +70,7 @@ pub(crate) async fn run(
         .map(|c| {
             vote_client(c, server, backend, |cmd| {
                 cmd.arg("--no-prime")
-                    .arg("--runtime=384")
+                    .arg("--runtime=288")
                     .arg("--histogram=benchmark.hist")
                     .arg("--target")
                     .arg(target_per_client.to_string())

@@ -59,7 +59,7 @@ pub(crate) async fn run(
 
     tracing::debug!("benchmark");
     let mut bench = lobsters_client(c, server, scale, noria)
-        .arg("--runtime=384")
+        .arg("--runtime=320")
         .arg("--histogram=benchmark.hist")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
