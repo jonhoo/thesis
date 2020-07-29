@@ -97,6 +97,11 @@ pub(crate) async fn one(
                 }
                 successful_scale = Some(scale);
 
+                if scale == 2_000 {
+                    tracing::warn!(%scale, "skipping known-good scale");
+                    continue;
+                }
+
                 if !partial && !durable && nshards == 0 && scale >= 6_250 {
                     // this runs out of memory
                     scales.overloaded();
