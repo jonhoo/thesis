@@ -191,7 +191,7 @@ pub(crate) async fn write_stats(
     Ok(false)
 }
 
-#[instrument(debug, skip(ssh))]
+#[instrument(level = "debug", skip(ssh))]
 pub(crate) async fn vmrss_for(ssh: &openssh::Session, process: &str) -> Result<usize, Report> {
     let pid = crate::output_on_success(ssh.command("pgrep").arg("-o").arg(process))
         .await

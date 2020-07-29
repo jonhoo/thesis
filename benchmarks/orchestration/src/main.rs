@@ -244,7 +244,7 @@ fn launcher() -> aws::Launcher<rusoto_sts::StsAssumeRoleSessionCredentialsProvid
 /// Prepare a box to run a particular experiment.
 ///
 /// Note that we _generate_ a setup function, so that the setup can differ per experiment.
-#[instrument(debug)]
+#[instrument(level = "debug")]
 fn noria_setup(
     _package: &'static str,
     binary: &'static str,
@@ -319,7 +319,7 @@ fn noria_bin<'s>(ssh: &'s openssh::Session, binary: &'static str) -> openssh::Co
     cmd
 }
 
-#[instrument(debug, skip(cmd))]
+#[instrument(level = "debug", skip(cmd))]
 async fn output_on_success<'a, C: std::borrow::BorrowMut<openssh::Command<'a>>>(
     mut cmd: C,
 ) -> Result<(Vec<u8>, Vec<u8>), Report> {
@@ -346,7 +346,7 @@ async fn output_on_success<'a, C: std::borrow::BorrowMut<openssh::Command<'a>>>(
     }
 }
 
-#[instrument(debug, skip(ssh))]
+#[instrument(level = "debug", skip(ssh))]
 pub(crate) async fn noria_commit(ssh: &openssh::Session) -> Result<String, Report> {
     let commit = crate::output_on_success(
         ssh.command("git")
@@ -361,7 +361,7 @@ pub(crate) async fn noria_commit(ssh: &openssh::Session) -> Result<String, Repor
     Ok(String::from_utf8_lossy(&commit.0).trim().to_string())
 }
 
-#[instrument(debug, skip(ssh))]
+#[instrument(level = "debug", skip(ssh))]
 pub(crate) async fn load(ssh: &openssh::Session) -> Result<(f64, f64), Report> {
     let load = crate::output_on_success(
         ssh.command("awk")
