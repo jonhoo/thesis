@@ -12,7 +12,7 @@ const GB: usize = 1024 * MB;
 /// lobsters-noria; requires two machines: a client and a server
 #[instrument(name = "lobsters-noria-mem", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!([(2000, 0), (4000, 0)], one, ctx, false)
+    crate::explore!([(4000, 0)], one, ctx, false)
 }
 
 #[instrument(err, skip(ctx))]
@@ -67,7 +67,7 @@ pub(crate) async fn one(
         let mut limits = if let Some(limits) = limits {
             Box::new(cliff::LoadIterator::from(limits)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::BinaryMinSearcher::until(2 * GB, 32 * MB))
+            Box::new(cliff::BinaryMinSearcher::until(1 * GB, 32 * MB))
                 as Box<dyn cliff::CliffSearch + Send>
         };
         let mut zero = Some(0);
@@ -79,6 +79,13 @@ pub(crate) async fn one(
                     last_good_limit = limit;
                 }
                 successful_limit = Some(limit);
+
+                if limit == 64 * MB {
+                    // this doesn't work
+                    tracing::warn!(%limit, "skipping known-bad limit");
+                    limits.overloaded();
+                    continue;
+                }
 
                 if limit == 0 && scale % 500 == 0 && (scale / 500).is_power_of_two() {
                     // we already have this

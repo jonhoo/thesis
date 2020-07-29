@@ -11,8 +11,8 @@ from glob import glob
 from hdrh.histogram import HdrHistogram
 from hdrh.log import HistogramLogReader
 
-plot_scale = 2000
-plot_offset = 256000
+plot_scale = 4000
+plot_offset = 128000
 
 data = pd.DataFrame()
 limits = []
@@ -104,7 +104,7 @@ data = data.set_index(["memlimit", "pct"]).sort_index()
 fig, ax = plt.subplots()
 limits.sort()
 print(limits)
-limits = [256 * 1024 * 1024, 128 * 1024 * 1024, 64 * 1024 * 1024]
+limits = [256 * 1024 * 1024, 128 * 1024 * 1024, 96 * 1024 * 1024]
 limits.sort()
 colors = common.memlimit_colors(len(limits))
 limits = limits + [0]
@@ -118,7 +118,7 @@ for limit in limits:
         full = d.query("partial == False")
         opmem_full = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == False & scale == %d & memlimit == 0' % (plot_scale))['vmrss'].max()
         ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
-        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = '%s (full mat.)' % (common.bts(opmem_full)))
+        ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = '%s (no partial)' % (common.bts(opmem_full)))
     else:
         ax.plot(d["latency"], d["pct"], color = colors[i], label = '%s' % (common.bts(opmem)))
         i += 1
