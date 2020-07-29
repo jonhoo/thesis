@@ -112,11 +112,11 @@ i = 0
 for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     lookup_limit = limit / 1024 / 1024 / 1024
-    opmem = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == True & scale == %d & memlimit == %f' % (plot_scale, lookup_limit))['opmem'].max()
+    opmem = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == True & scale == %d & memlimit == %f' % (plot_scale, lookup_limit))['vmrss'].max()
     if limit == 0:
         partial = d.query("partial == True")
         full = d.query("partial == False")
-        opmem_full = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == False & scale == %d & memlimit == 0' % (plot_scale))['opmem'].max()
+        opmem_full = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == False & scale == %d & memlimit == 0' % (plot_scale))['vmrss'].max()
         ax.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
         ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = '%s (full mat.)' % (common.bts(opmem_full)))
     else:

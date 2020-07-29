@@ -97,6 +97,7 @@ print("Max vote target is", max_target)
 # extract and tidy
 redis = source['redis'].copy()
 redis.sort_index(inplace = True)
+redis["vmrss"] = redis["vmrss"] / (1024 * 1024 * 1024)
 
 # find subset that corresponds to the "main" experiment
 redis_experiments = redis.query('op == "all" & write_every == 1000 & achieved >= 0.95 * target & mean < 50').groupby([c for c in redis.index.names if c not in ["op", "until", "metric"]]).tail(1)
@@ -114,6 +115,7 @@ print("Max redis target is", max_redis_target)
 # extract and tidy
 mysql = source['mysql'].copy()
 mysql.sort_index(inplace = True)
+mysql["vmrss"] = mysql["vmrss"] / (1024 * 1024 * 1024)
 
 # find subset that corresponds to the "main" experiment
 mysql_experiments = mysql.query('op == "all" & achieved >= 0.95 * requested & mean < 100').groupby([c for c in mysql.index.names if c not in ["op", "until", "metric"]]).tail(1)
@@ -143,7 +145,7 @@ kfmt = matplotlib.ticker.FuncFormatter(kfmtfn)
 
 def bts(b):
     if b >= 1024 * 1024 * 1024:
-        return '%1.0fGB' % (b / 1024 / 1024 / 1024)
+        return '%1.1fGB' % (b / 1024 / 1024 / 1024)
     if b >= 1024 * 1024:
         return '%1.0fMB' % (b / 1024 / 1024)
     if b >= 1024:

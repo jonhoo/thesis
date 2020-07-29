@@ -123,6 +123,7 @@ def redis(df, path):
     sload5 = 0.0
     cload1 = 0.0
     cload5 = 0.0
+    mem = 0
 
     client = 0
     with open(path, 'r') as f:
@@ -141,6 +142,8 @@ def redis(df, path):
                     fields = line.split()
                     cload1 += float(fields[-2])
                     cload5 += float(fields[-1])
+                elif "server memory" in line:
+                    mem += float(line.split()[-1]) * 1024
             else:
                 # we'll get cdfs straight from the histograms
                 pass
@@ -168,6 +171,7 @@ def redis(df, path):
         'sload5': sload5,
         'cload1': cload1,
         'cload5': cload5,
+        'vmrss': mem,
     }
 
     for (k, v) in meta.items():
@@ -203,6 +207,8 @@ def hybrid(df, path):
     sload5 = 0.0
     cload1 = 0.0
     cload5 = 0.0
+    mem = 0
+    bmem = 0
 
     client = 0
     with open(path, 'r') as f:
@@ -221,6 +227,10 @@ def hybrid(df, path):
                     fields = line.split()
                     cload1 += float(fields[-2])
                     cload5 += float(fields[-1])
+                elif "backend memory" in line:
+                    bmem += float(line.split()[-1]) * 1024
+                elif "server memory" in line:
+                    mem += float(line.split()[-1]) * 1024
             else:
                 # we'll get cdfs straight from the histograms
                 pass
@@ -248,6 +258,8 @@ def hybrid(df, path):
         'sload5': sload5,
         'cload1': cload1,
         'cload5': cload5,
+        'vmrss': mem,
+        'bvmrss': bmem,
     }
 
     for (k, v) in meta.items():
@@ -469,6 +481,7 @@ def lobsters_mysql(df, path):
     sload5 = 0.0
     cload1 = 0.0
     cload5 = 0.0
+    mem = 0
 
     data = []
     with open(path, 'r') as f:
@@ -486,6 +499,8 @@ def lobsters_mysql(df, path):
                     fields = line.split()
                     cload1 += float(fields[-2])
                     cload5 += float(fields[-1])
+                elif "server memory" in line:
+                    mem += float(line.split()[-1]) * 1024
 
     data = timelines(path)
     if data is None:
@@ -502,6 +517,7 @@ def lobsters_mysql(df, path):
         'sload5': sload5,
         'cload1': cload1,
         'cload5': cload5,
+        'vmrss': mem,
     }
     for (k, v) in meta.items():
         data[k] = v

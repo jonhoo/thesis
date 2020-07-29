@@ -21,12 +21,12 @@ for limit in limits:
     d = data.query('memlimit == %f' % limit).reset_index()
     if limit == 0:
         dd = d.query("partial == True")
-        opmem = dd["opmem"].max()
+        opmem = dd["vmrss"].max()
         ax.plot(dd["achieved"], dd["median"], '.-', lw=0.7, color = 'black', label = "%s (no eviction)" % common.bts(opmem))
         # dd = d.query("partial == False")
         # ax.plot(dd["achieved"], dd["median"], '.--', color = 'black', lw=1, alpha = 0.8, label = "full")
     else:
-        opmem = d["opmem"].max()
+        opmem = d["vmrss"].max()
         ax.plot(d["achieved"], d["median"], '.-', lw=0.7, color = colors[i], label = '%s' % (common.bts(opmem)))
         i += 1
 
