@@ -132,7 +132,7 @@ print("Max mysql target is", max_mysql_target)
 
 matplotlib.style.use('ggplot')
 matplotlib.rc('font', family='serif', size=11)
-matplotlib.rc('text.latex', preamble=['\\usepackage{mathptmx}'])
+matplotlib.rc('text.latex', preamble='\\usepackage{mathptmx}')
 matplotlib.rc('text', usetex=True)
 matplotlib.rc('figure', figsize=(figwidth, figwidth / golden_ratio))
 matplotlib.rc('legend', fontsize=11)
