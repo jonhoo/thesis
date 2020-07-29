@@ -42,10 +42,10 @@ queries the real Lobsters code would issue for that same page request. The
 generator supports scaling up the rate of access to emulate a larger user base
 for benchmarking.
 
-Experiments run on Amazon EC2 m5n.4xlarge instances, which have 16 vCPUs and
-64GB of memory. The server is always given a dedicated host, while load
-generating clients are split across one or more instances depending on the
-desired load factor. Experiments are run for a bit over 5 minutes unless
+Experiments run on Amazon EC2 r5n.4xlarge instances, which have 16 vCPUs and
+128GB of memory. The server is always given a dedicated host, while load
+generating clients are split across one or more m5n.4xlarge instances depending
+on the desired load factor. Experiments are run for a bit over 2 minutes unless
 otherwise specified.
 
 The benchmark setups are all ``partially open-loop''~\cite{frank-open-loop}:
@@ -64,9 +64,10 @@ returns from the backend.
 \section{Benefits and Costs of View Materialization}
 \label{s:eval:why}
 
-The core argument of this thesis is that partial state make view materialization
-feasible. Bundled up in that argument are several intertwined questions that
-must be answered before further evaluation of partial state is interesting:
+The core argument of this thesis is that partial state makes view
+materialization feasible. Bundled up in that argument are several intertwined
+questions that must be answered before further evaluation of partial state is
+interesting:
 
 \begin{enumerate}
     \item Why is view materialization desirable?
@@ -180,7 +181,7 @@ achieves low latency once the most commonly accessed results are cached.
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/lobsters-memlimit-cdf.pdf}
-  \caption{CDF of sojourn latency across all Lobsters pages at 1.5k pages per
+  \caption{CDF of sojourn latency across all Lobsters pages at 3k pages per
   second with different amounts of allocated memory. The figure depicts
   steady-state operation\,---\,the benchmark has been allowed to run for two
   minutes before the latency is measured.}
@@ -264,7 +265,7 @@ overall load is relatively low. For this reason, the next set of benchmarks use
 a simplified version of one particular query from Lobsters shown in
 Listing~\ref{l:votes}. It counts the number of votes for an article, and
 presents that alongside the article information. The benchmark issues requests
-distributed as 95\% reads and 5\% writes (inserts into \texttt{votes}). The
+distributed as 99\% reads and 1\% writes (inserts into \texttt{votes}). The
 access pattern is skewed such that 90\% of requests access 1\% of keys across 5M
 articles%
 \footnote{The benchmark samples keys from a Zipfian distribution with a skew
@@ -273,7 +274,7 @@ factor ($\alpha$) of 1.15}.
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/vote-throughput-memlimit.pdf}
-  \caption{Achieved throughput vs median request latency in vote with
+  \caption{Achieved throughput vs 90th percentile request latency in vote with
   different memory budgets. Offered load increases along the points on each
   line. At higher offered load, a higher memory budget is needed to keep up, or
   too many misses must be handled.}
@@ -465,7 +466,7 @@ increases dramatically.
     1) try to find ways to optimize eviction;
     2) lengthen the eviction interval;
     3) run with lower skew at lower throughput; or
-    4) run with a lower write rate (currently 95/5).
+    4) run with a lower write rate (currently 99/1).
   None of these are ideal, but 3.5\% vs 28\% is also not particularly
   compelling. We could run at lower load, but then the formula number also
   lowers comparatively.
