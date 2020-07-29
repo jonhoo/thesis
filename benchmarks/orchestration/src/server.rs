@@ -17,8 +17,9 @@ pub(crate) fn build<'s>(
 #[instrument(level = "trace", skip(ssh, server))]
 pub(crate) async fn stop(
     ssh: &openssh::Session,
-    server: openssh::RemoteChild<'_>,
+    mut server: openssh::RemoteChild<'_>,
 ) -> Result<(), Report> {
+    let mut stderr = server.stderr().take().unwrap();
     let srv_exit: Result<_, Report> = try {
         // Check if the server already stopped
         tracing::trace!("check for early termination");
@@ -129,7 +130,14 @@ pub(crate) async fn stop(
         .wrap_err("noria-zk --clean")?;
 
     if !srv_exit?.success() {
-        eyre::bail!("noria-server exited with an error");
+        use tokio::io::AsyncReadExt;
+        let mut s = String::new();
+        let e = match stderr.read_to_string(&mut s).await {
+            Ok(_) if s.is_empty() => Err(eyre::eyre!("stderr empty")),
+            Ok(_) => Err(eyre::eyre!(s)),
+            Err(e) => Err(eyre::eyre!(e)).wrap_err("stderr unavailable"),
+        };
+        return e.wrap_err("noria-server exited with an error");
     }
 
     if !clean.success() {
@@ -144,12 +152,12 @@ pub(crate) async fn write_stats(
     ssh: &openssh::Session,
     server: &tsunami::Machine<'_>,
     w: &mut (impl tokio::io::AsyncWrite + Unpin),
-) -> Result<(), Report> {
+) -> Result<bool, Report> {
     let mut curl = ssh
         .command("curl")
         .arg("-v")
         .arg("--max-time")
-        .arg("30") // in case the server is stuck somehow
+        .arg("60") // in case the server is stuck somehow
         .arg(format!(
             "http://{}:6033/get_statistics",
             server.private_ip.as_ref().expect("private ip unknown")
@@ -169,15 +177,19 @@ pub(crate) async fn write_stats(
         use tokio::io::AsyncReadExt;
         let mut e = String::new();
         stderr.read_to_string(&mut e).await?;
-        return Err(eyre::eyre!(e).wrap_err("failed to get server statistics"));
+        if e.contains("Operation timed out") {
+            return Ok(true);
+        } else {
+            return Err(eyre::eyre!(e).wrap_err("failed to get server statistics"));
+        }
     }
 
-    Ok(())
+    Ok(false)
 }
 
 #[instrument(debug, skip(ssh))]
-pub(crate) async fn vmrss(ssh: &openssh::Session) -> Result<usize, Report> {
-    let pid = crate::output_on_success(ssh.command("pgrep").arg("-o").arg("noria-server"))
+pub(crate) async fn vmrss_for(ssh: &openssh::Session, process: &str) -> Result<usize, Report> {
+    let pid = crate::output_on_success(ssh.command("pgrep").arg("-o").arg(process))
         .await
         .wrap_err("pgrep")?;
     let pid = String::from_utf8_lossy(&pid.0);

@@ -208,13 +208,39 @@ pub(crate) async fn run(
         .write_all(format!("# server load: {} {}\n", sload1, sload5).as_bytes())
         .await?;
 
-    if let Backend::Netsoup { .. } = backend {
-        let vmrss = crate::server::vmrss(s)
-            .await
-            .wrap_err("failed to get server memory use")?;
-        results
-            .write_all(format!("# server memory (kB): {}\n", vmrss).as_bytes())
-            .await?;
+    let vmrss_for = match backend {
+        Backend::Netsoup { .. } => "noria-server",
+        Backend::Redis => "redis-server",
+        Backend::Hybrid => {
+            let vmrss = crate::server::vmrss_for(s, "mysqld")
+                .await
+                .wrap_err("failed to get MySQL memory use")?;
+            results
+                .write_all(format!("# backend memory (kB): {}\n", vmrss).as_bytes())
+                .await?;
+            "redis-server"
+        }
+    };
+    let vmrss = crate::server::vmrss_for(s, vmrss_for)
+        .await
+        .wrap_err("failed to get server memory use");
+    match vmrss {
+        Ok(vmrss) => {
+            results
+                .write_all(format!("# server memory (kB): {}\n", vmrss).as_bytes())
+                .await?;
+        }
+        Err(e) => {
+            // the server process probably crashed
+            let _ = server
+                .ssh
+                .check()
+                .await
+                .wrap_err("check after vmrss failure")?;
+            // connection still good, so just mark this as bad and move on
+            tracing::warn!("{:?}", e);
+            on_overloaded();
+        }
     }
 
     let (cload1, cload5) = crate::load(cs[0])
@@ -261,9 +287,13 @@ pub(crate) async fn run(
             let mut results = tokio::fs::File::create(format!("{}-statistics.json", prefix))
                 .await
                 .wrap_err("failed to create local stats file")?;
-            crate::server::write_stats(s, server, &mut results)
+            let timed_out = crate::server::write_stats(s, server, &mut results)
                 .await
                 .wrap_err("failed to save server stats")?;
+            if timed_out {
+                tracing::warn!("timed out when fetching server stats");
+                on_overloaded();
+            }
             results.flush().await?;
             drop(results);
         }

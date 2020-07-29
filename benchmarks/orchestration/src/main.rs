@@ -346,10 +346,18 @@ async fn output_on_success<'a, C: std::borrow::BorrowMut<openssh::Command<'a>>>(
     if proc.status.success() {
         Ok((proc.stdout, proc.stderr))
     } else {
-        Err(
-            eyre::eyre!(String::from_utf8_lossy(&proc.stderr).to_string())
-                .wrap_err("execution failed"),
-        )
+        let code = proc.status.code().unwrap_or(0);
+        if proc.stderr.is_empty() {
+            Err(eyre::eyre!(
+                "process exited with {} with empty stderr",
+                code
+            ))
+        } else {
+            Err(
+                eyre::eyre!(String::from_utf8_lossy(&proc.stderr).to_string())
+                    .wrap_err(format!("process exited with {}", code)),
+            )
+        }
     }
 }
 
