@@ -38,7 +38,7 @@ pub(crate) async fn run(
         cmd.arg("--runtime=0")
             .arg("-d")
             .arg(distribution)
-            .arg("--articles=5000000")
+            .arg("--articles=10000000")
             .arg("--write-every")
             .arg(write_every.to_string());
     })
@@ -74,7 +74,7 @@ pub(crate) async fn run(
                     .arg(target_per_client.to_string())
                     .arg("-d")
                     .arg(distribution)
-                    .arg("--articles=5000000")
+                    .arg("--articles=10000000")
                     .arg("--write-every")
                     .arg(write_every.to_string());
             })
