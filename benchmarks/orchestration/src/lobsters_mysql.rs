@@ -171,7 +171,7 @@ pub(crate) async fn one(
         let mut scales = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(128, 64))
+            Box::new(cliff::ExponentialCliffSearcher::until(128, 32))
         };
         let result: Result<(), Report> = try {
             let mut successful_scale = None;
