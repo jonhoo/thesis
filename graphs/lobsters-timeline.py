@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 
-d = common.lobsters.query('until <= 256 & op == "all" & scale == 4000 & memlimit == 0.25 & partial == True & metric == "sojourn"').reset_index().set_index("partial")
+d = common.lobsters.query('until <= 128 & op == "all" & scale == 2000 & memlimit == 0.125 & partial == True & metric == "sojourn"').reset_index().set_index("partial")
 colors = {
     'sojourn': ['#e34a33', '#fdbb84', '#fee8c8'],
 }
@@ -33,10 +33,10 @@ ax.step(
 
 ax.set_ylabel('Page latency')
 ax.set_xlabel('Time after start [s]')
-ax.set_xlim(0.5, 256)
+ax.set_xlim(0.5, 128)
 ax.set_ylim(1, 500000)
-ax.set_xscale('log', basex=2)
-ax.set_xticks([1, 2, 4, 8, 16, 32, 64, 128, 256])
+ax.set_xscale('log', base=2)
+ax.set_xticks([1, 2, 4, 8, 16, 32, 64, 128])
 ax.set_yscale('log')
 ax.set_yticks([1, 10, 100, 1000, 10000])
 ax.set_yticklabels(["1ms", "10ms", "100ms", "1s", "10s"])
