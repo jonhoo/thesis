@@ -15,6 +15,7 @@ pub(crate) fn build<'s>(
     if let Some(dir) = dir {
         cmd.arg("-C").arg(dir);
     }
+    cmd.stderr(std::process::Stdio::piped());
     cmd
 }
 
