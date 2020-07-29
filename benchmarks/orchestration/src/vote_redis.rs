@@ -8,20 +8,7 @@ use tsunami::Tsunami;
 /// vote; requires at least two machines: a server and 1+ clients
 #[instrument(name = "vote-redis", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!(
-        [
-            //(20, "skewed", 1),
-            //(20, "skewed", 1),
-            //(2, "skewed", 6),
-            //(2, "skewed", 6),
-            //(20, "skewed", 6),
-            //(20, "uniform", 6),
-            (1000, "skewed", 6),
-        ],
-        one,
-        ctx,
-        false
-    )
+    crate::explore!([(10_000, "skewed", 4),], one, ctx, false)
 }
 
 #[instrument(err, skip(ctx))]
@@ -100,7 +87,7 @@ pub(crate) async fn one(
         let mut targets = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(100_000, 500_000))
+            Box::new(cliff::ExponentialCliffSearcher::until(800_000, 500_000))
         };
         let result: Result<(), Report> = try {
             let mut successful_target = None;

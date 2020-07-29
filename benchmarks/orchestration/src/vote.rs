@@ -10,16 +10,12 @@ use tsunami::Tsunami;
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
         [
-            (20, "skewed", 6, true, 0, true),
-            (20, "skewed", 6, false, 0, true),
-            (20, "uniform", 6, true, 0, true),
-            (20, "uniform", 6, false, 0, true),
-            (1000, "skewed", 3, true, 0, false),
-            (1000, "skewed", 3, false, 0, false),
-            (20, "skewed", 6, true, 256 * 1024 * 1024, true),
-            (20, "skewed", 6, true, 384 * 1024 * 1024, true),
-            (20, "skewed", 6, true, 512 * 1024 * 1024, true),
-            (20, "skewed", 6, true, 768 * 1024 * 1024, true),
+            (100, "skewed", 4, true, 0, true),
+            (10_000, "skewed", 4, true, 0, false),
+            (100, "skewed", 4, true, 256 * 1024 * 1024, true),
+            (100, "skewed", 4, true, 320 * 1024 * 1024, true),
+            (100, "skewed", 4, true, 384 * 1024 * 1024, true),
+            (100, "skewed", 4, true, 448 * 1024 * 1024, true),
         ],
         one,
         ctx,
@@ -75,8 +71,10 @@ pub(crate) async fn one(
 
         let mut targets = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        } else if write_every == 10_000 {
+            Box::new(cliff::ExponentialCliffSearcher::until(1_000_000, 1_000_000))
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(100_000, 500_000))
+            Box::new(cliff::ExponentialCliffSearcher::until(250_000, 250_000))
         };
         let result: Result<(), Report> = try {
             let mut successful_target = None;

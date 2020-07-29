@@ -9,7 +9,7 @@ use tsunami::Tsunami;
 /// vote; requires at least two machines: a server and 1+ clients
 #[instrument(name = "vote-hybrid", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!([(1000, "skewed", 6)], one, ctx, false)
+    crate::explore!([(10_000, "skewed", 4)], one, ctx, false)
 }
 
 #[instrument(err, skip(ctx))]
