@@ -163,7 +163,7 @@ potentially be saved. The figure therefore also includes memory use when running
 Noria with its durable RocksDB storage backend for base tables. In that
 configuration, base tables are kept on disk, not in memory, which makes the
 memory savings from partial state more apparent\,---\,the memory use is now
-about a third that of full materialization%
+about a third that without partial state%
 \footnote{Various other runtime overheads that partial state cannot eliminate
 remain, such as in-flight requests and pending responses. With diligent memory
 optimization, this overhead could likely be further reduced, further increasing
@@ -487,12 +487,12 @@ logic.
 
 When the application issues a query that Noria has never seen before, Noria must
 instantiate the dataflow for that query, along with any materializations it
-might need. With full materialization, the system must do all the work to
-compute the full state for the new view, and any internal operator state it
-depends on, up front and all at once. And during that time, Noria's dataflow
-must spend cycles on computing that new state, slowing down the processing of
-other concurrent writes. The new view also cannot serve any reads until all the
-state is computed.
+might need. Without partial state, the system must do all the work to compute
+the full state for the new view, and any internal operator state it depends on,
+up front and all at once. And during that time, Noria's dataflow must spend
+cycles on computing that new state, slowing down the processing of other
+concurrent writes. The new view also cannot serve any reads until all the state
+is computed.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -540,29 +540,29 @@ it issues both votes and ratings, and queries both views without blocking every
   \caption{Time to set up and access a new view. Access pattern is skewed (Zipf;
   $\alpha = 1.15$) across 10M articles. Benchmark runs for 90s prior to
   migration (solid red line). The dashed vertical line denotes the end of the
-  migration for full materialization.}
+  migration without partial state.}
   \label{f:vote-migration}
 \end{figure}
 
 Figure~\ref{f:vote-migration} plots the cache hit rate for reads from the new
 view over time, as well as the write throughput over the course of the
-experiment. With full materialization, the new view is not accessible until its
+experiment. Without partial state, the new view is not accessible until its
 construction finishes after $\approx$23 seconds. During that time, the
 application write performance drops substantially, as Noria must compute the
 content of the new view.
 
-With partial materialization, the view is immediately accessible, though its
-cache hit rate is initially low. However, since there are a few very popular
-keys, the hit rate quickly climbs to over 90\%. Since only results for requested
-keys are computed, write throughput is mostly unaffected by the migration%
+With partial state, the view is immediately accessible, though its cache hit
+rate is initially low. However, since there are a few very popular keys, the hit
+rate quickly climbs to over 90\%. Since only results for requested keys are
+computed, write throughput is mostly unaffected by the migration%
 \footnote{Overall write throughput is lower after the migration since Noria must
 now maintain two views, not just one.}.
 
 The figure also exposes another interesting effect of using partial
-materialization: increased write throughput. With full materialization, every
-write must be processed to completion, since all results are cached. With
-partial state, writes for keys that have not been read can be discarded early,
-as there is no state in memory that must be updated, which increases throughput.
+materialization: increased write throughput. Without partial state, every write
+must be processed to completion, since all results are cached. With partial
+state, writes for keys that have not been read can be discarded early, as there
+is no state in memory that must be updated, which increases throughput.
 
 \section{Skew}
 \label{s:eval:patterns}

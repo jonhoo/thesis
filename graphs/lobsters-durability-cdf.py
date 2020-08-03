@@ -124,7 +124,7 @@ lo.set_yticks([0, 25, 50, 75])
 lo.set_xlim(1, 8)
 lo.set_xticks([1, 2, 4, 6, 8])
 lo.set_xticklabels(["1ms", "2ms", "4ms", "6ms", "8ms"])
-lo.set_xlabel("Latency")
+lo.set_xlabel("Page latency")
 
 fig.tight_layout()
 plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")
