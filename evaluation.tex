@@ -52,8 +52,8 @@ according to the available statistics~\cite{generator}. It does not run the
 real Lobsters Ruby-on-Rails application, as it is prohibitively slow. Instead,
 all experiments use an adapter that turns page requests directly into the
 queries the real Lobsters code would issue for that same page request. The
-generator supports scaling up the rate of access to emulate a larger user base
-for benchmarking.
+generator supports scaling up the rate of access and user count to emulate a
+larger user base for benchmarking.
 
 The various pages in Lobsters differ significantly in what queries they issue,
 how many queries they issue, and the extent to which they are read or write
