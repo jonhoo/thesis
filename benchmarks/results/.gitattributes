@@ -1,0 +1,4 @@
+*.pickle binary
+*.json binary
+*.log binary
+*.hist binary
