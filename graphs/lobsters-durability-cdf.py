@@ -20,7 +20,7 @@ data = pd.DataFrame()
 pcts = [1, 5] + [x for x in range(10, 74, 10)] + [x for x in range(74, 101, 2)]
 
 lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?(_durable)?-(\d+)-(\d+)m.log")
-for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
+for path in glob(os.path.join(os.path.dirname(__file__), '..', 'benchmarks', 'results', 'lobsters', '*.log')):
     base = os.path.basename(path)
     match = lobsters_noria_fn.fullmatch(base)
     if match is None:
@@ -127,4 +127,4 @@ lo.set_xticklabels(["1ms", "2ms", "4ms", "6ms", "8ms"])
 lo.set_xlabel("Latency")
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[3]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")

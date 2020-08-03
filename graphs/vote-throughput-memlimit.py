@@ -6,8 +6,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 
+vote = common.load('vote', only_good = False)
+
 # first, find smallest supported memlimit at 1M
-low = common.source['vote'].query('op == "all" & until == 256')
+low = vote.query('op == "all" & until == 256')
 low = low.query('write_every == 100 & distribution == "skewed"')
 low = low.query('memlimit != 0 & target == 1000000 & metric == "sojourn"')
 low = low.query('achieved >= 0.99 * target & p95 < 20')
@@ -18,7 +20,7 @@ low_opmem = low['opmem'].item()
 print(low_opmem)
 
 fig, ax = plt.subplots()
-data = common.source['vote'].query('op == "all" & clients == 4 & write_every == 100 & until == 256 & distribution == "skewed" & metric == "sojourn"').sort_index().reset_index()
+data = vote.query('op == "all" & clients == 4 & write_every == 100 & until == 256 & distribution == "skewed" & metric == "sojourn"').sort_index().reset_index()
 limits = data.groupby('memlimit').tail(1)
 limits = [l for l in limits["memlimit"]]
 limits.sort()
@@ -55,4 +57,4 @@ ax.set_xlabel("Achieved throughput [requests per second]")
 ax.set_ylabel("95-th \\%-ile latency [ms]")
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")

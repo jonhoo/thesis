@@ -9,7 +9,7 @@ import sys
 # just plot skewed with reuse for now
 full = None
 partial = None
-for exp in common.source['vote-migration']:
+for exp in common.load('vote-migration'):
     c = exp['configuration']
     if c['reuse'] and c['distribution'] == "skewed" and c['articles'] == 10000000:
         exp['old']['time'] -= exp['migration'][0]
@@ -77,4 +77,4 @@ for handle in lgnd.get_lines():
 writes.set_xlabel("Time after migration [s]")
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")

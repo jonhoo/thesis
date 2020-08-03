@@ -7,10 +7,10 @@ import pandas as pd
 import subprocess
 import sys
 import io
+import os
 
-print(["cargo", "r", "--release", "--manifest-path", "formula/Cargo.toml"])
-cdf = subprocess.run(["cargo", "r", "--release", "--manifest-path", "formula/Cargo.toml"], capture_output=True, text=True)
-data = pd.read_table(io.StringIO(cdf.stdout))
+with open(os.path.join(os.path.dirname(__file__), '..', 'benchmarks', 'results', 'vote-formula', 'results.log'), 'r') as f:
+    data = pd.read_table(f)
 
 fig, ax = plt.subplots()
 data = data.sort_values(by = ["alpha", "throughput"], ascending=[False, True])
@@ -19,7 +19,6 @@ colors = common.memlimit_colors(len(skews))
 i = 0
 for skew in skews:
     d = data.query("skew == '%s'" % skew)
-    print(d)
     if skew == "uniform":
         ax.plot(d["throughput"], d["percentage"], '.-.', color='black', label='uniform')
     else:
@@ -33,4 +32,4 @@ ax.set_ylim(0, 50)
 ax.legend()
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")

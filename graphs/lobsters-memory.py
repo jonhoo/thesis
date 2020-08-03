@@ -13,10 +13,11 @@ scale = 6000
 #
 bfmtfn = lambda x : '%1.1fGB' % (x * 1e-9) if x >= 1e9 else '%1.0fMB' % (x * 1e-6) if x >= 1e6 else '%1.10kB' % (x * 1e-3) if x >= 1e3 else '%1.0fB' % x if x > 0 else "No overhead"
 
-base = common.lobsters.query('op == "all" & until == 256 & scale == %d & metric == "sojourn"' % (scale))
-prune_limit = base.query('memlimit != 0 & durable == False & achieved >= 0.99 * requested & mean < 50').reset_index()['memlimit'].min()
+base = common.load('lobsters').query('until == 256 & scale == %d & metric == "sojourn"' % (scale))
+base["vmrss"] = base["vmrss"] / (1024 * 1024 * 1024)
+prune_limit = base.query('memlimit != 0 & durable == False').reset_index()['memlimit'].min()
 print('Using %s memory limit as representative for lobsters' % (common.bts(prune_limit * 1024 * 1024 * 1024)))
-prune_limit_dur = base.query('memlimit != 0 & durable == True & achieved >= 0.99 * requested').reset_index()['memlimit'].min()
+prune_limit_dur = base.query('memlimit != 0 & durable == True').reset_index()['memlimit'].min()
 print('Using %s memory limit as representative for durable lobsters' % (common.bts(prune_limit_dur * 1024 * 1024 * 1024)))
 prune = base.query('durable == False & memlimit == %f' % (prune_limit))
 prune_dur = base.query('durable == True & memlimit == %f' % (prune_limit_dur))
@@ -62,4 +63,4 @@ for rect in bars1 + bars2:
                 ha='center', va='bottom')
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")

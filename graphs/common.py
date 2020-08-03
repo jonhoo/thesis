@@ -1,133 +1,31 @@
+import os
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
+try:
+   import cPickle as pickle
+except:
+   import pickle
+import sys
 
 golden_ratio = 1.61803
 figwidth = 8.5 / golden_ratio
 
-# bring in aggregated results
-from memoize import source
+def load(d, only_good=True):
+    with open(os.path.join(os.path.dirname(__file__), '..', 'benchmarks', 'results', d, 'parsed.pickle'), 'rb') as f:
+        df = pickle.load(f)
+        if only_good:
+            if d.startswith('lobsters'):
+                df = df.query('op == "all" & achieved >= 0.99 * requested & mean < 50')
+            elif d == "vote-migration":
+                pass
+            else:
+                df = df.query('op == "all" & achieved >= 0.99 * target & mean < 20')
+        return df
 
-# now, extract and clean up the data
-
-#
-# Lobsters
-#
-
-# extract
-lobsters = source['lobsters-noria'].copy()
-
-# adjust units
-lobsters["vmrss"] = lobsters["vmrss"] / (1024 * 1024 * 1024)
-lobsters["basemem"] = lobsters["basemem"] / (1024 * 1024 * 1024)
-lobsters["opmem"] = lobsters["opmem"] / (1024 * 1024 * 1024)
-lobsters["fopmem"] = lobsters["fopmem"] / (1024 * 1024 * 1024)
-lobsters["rmem"] = lobsters["rmem"] / (1024 * 1024 * 1024)
-
-# compute derivatives
-lobsters["mem"] = lobsters["basemem"] + lobsters["opmem"]
-
-# set up indexes properly
-lobsters.sort_index(inplace = True)
-
-# find subset that corresponds to the "main" experiment
-lobsters_experiments = lobsters.query('op == "all" & memlimit == 0 & achieved >= 0.99 * requested & mean < 100').groupby([c for c in lobsters.index.names if c not in ["op", "until", "metric"]]).tail(1)
-
-# find scale that is shared among the most lobsters configurations
-data = lobsters_experiments
-shared_scale = None
-shared_scale_cnt = 0
-for scale in data.reset_index()["scale"]:
-    r = data.query("scale == %d" % scale)
-    if len(r) > shared_scale_cnt or (len(r) == shared_scale_cnt and scale > shared_scale):
-        shared_scale_cnt = len(r)
-        shared_scale = scale
-print('Shared lobsteres scaling factor is %dx (%d/%d rows)' % (shared_scale, shared_scale_cnt, len(data)))
-
-# compute maximum scale across all lobsters experiments
-max_scale = lobsters.reset_index()["scale"].max() * 1.1
-max_pps = (46.0 / 60.0) * max_scale # BASE_OPS_PER_MIN
-print("Max scale is %f (%f pages per second)" % (max_scale, max_pps))
 
 #
-# vote
-#
-
-# extract
-vote = source['vote'].copy()
-
-# adjust units
-vote["vmrss"] = vote["vmrss"] / (1024 * 1024 * 1024)
-vote["basemem"] = vote["basemem"] / (1024 * 1024 * 1024)
-vote["opmem"] = vote["opmem"] / (1024 * 1024 * 1024)
-vote["fopmem"] = vote["fopmem"] / (1024 * 1024 * 1024)
-vote["rmem"] = vote["rmem"] / (1024 * 1024 * 1024)
-
-# compute derivatives
-vote["mem"] = vote["basemem"] + vote["opmem"]
-vote["aggmem"] = vote["opmem"] - vote["rmem"]
-
-# set up indexes properly
-vote.sort_index(inplace = True)
-
-# find subset that corresponds to the "main" experiment
-vote_experiments = vote.query('op == "all" & memlimit == 0 & write_every == 100 & achieved >= 0.95 * target & mean < 50').groupby([c for c in vote.index.names if c not in ["op", "until", "metric"]]).tail(1)
-
-# find target that is shared among the most lobsters configurations
-data = vote_experiments
-shared_target = None
-shared_target_cnt = 0
-for target in data.reset_index()["target"]:
-    r = data.query("target == %d" % target)
-    if len(r) > shared_target_cnt or (len(r) == shared_target_cnt and target > shared_target):
-        shared_target_cnt = len(r)
-        shared_target = target
-print('Shared vote target is %d ops/s (%d/%d rows)' % (shared_target, shared_target_cnt, len(data)))
-
-# compute maximum scale across all vote experiments
-mx1 = vote["achieved"].max()
-mx2 = vote.reset_index()["target"].max()
-max_target = max([mx1, mx2]) * 1.1
-print("Max vote target is", max_target)
-
-#
-# redis
-#
-
-# extract and tidy
-redis = source['redis'].copy()
-redis.sort_index(inplace = True)
-redis["vmrss"] = redis["vmrss"] / (1024 * 1024 * 1024)
-
-# find subset that corresponds to the "main" experiment
-redis_experiments = redis.query('op == "all" & write_every == 1000 & achieved >= 0.95 * target & mean < 50').groupby([c for c in redis.index.names if c not in ["op", "until", "metric"]]).tail(1)
-
-# compute maximum scale across all redis experiments
-mx1 = redis["achieved"].max()
-mx2 = redis.reset_index()["target"].max()
-max_redis_target = max([mx1, mx2]) * 1.1
-print("Max redis target is", max_redis_target)
-
-#
-# mysql
-#
-
-# extract and tidy
-mysql = source['mysql'].copy()
-mysql.sort_index(inplace = True)
-mysql["vmrss"] = mysql["vmrss"] / (1024 * 1024 * 1024)
-
-# find subset that corresponds to the "main" experiment
-mysql_experiments = mysql.query('op == "all" & achieved >= 0.95 * requested & mean < 100').groupby([c for c in mysql.index.names if c not in ["op", "until", "metric"]]).tail(1)
-
-# compute maximum scale across all mysql experiments
-mx1 = mysql["achieved"].max()
-mx2 = mysql.reset_index()["requested"].max()
-max_mysql_target = max([mx1, mx2]) * 1.1
-print("Max mysql target is", max_mysql_target)
-
-#
-# next, set up general matplotlib styles so all figures look the same.
+# set up general matplotlib styles so all figures look the same.
 #
 
 matplotlib.style.use('ggplot')

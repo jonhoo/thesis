@@ -6,7 +6,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 
-d = common.lobsters.query('until <= 128 & op == "all" & scale == 2000 & memlimit == 0.125 & partial == True & metric == "sojourn"').reset_index().set_index("partial")
+d = common.load('lobsters', only_good = False)
+d = d.query('op == "all" & scale == 2000 & memlimit == 0.125 & partial == True')
+d = d.query('until <= 128 & metric == "sojourn"')
+d = d.reset_index().set_index("partial")
 colors = {
     'sojourn': ['#e34a33', '#fdbb84', '#fee8c8'],
 }
@@ -52,4 +55,4 @@ order = [1, 4, 2, 5, 3, 0]
 plt.legend([handles[i] for i in order], [labels[i] for i in order], loc='upper center', ncol=3)
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")

@@ -7,17 +7,18 @@ import pandas as pd
 import sys
 
 # compute subset of data for memory-limited lobsters
-limited_lobsters_scale = common.lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.99 * requested & mean < 50').reset_index()['scale'].max()
-limited_lobsters = common.lobsters.query('op == "all" & memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
+base = common.load('lobsters')
+limited_lobsters_scale = base.query('memlimit != 0').reset_index()['scale'].max()
+limited_lobsters = base.query('memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
 limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested & mean < 50')["memlimit"].min()
-limited_lobsters = common.lobsters.query('op == "all" & memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
+limited_lobsters = base.query('memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
 print('Using %.0fMB memory limit as representative for lobsters (%d pages/s)' % (limited_lobsters_still_ok * 1024, limited_lobsters["achieved"].min()))
 
 prune = limited_lobsters
-partial_scale = common.lobsters_experiments.query('partial == True').reset_index()['scale'].max()
-partial = common.lobsters_experiments.query('partial == True & scale == %d' % (partial_scale))
-full_scale = common.lobsters_experiments.query('partial == False').reset_index()['scale'].max()
-full = common.lobsters_experiments.query('partial == False & scale == %d' % (full_scale))
+partial_scale = base.query('partial == True').reset_index()['scale'].max()
+partial = base.query('partial == True & scale == %d' % (partial_scale))
+full_scale = base.query('partial == False').reset_index()['scale'].max()
+full = base.query('partial == False & scale == %d' % (full_scale))
 
 fig, throughput = plt.subplots()
 
@@ -39,7 +40,7 @@ for x in xs:
     elif x == "Noria without partial":
         achieved = full['achieved'].max()
     elif x == "MySQL":
-        achieved = common.mysql_experiments['achieved'].max()
+        achieved = common.load('lobsters-mysql')['achieved'].max()
     tys.append(achieved)
 
 bars = throughput.bar(xticks, tys)
@@ -66,4 +67,4 @@ for rect in bars:
                 ha='center', va='bottom')
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")

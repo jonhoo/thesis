@@ -20,7 +20,7 @@ limits = []
 pcts = [1, 5] + [x for x in range(10, 74, 10)] + [x for x in range(74, 101, 2)]
 
 lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?(_durable)?-(\d+)-(\d+)m.log")
-for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
+for path in glob(os.path.join(os.path.dirname(__file__), '..', 'benchmarks', 'results', 'lobsters', '*.log')):
     base = os.path.basename(path)
     match = lobsters_noria_fn.fullmatch(base)
     if match is None:
@@ -34,7 +34,7 @@ for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
     partial = match.group(2) is None
     durable = match.group(3) is not None
     scale = int(match.group(4))
-    memlimit = float(int(match.group(5)))
+    memlimit = float(int(match.group(5))) / 1024.0 / 1024.0 / 1024.0
 
     if shards != 0 or durable or not partial or scale != plot_scale:
         continue
@@ -107,20 +107,20 @@ gs = GridSpec(2, 1, figure=fig, height_ratios = [0.8, 0.2])
 hi = fig.add_subplot(gs[0, :])
 lo = fig.add_subplot(gs[1, :])
 limits.sort()
-print(limits)
-limits = [512 * 1024 * 1024, 256 * 1024 * 1024, 128 * 1024 * 1024, 96 * 1024 * 1024]
+limits = [512, 256, 128, 96]
 limits.sort()
 colors = common.memlimit_colors(len(limits))
 limits = limits + [0]
 i = 0
+base = common.load('lobsters', only_good = False)
 for limit in limits:
+    limit /= 1024.0
     d = data.query('memlimit == %f' % limit).reset_index()
-    lookup_limit = limit / 1024 / 1024 / 1024
-    opmem = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == True & scale == %d & memlimit == %f' % (plot_scale, lookup_limit))['vmrss'].max()
+    opmem = base.query('until == 1 & partial == True & scale == %d & memlimit == %f' % (plot_scale, limit))['vmrss'].max()
     if limit == 0:
         partial = d.query("partial == True")
         # full = d.query("partial == False")
-        opmem_full = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == False & scale == %d & memlimit == 0' % (plot_scale))['vmrss'].max()
+        opmem_full = base.query('until == 1 & partial == False & scale == %d & memlimit == 0' % (plot_scale))['vmrss'].max()
         lo.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
         hi.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
         # ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = '%s (no partial)' % (common.bts(opmem_full)))
@@ -146,4 +146,4 @@ lo.set_xticklabels(["1ms", "2ms", "4ms", "6ms", "8ms"])
 lo.set_xlabel("Latency")
 
 fig.tight_layout()
-plt.savefig("{}.pdf".format(sys.argv[3]), format="pdf")
+plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")
