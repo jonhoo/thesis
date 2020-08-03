@@ -14,9 +14,9 @@ from hdrh.log import HistogramLogReader
 
 plot_scale = 2000
 plot_offset = 256000
+plot_memlimit = 256 * 1024 * 1024
 
 data = pd.DataFrame()
-limits = []
 pcts = [1, 5] + [x for x in range(10, 74, 10)] + [x for x in range(74, 101, 2)]
 
 lobsters_noria_fn = re.compile("lobsters-direct((?:_)\d+)?(_full)?(_durable)?-(\d+)-(\d+)m.log")
@@ -34,9 +34,9 @@ for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
     partial = match.group(2) is None
     durable = match.group(3) is not None
     scale = int(match.group(4))
-    memlimit = float(int(match.group(5)))
+    memlimit = int(match.group(5))
 
-    if shards != 0 or durable or not partial or scale != plot_scale:
+    if shards != 0 or not partial or scale != plot_scale or memlimit != plot_memlimit:
         continue
     
     # check achieved load so we don't consider one that didn't keep up
@@ -51,8 +51,6 @@ for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
                     target += float(line.split()[-1])
     if generated < 0.95 * target:
         continue
-    if memlimit not in limits:
-        limits.append(memlimit)
 
     # time to fetch the cdf
     hist_path = os.path.splitext(path)[0] + '.hist'
@@ -87,8 +85,7 @@ for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
     df = pd.DataFrame()
     for time, hist in histograms.items():
         row = {
-            "memlimit": memlimit,
-            "partial": partial,
+            "durable": durable,
             "achieved": generated,
         }
 
@@ -100,34 +97,18 @@ for path in glob(os.path.join(sys.argv[2], 'lobsters-direct*.log')):
 
     data = pd.concat([data, df])
 
-data = data.set_index(["memlimit", "pct"]).sort_index()
+data = data.set_index(["durable", "pct"]).sort_index()
 
 fig = plt.figure(constrained_layout=True)
 gs = GridSpec(2, 1, figure=fig, height_ratios = [0.8, 0.2])
 hi = fig.add_subplot(gs[0, :])
 lo = fig.add_subplot(gs[1, :])
-limits.sort()
-print(limits)
-limits = [512 * 1024 * 1024, 256 * 1024 * 1024, 128 * 1024 * 1024, 96 * 1024 * 1024]
-limits.sort()
-colors = common.memlimit_colors(len(limits))
-limits = limits + [0]
-i = 0
-for limit in limits:
-    d = data.query('memlimit == %f' % limit).reset_index()
-    lookup_limit = limit / 1024 / 1024 / 1024
-    opmem = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == True & scale == %d & memlimit == %f' % (plot_scale, lookup_limit))['vmrss'].max()
-    if limit == 0:
-        partial = d.query("partial == True")
-        # full = d.query("partial == False")
-        opmem_full = common.source['lobsters-noria'].query('until == 1 & op == "all" & partial == False & scale == %d & memlimit == 0' % (plot_scale))['vmrss'].max()
-        lo.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
-        hi.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
-        # ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = '%s (no partial)' % (common.bts(opmem_full)))
-    else:
-        lo.plot(d["latency"], d["pct"], color = colors[i], label = '%s' % (common.bts(opmem)))
-        hi.plot(d["latency"], d["pct"], color = colors[i], label = '%s' % (common.bts(opmem)))
-        i += 1
+d = data.query('durable == False').reset_index()
+lo.plot(d["latency"], d["pct"], color = common.colors['noria'], ls = "-", label = 'In-memory base tables')
+hi.plot(d["latency"], d["pct"], color = common.colors['noria'], ls = "-", label = 'In-memory base tables')
+d = data.query('durable == True').reset_index()
+lo.plot(d["latency"], d["pct"], color = common.colors['durable'], ls = "--", label = 'On-disk base tables')
+hi.plot(d["latency"], d["pct"], color = common.colors['durable'], ls = "--", label = 'On-disk base tables')
 
 hi.set_ylim(75, 101)
 hi.set_yticks([75, 90, 95, 100])

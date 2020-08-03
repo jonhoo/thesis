@@ -154,9 +154,9 @@ def bts(b):
 
 # https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=6
 colors = {
-    'full': '#a6cee3',
-    'partial': '#1f78b4',
-    'evict': '#33a02c',
+    'full': '#1f78b4',
+    'durable': '#a6cee3',
+    'noria': '#33a02c',
     'mysql': '#e31a1c',
     'redis': '#fb9a99',
 }

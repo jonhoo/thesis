@@ -70,7 +70,7 @@ pub(crate) async fn run(
         .map(|c| {
             vote_client(c, server, backend, |cmd| {
                 cmd.arg("--no-prime")
-                    .arg("--runtime=288")
+                    .arg("--runtime=320")
                     .arg("--histogram=benchmark.hist")
                     .arg("--target")
                     .arg(target_per_client.to_string())
@@ -112,13 +112,16 @@ pub(crate) async fn run(
                         if let (Ok(pct), Ok(sjrn)) = (pct, sjrn) {
                             got_lines = true;
 
-                            if pct == 90 && sjrn > 20_000 {
-                                tracing::error!(
-                                    endpoint = field,
-                                    latency = sjrn,
-                                    "high sojourn latency"
-                                );
-                                on_overloaded();
+                            if (field == "read" && pct == 95) || (field == "write" && pct == 50) {
+                                if sjrn > 20_000 {
+                                    tracing::error!(
+                                        endpoint = field,
+                                        latency = sjrn,
+                                        pct,
+                                        "high sojourn latency"
+                                    );
+                                    on_overloaded();
+                                }
                             }
                             continue;
                         }
@@ -196,8 +199,8 @@ pub(crate) async fn run(
     results
         .write_all(format!("# server load: {} {}\n", sload1, sload5).as_bytes())
         .await?;
-    if sload1 > 15.5 {
-        tracing::warn!(%sload1, "high server load -- assuming overloaded");
+    if sload5 > 15.5 {
+        tracing::warn!(%sload5, "high server load -- assuming overloaded");
         on_overloaded();
     }
 

@@ -12,7 +12,7 @@ const GB: usize = 1024 * MB;
 /// lobsters-noria; requires two machines: a client and a server
 #[instrument(name = "lobsters-noria-mem", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!([(4000, 0)], one, ctx, false)
+    crate::explore!([(2000, 0)], one, ctx, false)
 }
 
 #[instrument(err, skip(ctx))]
@@ -87,10 +87,17 @@ pub(crate) async fn one(
                     continue;
                 }
 
-                if limit == 0 && scale % 500 == 0 && (scale / 500).is_power_of_two() {
-                    // we already have this
-                    tracing::info!(%scale, "skipping non-limited scale we already have");
-                    continue;
+                if scale % 4000 == 0 && (scale / 4000).is_power_of_two() {
+                    if limit == 128 * MB || limit == 256 * MB || limit == 384 * MB {
+                        // we already have this
+                        tracing::info!(%scale, %limit, "skipping (good) memlimit we already have");
+                        continue;
+                    }
+                    if limit == 0 {
+                        // we already have this
+                        tracing::info!(%scale, "skipping (good) non-limited scale we already have");
+                        continue;
+                    }
                 }
 
                 if *ctx.exit.borrow() {
@@ -140,9 +147,11 @@ pub(crate) async fn one(
                     )
                     .await?;
 
-                    tracing::debug!("stopping server");
-                    crate::server::stop(s, noria_server).await?;
-                    tracing::trace!("server stopped");
+                    if !*ctx.exit.borrow() {
+                        tracing::debug!("stopping server");
+                        crate::server::stop(s, noria_server).await?;
+                        tracing::trace!("server stopped");
+                    }
 
                     Ok::<_, Report>(())
                 }

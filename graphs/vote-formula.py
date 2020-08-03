@@ -29,7 +29,7 @@ for skew in skews:
 ax.xaxis.set_major_formatter(common.kfmt)
 ax.set_xlabel('Expected number of requests per second')
 ax.set_ylabel('Must be cached [\\%]')
-ax.set_ylim(0, 100)
+ax.set_ylim(0, 50)
 ax.legend()
 
 fig.tight_layout()

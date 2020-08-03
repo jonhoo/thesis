@@ -12,12 +12,7 @@ const GB: usize = 1024 * MB;
 /// vote_mem; requires at least two machines: a server and 1+ clients
 #[instrument(name = "vote-mem", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!(
-        [(800_000, 100, "skewed", 4), (1_600_000, 100, "skewed", 4)],
-        one,
-        ctx,
-        true
-    )
+    crate::explore!([(1_000_000, 100, "skewed", 4)], one, ctx, true)
 }
 
 #[instrument(err, skip(ctx))]
@@ -83,7 +78,7 @@ pub(crate) async fn one(
                 }
                 successful_limit = Some(limit);
 
-                if limit == 0 && target % 1000 == 0 && (target / 1_000).is_power_of_two() {
+                if limit == 0 && target % 250_000 == 0 && (target / 250_000).is_power_of_two() {
                     // we already have this
                     tracing::info!(%target, "skipping non-limited target we already have");
                     continue;
@@ -99,7 +94,7 @@ pub(crate) async fn one(
                     tracing::info!("start benchmark target");
                     let backend = if partial { "partial" } else { "full" };
                     let prefix = format!(
-                        "{}.5000000a.{}t.{}r.{}c.{}m.{}",
+                        "{}.10000000a.{}t.{}r.{}c.{}m.{}",
                         backend, target, write_every, nclients, limit, distribution,
                     );
 
@@ -133,9 +128,11 @@ pub(crate) async fn one(
                     )
                     .await?;
 
-                    tracing::debug!("stopping server");
-                    crate::server::stop(s, noria_server).await?;
-                    tracing::trace!("server stopped");
+                    if !*ctx.exit.borrow() {
+                        tracing::debug!("stopping server");
+                        crate::server::stop(s, noria_server).await?;
+                        tracing::trace!("server stopped");
+                    }
 
                     Ok::<_, Report>(())
                 }

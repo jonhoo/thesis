@@ -461,7 +461,7 @@ def lobsters_noria(df, path):
     data["op"] = data["op"].astype("string")
 
     # set the correct index
-    data.set_index(["scale", "partial", "memlimit", "op", "until", "metric"], inplace=True)
+    data.set_index(["scale", "partial", "durable", "memlimit", "op", "until", "metric"], inplace=True)
     return df.append(data)
 
 lobsters_mysql_fn = re.compile("lobsters-mysql-(\d+)-0m.log")

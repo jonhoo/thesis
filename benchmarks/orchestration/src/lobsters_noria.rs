@@ -32,7 +32,7 @@ pub(crate) async fn one(
     loads: Option<Vec<usize>>,
     mut ctx: Context,
 ) -> Result<usize, Report> {
-    let (nshards, partial, memlimit, durable) = parameters;
+    let (nshards, partial, memlimit, mut durable) = parameters;
     let mut last_good_scale = 0;
 
     let mut aws = crate::launcher();
@@ -83,6 +83,10 @@ pub(crate) async fn one(
 
         let mut scales = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        } else if durable && partial {
+            // we don't normally run non-durable partial @ 6k scale, so run that too (6001)
+            Box::new(cliff::LoadIterator::from(vec![2000, 6000, 6001]))
+                as Box<dyn cliff::CliffSearch + Send>
         } else if durable {
             Box::new(cliff::LoadIterator::from(vec![6000])) as Box<dyn cliff::CliffSearch + Send>
         } else {
@@ -90,28 +94,30 @@ pub(crate) async fn one(
         };
         let result: Result<(), Report> = try {
             let mut successful_scale = None;
-            while let Some(scale) = scales.next() {
+            while let Some(mut scale) = scales.next() {
+                if scale % 2 == 1 {
+                    tracing::warn!(%scale, "switching to non-durable");
+                    assert!(durable);
+                    scale -= 1;
+                    durable = false;
+                }
+
                 if let Some(scale) = successful_scale.take() {
                     // last run succeeded at the given scale
                     last_good_scale = scale;
                 }
                 successful_scale = Some(scale);
 
-                if scale == 2_000 {
-                    tracing::warn!(%scale, "skipping known-good scale");
-                    continue;
-                }
-
                 if !partial && !durable && nshards == 0 && scale >= 6_250 {
                     // this runs out of memory
                     scales.overloaded();
-                    tracing::warn!(%scale, "skipping scale that runs out of memory");
+                    tracing::warn!(%scale, "skipping full scale that runs out of memory");
                     continue;
                 }
-                if partial && nshards == 0 && scale >= 13_000 {
-                    // this falls over entirely
+                if partial && nshards == 0 && scale >= 11_000 {
+                    // this runs partial out of memory
                     scales.overloaded();
-                    tracing::warn!(%scale, "skipping scale that just fails");
+                    tracing::warn!(%scale, "skipping partial scale that runs out of memory");
                     continue;
                 }
 
@@ -183,9 +189,11 @@ pub(crate) async fn one(
                     )
                     .await?;
 
-                    tracing::debug!("stopping server");
-                    crate::server::stop(s, noria_server).await?;
-                    tracing::trace!("server stopped");
+                    if !*ctx.exit.borrow() {
+                        tracing::debug!("stopping server");
+                        crate::server::stop(s, noria_server).await?;
+                        tracing::trace!("server stopped");
+                    }
 
                     Ok::<_, Report>(())
                 }

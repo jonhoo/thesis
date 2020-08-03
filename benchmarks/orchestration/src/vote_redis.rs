@@ -87,7 +87,9 @@ pub(crate) async fn one(
         let mut targets = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(800_000, 500_000))
+            let mut s = cliff::ExponentialCliffSearcher::until(250_000, 125_000);
+            s.fill_left();
+            Box::new(s)
         };
         let result: Result<(), Report> = try {
             let mut successful_target = None;
@@ -108,7 +110,7 @@ pub(crate) async fn one(
                     tracing::info!("start benchmark target");
                     let backend = "redis";
                     let prefix = format!(
-                        "{}.5000000a.{}t.{}r.{}c.{}",
+                        "{}.10000000a.{}t.{}r.{}c.{}",
                         backend, target, write_every, nclients, distribution,
                     );
 

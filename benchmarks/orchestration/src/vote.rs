@@ -10,12 +10,14 @@ use tsunami::Tsunami;
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
         [
+            (100, "skewed", 4, false, 0, true),
             (100, "skewed", 4, true, 0, true),
             (10_000, "skewed", 4, true, 0, false),
             (100, "skewed", 4, true, 256 * 1024 * 1024, true),
             (100, "skewed", 4, true, 320 * 1024 * 1024, true),
             (100, "skewed", 4, true, 384 * 1024 * 1024, true),
             (100, "skewed", 4, true, 448 * 1024 * 1024, true),
+            (100, "skewed", 4, true, 512 * 1024 * 1024, true),
         ],
         one,
         ctx,
@@ -71,10 +73,17 @@ pub(crate) async fn one(
 
         let mut targets = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        } else if !partial {
+            Box::new(cliff::LoadIterator::from(vec![1_000_000]))
+                as Box<dyn cliff::CliffSearch + Send>
         } else if write_every == 10_000 {
-            Box::new(cliff::ExponentialCliffSearcher::until(1_000_000, 1_000_000))
+            let mut s = cliff::ExponentialCliffSearcher::until(1_000_000, 1_000_000);
+            s.fill_left();
+            Box::new(s)
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(250_000, 250_000))
+            let mut s = cliff::ExponentialCliffSearcher::until(250_000, 125_000);
+            s.fill_left();
+            Box::new(s)
         };
         let result: Result<(), Report> = try {
             let mut successful_target = None;
@@ -98,7 +107,7 @@ pub(crate) async fn one(
                         backend.push_str("_nj");
                     }
                     let prefix = format!(
-                        "{}.5000000a.{}t.{}r.{}c.{}m.{}",
+                        "{}.10000000a.{}t.{}r.{}c.{}m.{}",
                         backend, target, write_every, nclients, memlimit, distribution,
                     );
 
@@ -132,9 +141,11 @@ pub(crate) async fn one(
                     )
                     .await?;
 
-                    tracing::debug!("stopping server");
-                    crate::server::stop(s, noria_server).await?;
-                    tracing::trace!("server stopped");
+                    if !*ctx.exit.borrow() {
+                        tracing::debug!("stopping server");
+                        crate::server::stop(s, noria_server).await?;
+                        tracing::trace!("server stopped");
+                    }
 
                     Ok::<_, Report>(())
                 }

@@ -6,132 +6,60 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 
+scale = 6000
+
 #
 # memory use at various lobsters scales
 #
 bfmtfn = lambda x : '%1.1fGB' % (x * 1e-9) if x >= 1e9 else '%1.0fMB' % (x * 1e-6) if x >= 1e6 else '%1.10kB' % (x * 1e-3) if x >= 1e3 else '%1.0fB' % x if x > 0 else "No overhead"
 
-# compute subset of data for memory-limited lobsters
-limited_lobsters_scale = common.lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.99 * requested & mean < 50').reset_index()['scale'].max()
-limited_lobsters = common.lobsters.query('op == "all" & memlimit != 0 & scale == %d' % limited_lobsters_scale).groupby('memlimit').tail(1).reset_index()
-limited_lobsters_still_ok = limited_lobsters.query('achieved >= 0.99 * requested & mean < 50')["memlimit"].min()
-limited_lobsters = common.lobsters.query('op == "all" & memlimit == %f & scale == %d' % (limited_lobsters_still_ok, limited_lobsters_scale)).tail(1).copy()
-print('Using %.0fMB memory limit as representative for lobsters (%d pages/s)' % (limited_lobsters_still_ok * 1024, limited_lobsters["achieved"].min()))
+base = common.lobsters.query('op == "all" & until == 256 & scale == %d & metric == "sojourn"' % (scale))
+prune_limit = base.query('memlimit != 0 & durable == False & achieved >= 0.99 * requested & mean < 50').reset_index()['memlimit'].min()
+print('Using %s memory limit as representative for lobsters' % (common.bts(prune_limit * 1024 * 1024 * 1024)))
+prune_limit_dur = base.query('memlimit != 0 & durable == True & achieved >= 0.99 * requested').reset_index()['memlimit'].min()
+print('Using %s memory limit as representative for durable lobsters' % (common.bts(prune_limit_dur * 1024 * 1024 * 1024)))
+prune = base.query('durable == False & memlimit == %f' % (prune_limit))
+prune_dur = base.query('durable == True & memlimit == %f' % (prune_limit_dur))
+partial = base.query('partial == True & memlimit == 0')
+full = base.query('partial == False & memlimit == 0')
 
-prune = limited_lobsters
-partial_scale = common.lobsters_experiments.query('partial == True').reset_index()['scale'].max()
-partial = common.lobsters_experiments.query('partial == True & scale == %d' % (partial_scale))
-full_scale = common.lobsters_experiments.query('partial == False').reset_index()['scale'].max()
-full = common.lobsters_experiments.query('partial == False & scale == %d' % (full_scale))
-
-print('Run these RocksDB experiments:')
-print('\t--no-partial @ %d' % full_scale)
-print('\t-m %d @ %d' % (limited_lobsters_still_ok * 1024 * 1024 * 1024, limited_lobsters_scale))
-
-# find closest scale for prune, and show vmrss
-candidates = common.lobsters.query('op == "all" & memlimit != 0 & achieved >= 0.99 * requested & mean < 50')
-candidate = limited_lobsters_scale
-for scale in candidates.reset_index()['scale']:
-    if abs(scale - full_scale) < abs(candidate - full_scale):
-        candidate = scale
-mem_at_candidate = candidates.query('scale == %d' % candidate)['vmrss'].min()
-nxt = candidates.query('scale > %d' % candidate).reset_index()['scale'].min()
-mem_at_nxt = candidates.query('scale == %d' % nxt)['vmrss'].min()
-# linear iterpolation
-a = (mem_at_nxt - mem_at_candidate) / (nxt - candidate)
-b = mem_at_candidate - a * candidate
-mem_at_full_apx = a * full_scale + b
-print("VmRSS for prune @ full-ish (%d-%d vs %d): %s" % (candidate, nxt, full_scale, bfmtfn(mem_at_full_apx * 1024 * 1024 * 1024)))
-
-fig, (throughput, mem) = plt.subplots(2, 1, sharex = True)
+fig, mem = plt.subplots()
 
 xs = [
     "Noria",
-    # "Noria, partial",
-    "Noria, no partial",
-    "MySQL"
+    "Noria without partial",
 ]
 xticks = [x for x in range(len(xs))]
-
-#
-# throughput achieved
-#
-
-tys = []
-for x in xs:
-    if x == "Noria":
-        achieved = prune['achieved'].max()
-    elif x == "Noria, partial":
-        achieved = partial['achieved'].max()
-    elif x == "Noria, no partial":
-        achieved = full['achieved'].max()
-    elif x == "MySQL":
-        achieved = common.mysql_experiments['achieved'].max()
-    tys.append(achieved)
-
-# plot the "bottom" part of the bars
-bars = throughput.bar(xticks, tys)
-bars[0].set_color(common.colors['evict'])
-# bars[1].set_color(common.colors['partial'])
-bars[1].set_color(common.colors['full'])
-bars[2].set_color(common.colors['mysql'])
-
-throughput.set_xticks(xticks)
-throughput.set_xticklabels(xs)
-throughput.set_ylim(0, max(tys) * 1.35) # also fit labels over bars
-throughput.yaxis.set_major_formatter(common.kfmt)
-
-throughput.set_ylabel("Pages/s")
-
-# Attach a text label above each bar with its value.
-fmtfn = lambda x: '%1.1fM' % (x * 1e-6) if x >= 1e6 else '%1.1fk' % (x * 1e-3) if x >= 1e3 else '%1.0f' % x
-for rect in bars:
-    height = rect.get_height()
-    y = fmtfn(rect.get_y() + height)
-    throughput.annotate(y,
-                xy=(rect.get_x() + rect.get_width() / 2, rect.get_y() + height),
-                xytext=(0, 3),  # 3 points vertical offset
-                textcoords="offset points",
-                ha='center', va='bottom')
+width = 0.35
 
 #
 # memory used
 #
 
-ys = [
-    prune["vmrss"].item(),
-    # partial["vmrss"].item(),
-    full["vmrss"].item(),
-    common.mysql_experiments['vmrss'].max()
-]
-bars = mem.bar(xticks, ys)
-bars[0].set_color(common.colors['evict'])
-# bars[1].set_color(common.colors['partial'])
-bars[1].set_color(common.colors['full'])
-bars[2].set_color(common.colors['mysql'])
+print('Partial non-durable compared to full: %.1f%%' % (100.0 * float(prune_dur["vmrss"].item()) / full.query('durable == True')["vmrss"].item()))
+bars1 = mem.bar([x - width/2 for x in xticks], [prune['vmrss'].item(), full.query('durable == False')['vmrss'].item()], width)
+bars1[0].set_color(common.colors['noria'])
+bars1[1].set_color(common.colors['full'])
+
+bars2 = mem.bar([x + width/2 for x in xticks], [prune_dur['vmrss'].item(), full.query('durable == True')['vmrss'].item()], width, alpha = 0.99, hatch = '//')
+bars2[0].set_color(common.colors['noria'])
+bars2[1].set_color(common.colors['full'])
 
 mem.set_xticks(xticks)
 mem.set_xticklabels(xs)
-mem.set_ylim(0, full["vmrss"].item() * 1.35) # also fit labels over bars
+mem.set_ylim(0, 128 * 1.1) # also fit labels over bars
+mem.set_yticks([0, 32, 64, 96, 128])
 
-mem.set_ylabel("Memory")
+mem.set_ylabel("Resident virtual memory [GB]")
 
 # Attach a text label above each bar with its value.
-for rect in bars:
+for rect in bars1 + bars2:
     height = rect.get_height()
     mem.annotate(bfmtfn((rect.get_y() + height) * 1024 * 1024 * 1024),
                 xy=(rect.get_x() + rect.get_width() / 2, rect.get_y() + height),
                 xytext=(0, 3),  # 3 points vertical offset
                 textcoords="offset points",
                 ha='center', va='bottom')
-
-print("%s base mem: %s" % (xs[0], fmtfn(prune['basemem'].item() * 1024 * 1024 * 1024)))
-print("%s base mem: %s" % ("partial", fmtfn(partial['basemem'].item() * 1024 * 1024 * 1024)))
-print("%s base mem: %s" % (xs[1], fmtfn(full['basemem'].item() * 1024 * 1024 * 1024)))
-
-print("%s vmrss: %s" % (xs[0], fmtfn(prune['vmrss'].item() * 1024 * 1024 * 1024)))
-print("%s vmrss: %s" % ("partial", fmtfn(partial['vmrss'].item() * 1024 * 1024 * 1024)))
-print("%s vmrss: %s" % (xs[1], fmtfn(full['vmrss'].item() * 1024 * 1024 * 1024)))
 
 fig.tight_layout()
 plt.savefig("{}.pdf".format(sys.argv[2]), format="pdf")

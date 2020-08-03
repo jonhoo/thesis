@@ -214,7 +214,7 @@ pub(crate) async fn one(
                     tracing::info!("start benchmark target");
                     let backend = "hybrid";
                     let prefix = format!(
-                        "{}.5000000a.{}t.{}r.{}c.{}",
+                        "{}.10000000a.{}t.{}r.{}c.{}",
                         backend, target, write_every, nclients, distribution,
                     );
 

@@ -1,4 +1,4 @@
-const NUM: usize = 5000000;
+const NUM: usize = 10000000;
 
 fn main() {
     println!("skew\talpha\tthroughput\tpercentage");

@@ -1,8 +1,10 @@
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
 	    evaluation.tex \
+	    graphs/lobsters-throughput.pdf \
 	    graphs/lobsters-memory.pdf \
 	    graphs/lobsters-memlimit-cdf.pdf \
+	    graphs/lobsters-durability-cdf.pdf \
 	    graphs/lobsters-timeline.pdf \
 	    graphs/vote-formula.pdf \
 	    graphs/vote-migration.pdf \
@@ -30,6 +32,9 @@ graphs/source.pickle: graphs/extract-hist/src/main.rs graphs/ingest.py graphs/me
 
 graphs/lobsters-memlimit-cdf.pdf: graphs/source.pickle graphs/common.py graphs/lobsters-memlimit-cdf.py
 	python graphs/lobsters-memlimit-cdf.py graphs/source.pickle benchmarks/orchestration/ graphs/lobsters-memlimit-cdf
+
+graphs/lobsters-durability-cdf.pdf: graphs/source.pickle graphs/common.py graphs/lobsters-durability-cdf.py
+	python graphs/lobsters-durability-cdf.py graphs/source.pickle benchmarks/orchestration/ graphs/lobsters-durability-cdf
 
 graphs/vote-formula.pdf: graphs/source.pickle graphs/common.py formula/src/main.rs graphs/vote-formula.py
 	python graphs/vote-formula.py graphs/source.pickle graphs/vote-formula

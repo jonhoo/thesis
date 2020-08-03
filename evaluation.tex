@@ -1,27 +1,40 @@
 This thesis is built on the belief that view materialization is useful, but
 prohibitively costly to use with current solutions. It presents partial state as
-a solution to this problem, which allows retaining the benefits of view
+a solution to this problem that allows retaining the benefits of view
 materialization at a fraction of the cost. Section \ref{s:eval:why} evaluates
 the validity of this assumption, and the efficacy of partial state as a
 solution.
 
+Existing application deployments tend to implement their own ad-hoc caching
+logic, usually by placing a dedicated cache in front of the database. Some
+larger companies have also built comprehensive tooling to manage their caches
+correctly. Section \ref{s:eval:alts} looks at how Noria serves as an attractive
+alternative to these approaches.
+
 With partial state, only a subset of each view is materialized, and missing
-results are computed on-demand. This reduces memory use, but also means that
-some queries take a while to be satisfied. Ultimately, partial state presents a
-trade-off between memory use (cache size) and tail latency (miss rate). Section
-\ref{s:eval:cost} explores the implications of this trade-off.
+results are computed on-demand. Partial state thus presents a trade-off between
+memory use (cache size) and tail latency (miss rate). Section \ref{s:eval:cost}
+explores the effects of this trade-off.
 
-Partial state allows applications to introduce new views without materializing
-that entire view all up-front. Instead, the view is gradually materialized
-on-demand. This enables fast adoption of new queries, but also means that
-queries to new views are initially slow. Section \ref{s:eval:mig} evaluates such
-partial state migrations.
+Developers may be hesitant to switch applications that already use a cache today
+to Noria without some evidence that their performance won't regress.
+Unfortunately, the impact Noria would have on any given application is highly
+dependent on the particulars of each application, and is thus hard to measure.
+To demonstrate that Noria can offer comparable absolute performance to existing
+caching solutions, section \ref{s:eval:kvperf} compares Noria lookup performance
+to that of Redis under ideal caching conditions.
 
-The efficacy of partial state as a solution to the view materialization memory
-use problem depends on application access patterns being sufficiently skewed that
-keeping only some results cached reduces latency for a significant fraction of
-requests. While it is impossible to predict the skew for an arbitrary
-application's data and queries, section \ref{s:eval:patterns} gives a simple
+An added benefit of partial state is that it allows applications to introduce
+new queries/views without materializing it entirely up-front. This enables fast
+adoption of new queries, but also means that queries to new views are initially
+slow. Section \ref{s:eval:mig} evaluates these partial state migrations compared
+to traditional all-at-once materialization.
+
+The ability of partial state to reduce the memory use of view materialization
+depends on skew in the application's data and access patterns. It allows Noria
+to reduce latency for a significant fraction of requests by keeping only a few
+results cached. While it is impossible to predict the skew for an arbitrary
+application's data and queries, section \ref{s:eval:patterns} gives a simplified
 theoretical model to help with estimation.
 
 \section{Experimental Setup}
@@ -42,11 +55,25 @@ queries the real Lobsters code would issue for that same page request. The
 generator supports scaling up the rate of access to emulate a larger user base
 for benchmarking.
 
+The various pages in Lobsters differ significantly in what queries they issue,
+how many queries they issue, and the extent to which they are read or write
+heavy. Just over half of all requests are for the pages of individual stories,
+which fetches the comments for that story, along with its popularity score and
+the score of each associated comment. The story page is mostly read-only, and
+issues 12 read queries. Each request also performs a single update to keep track
+of when the user last viewed the story for notification purposes. A third of
+requests are for the front page, which lists the 25 most highly scored stories,
+along with their scores. The front page is read-only, and also issues 12
+queries. The most write-heavy pages are the ones for voting on a story or
+comment, or adding a new comment. These operations are rare, and make up only
+about 1 in every 60 requests. They also issue much fewer queries: two for votes
+and five for comments. Latency is measured across all requests, no matter what
+page they are for.
+
 Experiments run on Amazon EC2 r5n.4xlarge instances, which have 16 vCPUs and
 128GB of memory. The server is always given a dedicated host, while load
 generating clients are split across one or more m5n.4xlarge instances depending
-on the desired load factor. Experiments are run for a bit over 2 minutes unless
-otherwise specified.
+on the desired load factor.
 
 The benchmark setups are all ``partially open-loop''~\cite{frank-open-loop}:
 clients generate load according to a workload-dictated distribution of
@@ -57,9 +84,14 @@ request throughput and ``sojourn time''~\cite{open-loop-cautionary-tale}, which
 is the delay the client experiences from request generation until a response
 returns from the backend.
 
-% We seed the database with 9.2k users, 40k stories and 120k comments---the
-% size of the real Lobsters deployment---and run increasing request loads to
-% push the different setups to their limits.
+All experiments measure memory use using the resident virtual memory of the
+server process (VmRSS). This measurement therefore includes all indexes, runtime
+allocations, and other bookkeeping metadata. For Noria, it also includes the
+data stored in the base tables.
+
+Since the benchmarks introduce more data as they run, memory use increases over
+the course of each run. Experiments are run for a bit over 5 minutes unless
+otherwise specified, and memory measurements are taken at the end of the run.
 
 \section{Benefits and Costs of View Materialization}
 \label{s:eval:why}
@@ -77,31 +109,46 @@ interesting:
 
 \begin{figure}[h]
   \centering
-  \includegraphics{graphs/lobsters-memory.pdf}
+  \includegraphics{graphs/lobsters-throughput.pdf}
   \caption{Maximum achieved throughput on Lobsters benchmark with and without
   view materialization. Without view materialization, MySQL must compute query
   results each time. Traditional (full) view materialization runs out of memory
-  at $\approx$2.3k pages/second. Partial state allows Noria to reduce memory use
-  significantly so that it can sustain higher throughput.}
+  at $\approx$4.6k pages/second. Partial state allows Noria to reduce memory use
+  significantly so that it can achieve higher throughput.}
+  \label{f:lobsters-throughput}
+\end{figure}
+
+Figure~\ref{f:lobsters-throughput} attempts to explain why view materialization
+is desirable. It compares the highest sustainable request load of three
+different systems: MySQL, Noria without partial state, and Noria with partial
+state. MySQL is run entirely in RAM by running it on a ramdisk, and on its
+lowest isolation level. The figure shows the highest Lobsters throughput each
+system achieves before its mean latency exceeds 50ms.
+
+View materialization alone (as provided by Noria) improves performance by almost
+$12\times$ compared to MySQL, as query results are now frequently cached.
+However, without partial state, this performance increase comes at a significant
+memory cost. Beyond 4.6k pages/second, Noria runs out of memory, and cannot
+support the workload. With partial state, Noria uses much less memory at a given
+load factor, which allows it to support 67\% higher throughput, almost
+20$\times$ that of MySQL%
+\footnote{The Noria benchmarks are memory constrained, not CPU constrained.
+MySQL fully loads all 16 cores at 391 pages per second.}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/lobsters-memory.pdf}
+  \caption{Memory use two minutes into the Lobsters benchmark at 4.6k pages per
+  second. Striped bars store base tables on disk using RocksDB.}
   \label{f:lobsters-memory}
 \end{figure}
 
-Figure~\ref{f:lobsters-memory} attempts to give insight into all these questions
-by comparing the highest sustainable request load of three different systems:
-MySQL, Noria without partial state, and Noria with partial state. MySQL is run
-entirely in RAM by running it on a ramdisk, and on its lowest isolation level.
-The figure shows the highest Lobsters throughput each system achieves before its
-median latency exceeds 50ms.
-
-View materialization alone (as provided by Noria) improves performance by almost
-$6\times$ compared to MySQL, as query results are now frequently cached.
-However, without partial state, this performance increase comes at a significant
-memory cost. Beyond 2.3k pages/second, Noria runs out of memory, and cannot
-support the workload. With partial state, Noria uses only 39GB of memory, a
-third less than the 58GB used with full materialization. This in turn allows it
-to support 65\% higher throughput, almost 10$\times$ that of MySQL%
-\footnote{The Noria benchmarks are memory constrained, not CPU constrained.
-MySQL fully loads all 16 cores at 391 pages per second.}.
+Figure~\ref{f:lobsters-memory} shows the memory use at 4.6k pages per second
+with and without partial state. It demonstrates both the issues with full
+materialization, and the improvements brought about by partial state. With full
+materialization, Noria must store every result for every query in memory. In
+contrast, with partial state, Noria need only store frequently accessed results,
+which cuts memory use in half.
 
 The memory use reductions with partial state are a direct result of the skew in
 Lobsters data popularity and access patterns. Many pages are simply never
@@ -110,28 +157,86 @@ cache. With partial state, Noria also evicts infrequently accessed results,
 which further reduces memory use, and ensures that the cache does not eventually
 grow to contain all results.
 
+Much of Noria's memory use goes to storing the base tables in memory. Since
+partial state cannot evict base table state, this limits how much memory can
+potentially be saved. The figure therefore also includes memory use when running
+Noria with its durable RocksDB storage backend for base tables. In that
+configuration, base tables are kept on disk, not in memory, which makes the
+memory savings from partial state more apparent\,---\,the memory use is now
+about a third that of full materialization%
+\footnote{Various other runtime overheads that partial state cannot eliminate
+remain, such as in-flight requests and pending responses. With diligent memory
+optimization, this overhead could likely be further reduced, further increasing
+the relative benefits from partial state.}.
+
 Since partial state uses less memory, applications that do not need higher
-throughput can instead reduce cost by purchasing less memory. For example, on
-AWS EC2, going from a 64GB instance type with 16 cores (\texttt{m5n.4xlarge}) to
-a 128GB instance type with 16 cores (\texttt{r5n.4xlarge}) comes at a 25\% price
-increase. Instances with 256GB of memory only come with 32 cores
+throughput can instead reduce cost by using hosts with less memory. For example,
+on AWS EC2, going from a 64GB instance type with 16 cores (\texttt{m5n.4xlarge})
+to a 128GB instance type with 16 cores (\texttt{r5n.4xlarge}) comes at a 25\%
+price increase. Instances with 256GB of memory only come with 32 cores
 (\texttt{r5n.8xlarge}) or more, and come out at twice the price of 128GB.
 
-\begin{inprogress}
-  These results come with Noria keeping all its results in memory. By offloading
-  the storage of base tables to disk instead, memory use can be further reduced.
-  In Lobsters, this is unlikely to increase performance by much, as throughput
-  it bottlenecked at 3.8k pages/second by updates to a particularly complex
-  view.
-\end{inprogress}
+\section{Rolling Your Own}
+\label{s:eval:alts}
 
-% The key question for partially stateful dataflow then is whether it truly and
-% meaningfully reduces application memory use. Or, more accurately, whether
-% applications can run efficiently when only some of its query results are cached.
-% Intuitively, one might expect this to be true for many user-driven applications:
-% some queries may only be executed for rarely used features, and unpopular posts
-% may be accessed only very infrequently, or perhaps not at all, after they were
-% initially posted.
+Many applications already require lower latency and higher throughput than
+straightforward SQL queries against traditional relational databases can
+provide. Developers often go through a sequence of manual optimizations to try
+to mitigate this.
+
+The first step is usually to pre-compute certain computed values and store them
+directly in the database. For example, in Lobsters, each story has a
+``hotness'', which is a score of how popular a story is, and thus how far up it
+should appear in listings. This value depends on a lot of parameters, such as
+the number of votes, the number of comments, etc. It would be prohibitively
+expensive to compute a story's hotness directly in the queries,
+especially in the context of computing the front page view, since it requires
+the hotness for \emph{all} stories. Instead, the Lobsters developers add a
+computed column, \texttt{hotness}, to the \texttt{story} table. This column is
+then updated whenever relevant data changes, such as when:
+
+\begin{itemize}
+    \item a story is upvoted or downvoted.
+    \item a comment is added to a story.
+    \item a comment on a story is upvoted or downvoted.
+    \item a comment or vote is deleted.
+    \item one story is merged into another.
+\end{itemize}
+
+There are several such computed columns in Lobsters, and all write paths must
+ensure that they correctly update all related computed values. This process is
+manual and error-prone.
+
+If database optimizations do not suffice for the application's performance
+needs, developers usually add a cache in front of the database. This cache
+often takes the form of a key-value store which holds frequently accessed,
+computed results. When it issues a query, the application checks the (fast)
+cache first, and only if the results are not available in cache is the backend
+consulted.
+
+A dedicated cache speeds up reads that hit, but introduces significant
+application complexity. Just like for manual query optimizations, all parts of
+the application that modify data related to any given cache entry must know to
+also invalidate or update the cache. In addition, the developers must ensure
+that if multiple clients miss on a given entry, they do not hit the backend
+database all at once. This is especially important if a popular entry is
+invalidated, as it may cause a ``thundering herd'' effect where a large number
+of clients swarm the backend and overwhelm it. Furthermore, since the clients
+must now access two separate systems, mechanisms must be in place to ensure that
+the cache remains consistent with the underlying data. This is difficult since
+data may be updated at any time, including just after a client has fetched the
+(then) latest data from the database to update the cache.
+
+Implementing caching ``correctly'' requires highly sophisticated
+machinery~\cite{facebook-memcache, transactional-cache, orm-cache, sql-cache}
+which developers may not even think to employ. A survey from 2016 found that
+0.3-3.0\% of application code spread across 2.1-10.8\% of the application's
+source files is caching-related, and that cache-related issues make up 1-5\% of
+all issues~\cite{caching-is-hard}.
+
+\textbf{With Noria, these kinds of manual materialization techniques are not
+necessary.} Noria performs and maintains the relevant materializations as
+needed, and the application needs no cache-related code.
 
 \section{The Memory/Latency Trade-off}
 \label{s:eval:cost}
@@ -143,8 +248,8 @@ missing state, which takes time and consumes resources otherwise dedicated to
 writes. This shows up as increased tail latency for the application: queries
 whose results are not known must wait to be computed. The hope with partial
 state is that, once the commonly-accessed query results are cached, latency
-quickly drops such that going forward only the infrequently accessed query
-results must be computed on-demand.
+quickly drops such that going forward only infrequently accessed query results
+must be computed on-demand.
 
 \subsection{Warming the Cache}
 
@@ -172,8 +277,8 @@ y-axis. Progressively lighter colors indicate values further into the tail.
 The figure shows that latency is initially high, but after a few seconds, the
 mean and 95th percentile latency drop below 10 milliseconds. By the time a
 minute has passed, the 99th percentile has followed suit. Since only a small
-fraction of the total computed state is cached (as shown in the top-left bar of
-Figure~\ref{f:lobsters-memory}), this supports the hypothesis that partial state 
+portion of the total computed state is cached (as shown in
+Figure~\ref{f:lobsters-memory}), this supports the hypothesis that partial state
 achieves low latency once the most commonly accessed results are cached.
 
 \subsection{Impact on Tail Latency}
@@ -181,10 +286,10 @@ achieves low latency once the most commonly accessed results are cached.
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/lobsters-memlimit-cdf.pdf}
-  \caption{CDF of sojourn latency across all Lobsters pages at 3k pages per
-  second with different amounts of allocated memory. The figure depicts
-  steady-state operation\,---\,the benchmark has been allowed to run for two
-  minutes before the latency is measured.}
+  \caption{CDF of sojourn latency across all Lobsters pages at 1.5k pages per
+  second with varying memory use. The figure depicts steady-state
+  operation\,---\,the benchmark has been allowed to run for two minutes before
+  the latency is measured.}
   \label{f:lobsters-mem-latency}
 \end{figure}
 
@@ -199,51 +304,52 @@ reduce memory use by evicting more aggressively (darker purple lines), more
 requests take longer, and the tail grows. In other words, the further you want
 to reduce memory use, the more you pay in latency.
 
-The reason why the whole curve shifts, rather than just the tail, is that this
-CDF is across \emph{all} the different page types in Lobsters. Each one issues a
-different set of queries, and so their total time differs, as does the effect of
-a longer tail. The exact shape of this curve, and how it shifts in response to
-varying resources, depends on the application in question.
-\S\ref{s:eval:patterns} attempts to give a useful approximation heuristic for
-other applications.
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/lobsters-durability-cdf.pdf}
+  \caption{CDF of sojourn latency across all Lobsters pages at 1.5k pages per
+  second with base tables in memory and on disk. The figure depicts steady-state
+  operation\,---\,the benchmark has been allowed to run for two minutes before
+  the latency is measured.}
+  \label{f:lobsters-dur-latency}
+\end{figure}
 
-\begin{inprogress}
-Full materialization is slightly faster than partial materialization because
-SOMETHING SOMETHING either join eviction or faster lookups due to no tombstones?
-\end{inprogress}
+If base tables are not kept in memory, the cost of recomputing missing state
+from the data in those base tables increases. Exactly how much depends on the
+performance characteristics of the durability backend in use.
+Figure~\ref{f:lobsters-dur-latency} shows a CDF of page latencies when Noria's
+RocksDB backend is used, with writes going to a ramdisk. Latencies increase by
+anywhere from 20-50\%, depending on the number of misses a given page request
+experiences.
 
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics{graphs/lobsters-pages-cdf.pdf}
-%   \caption{CDF of Lobsters page latency in steady-state at 3000 pages per second
-%   for different pages without eviction. This does \textbf{not} measure queueing
-%   time.}
-%   \label{f:lobsters-pages-latency}
-% \end{figure}
-%
-% The figure above includes data across all the different Lobsters pages the
-% client requests over the course of the benchmark.
-% Figure~\ref{f:lobsters-pages-latency} breaks this down by four fairly
-% different page request types: viewing a story (most common), viewing the front
-% page, voting for a comment, and submitting a new story (least common).
+The reason why the whole curve shifts, rather than just the tail, is that these
+CDFs are across \emph{all} the different page types in Lobsters. Each one issues
+a different set of queries, and so their total time differs, as does the effect
+of a longer tail. The exact shape of this curve, and how it shifts in response
+to varying resources, depends on the application in question.
 
-The memory use can only be reduced so far before the system can no longer keep
-up with the offered load. If some of the most frequently accessed query results
-are not cached, the system will constantly have to re-compute those results to
-satisfy reads that come in after the eviction, which increases latency, and
-decreases throughput. This effect then compounds for each popular query result,
-as each one is accessed frequently. Essentially, the system will never finish
-warming the cache, and latency will remain at the high levels shown early in
-Figure~\ref{f:lobsters-timeline}. For Lobsters, this happens around the 150MB
-mark. If the eviction is tuned to evict operator state below that threshold,
-Noria can no longer sustain 3.8k pages per second.
+% \begin{inprogress}
+% Full materialization is slightly faster than partial materialization because
+% SOMETHING SOMETHING either join eviction or faster lookups due to no tombstones?
+% \end{inprogress}
 
 \subsection{Memory Use and Throughput}
+
+Memory use can only be reduced so far before the system no longer keeps up with
+the offered load. If some of the most frequently accessed (``hot'') query
+results are not cached, the system will constantly have to re-compute those
+results to satisfy reads that come in shortly after that query result is
+evicted. This cache churn increases latency and decreases throughput, often
+significantly. Essentially, the system will never finish warming the cache, and
+latency will remain at the high levels shown early in
+Figure~\ref{f:lobsters-timeline}. For Lobsters, this happens around the 18GB
+mark. If the eviction is tuned to be more aggressive than that, Noria can no
+longer sustain 1.5k pages per second.
 
 Generally speaking, as throughput increases, so must the memory budget. The
 intuition behind this is that the memory budget effectively dictates your hit
 rate. The more requests are issued per second, the more misses (in absolute
-terms) result from a given hit fraction. If those misses in the tail are
+terms) result from a given hit rate. If those misses in the tail are
 distinct, Noria must satisfy \textbf{more} upqueries as load increases, while
 also handling that added load.
 
@@ -266,29 +372,115 @@ a simplified version of one particular query from Lobsters shown in
 Listing~\ref{l:votes}. It counts the number of votes for an article, and
 presents that alongside the article information. The benchmark issues requests
 distributed as 99\% reads and 1\% writes (inserts into \texttt{votes}). The
-access pattern is skewed such that 90\% of requests access 1\% of keys across 5M
-articles%
+access pattern is skewed such that 90\% of requests access 1\% of keys across
+10M articles%
 \footnote{The benchmark samples keys from a Zipfian distribution with a skew
-factor ($\alpha$) of 1.15}.
+factor ($\alpha$) of 1.15}. Load is generated by four clients, and each one
+batches requests for a maximum of 10ms to reduce serialization overheads.
 
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/vote-throughput-memlimit.pdf}
-  \caption{Achieved throughput vs 90th percentile request latency in vote with
-  different memory budgets. Offered load increases along the points on each
-  line. At higher offered load, a higher memory budget is needed to keep up, or
-  too many misses must be handled.}
+  \caption{Achieved throughput vs 95th percentile request latency in vote with
+  increasingly aggressive eviction. Offered load increases along the points on
+  each line. A near-vertical line indicates that the system no longer keeps up
+  with offered load.}
   \label{f:vote-throughput-memlimit}
 \end{figure}
 
 Figure~\ref{f:vote-throughput-memlimit} demonstrates the connection between
 throughput and memory use. It shows throughput-latency lines for the vote
-benchmark for different memory allowances. Each point along each line is a
-higher offered load; its x-coordinate is the achieved throughput, and its
-y-coordinate is the measured median latency. When the backend no longer keeps
-up, you see a ``hockey stick'' effect, where achieved throughput no longer
-increases, while latency spikes. The figure shows that as the offered load
-increases, Noria needs progressively more memory to keep up.
+benchmark with progressively more aggressive eviction. Each point along each
+line is a higher offered load; its x-coordinate is the achieved throughput, and
+its y-coordinate is the measured median latency. When Noria no longer keeps up,
+you see a ``hockey stick'' effect, where achieved throughput no longer
+increases, while latency spikes.
+
+The figure shows that as the offered load increases, Noria needs to use more
+memory to keep up. If we do not bound memory use, Noria can keep up with higher
+load at the cost of caching most of the dataset (about two thirds).
+
+\section{Absolute Cache Performance}
+\label{s:eval:kvperf}
+
+Despite how error-prone the approach is, ad-hoc, per-application caching is
+still common in practice. And while Noria eliminates most of the developer
+burden of getting caching right, it must offer competitive performance with
+manually constructed caching solutions to present a viable alternative.
+
+Unfortunately, this is difficult to evaluate, since high-performance solutions
+are often developed specifically for a given application, and not available as
+general-purpose tools. And effectively applying the general-purpose tools that
+\textbf{are} available, like memcache and Redis, requires significant effort on
+the part of the application authors (or the evaluators). To manually add caching
+support to Lobsters' ~80 queries, including thundering herd mitigation and
+incremental updates, would be a massive undertaking.
+
+This fact alone is, in essence, an argument for the Noria approach. The manual
+effort involved in making Lobsters use Noria is minimal\,---\,just switch the
+code to query Noria instead of MySQL, and you get automatic caching. In many
+cases the application code can even be simplified, such as by removing manual
+materialization decisions like the story ``hotness'' column described in
+\S\ref{s:eval:alts}.
+
+Nevertheless, an experiment to evaluate Noria's absolute performance compared to
+a ``real'' cache is necessary. Without such a comparison, Noria can only claim
+to be ``faster than MySQL'', but not ``as fast as a cache''.
+
+The next experiment runs the vote benchmark from Listing~\ref{l:votes} against
+Redis~\cite{redis}, a popular high-performance key-value store that is commonly
+used as a caching backend. In an attempt to approximate how a carefully planned
+and optimized application caching deployment might perform, it makes the
+following modifications to the benchmark:
+
+\begin{itemize}
+ \item Every access hits in cache, to emulate perfect thundering herd mitigation
+   and invalidation-avoidance schemes.
+ \item Nearly all accesses (99.99\%) are reads, since writes would be
+   bottlenecked by the backing store.
+ \item Data is not stored anywhere except Redis.
+ \item Accesses are batched to reduce serialization cost and increase
+   throughput. Specifically, reads are \texttt{MGET}s, and writes are pipelined
+    \texttt{INCRBY}s.
+\end{itemize}
+
+This is not a realistic use of Redis as a cache, and ignores the complexities of
+integrating the cache with the application. It also assumes that cached query
+results are never spread across more than one key in the cache. But it does
+allow ``assuming the best'' about the underlying caching strategy and system.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics{graphs/vote-redis.pdf}
+  \caption{Achieved throughput vs 95th \%-ile request latency in cache-optimized
+  vote. Offered load increases along the points on each line. The vertical
+  line indicates $16\times$ the highest Redis throughput, since Redis is
+  single-threaded.}
+  \label{f:vote-redis}
+\end{figure}
+
+Figure~\ref{f:vote-redis} shows a throughput-latency plot that explores the
+performance profiles of Redis and Noria under these experimental conditions%
+\footnote{Noria runs with the same modified access patterns as outlined for
+Redis.}.
+% For comparison, it also includes a MySQL + Redis implementation that
+% stores votes and articles in MySQL, and uses the na\"ive write-back cache
+% strategy outlined above.
+Redis is not multi-threaded, and can only use one of the server's 16 cores, so
+the figure also includes the Redis performance extrapolated to 16 cores. This is
+an over-estimate, since to achieve this performance in practice, the
+application's already-perfect caching scheme would need to also shard perfectly.
+Noria implements the necessary synchronization internally to take advantage of
+all the cores.
+
+The results show that Noria achieves $\approx$42\% of the theoretical 16-core
+performance of Redis. Given the idealized nature of this experiment, the exact
+absolute numbers should be taken with a pile of salt, but they do provide an
+upper bound of sorts for Redis' performance. That Noria approaches this
+performance is a good indicator that Noria's cache hit performance is comparable
+to that of an ad-hoc caching implementation. And again, Noria does so while
+providing rich SQL queries, and without requiring application-specific caching
+logic.
 
 \section{Bringing Up New Views}
 \label{s:eval:mig}
@@ -328,20 +520,19 @@ state is computed.
 
 Partial state enables such migrations to be instantaneous in many cases\,---\,if
 the new view can be made partial it is instantiated as empty, and immediately
-made available, and will be filled on demand as the application submits reads.
+made available. It is then filled on demand as the application submits reads.
 To demonstrate the different behavior of full and partial materialization for
 migrations, the next benchmark makes a modification to the ``vote'' benchmark
-illustrated by Listing~\ref{l:votes}. It introduces a new table,
-\texttt{ratings}, which has ``ratings'' on a scale from 0 to 1 for each article
-instead of just a binary 0 or 1. It also add a new view, shown in
-Listing~\ref{l:ratings}, which combines the existing votes with the new ratings
-to compute a total article score%
+from Listing~\ref{l:votes}. It introduces a new table, \texttt{ratings}, which
+has ``ratings'' on a scale from 0 to 1 for each article instead of just a binary
+0 or 1. It also add a new view, shown in Listing~\ref{l:ratings}, which combines
+the existing votes with the new ratings to compute a total article score%
 \footnote{By writing the query this way, votes and ratings can co-exist.}.
 
-The benchmark inserts votes and issues the original vote query
-(Listing~\ref{l:votes}) for 90 seconds, and then introduces the new table and
-query (denoted as time 0). From then on, it issues both votes and ratings, and
-queries both views without blocking every 10 milliseconds.
+The benchmark inserts votes and issues the original vote query for 90 seconds,
+and then introduces the new table and query (denoted as time 0). From then on,
+it issues both votes and ratings, and queries both views without blocking every
+10 milliseconds.
 
 \begin{figure}[h]
   \centering
@@ -356,33 +547,22 @@ queries both views without blocking every 10 milliseconds.
 Figure~\ref{f:vote-migration} plots the cache hit rate for reads from the new
 view over time, as well as the write throughput over the course of the
 experiment. With full materialization, the new view is not accessible until its
-construction finishes after $\approx$23 seconds, and during that time, the
-application write performance drops substantially. With partial materialization,
-the view is immediately accessible, though its cache hit rate is initially low.
-However, since there are a few very popular keys, the hit rate quickly climbs to
-over 90\%. Since only results for requested keys are computed, write throughput
-is mostly unaffected by the low upquery rate.
+construction finishes after $\approx$23 seconds. During that time, the
+application write performance drops substantially, as Noria must compute the
+content of the new view.
+
+With partial materialization, the view is immediately accessible, though its
+cache hit rate is initially low. However, since there are a few very popular
+keys, the hit rate quickly climbs to over 90\%. Since only results for requested
+keys are computed, write throughput is mostly unaffected by the migration%
+\footnote{Overall write throughput is lower after the migration since Noria must
+now maintain two views, not just one.}.
 
 The figure also exposes another interesting effect of using partial
 materialization: increased write throughput. With full materialization, every
 write must be processed to completion, since all results are cached. With
 partial state, writes for keys that have not been read can be discarded early,
 as there is no state in memory that must be updated, which increases throughput.
-
-% Figure~\ref{f:vote-migration} shows that, for the vote query, the hit rate is
-% 85\% after about 20s, but this is a very limited sample. To get a better idea of
-% how this time varies for a wider variety of situations, we return to the
-% Lobsters experiment.
-% 
-% \begin{figure}[t]
-%   \centering
-%   \includegraphics{graphs/vote-timeline.pdf}
-%   \caption{Vote read latency timeline at 800k operations per second without
-%   eviction. \textbf{Both axes use a logarithmic scale.} Brighter colors include
-%   more of the tail. Note that y axis is one order of magnitude lower than for
-%   the Lobsters plots.}
-%   \label{f:vote-timeline}
-% \end{figure}
 
 \section{Skew}
 \label{s:eval:patterns}
@@ -394,39 +574,40 @@ this is not the case, the likelihood of missing in the cache is inversely
 proportional to the size of the cache, and you would need to cache computations
 over most of the data to maintain a decent cache hit rate.
 
-Significant skew shows up across a wide range of real-world
-datasets~\cite{power1,power2,network-skew}, including many social
-networks~\cite{network-skew2, community-skew}. In a large public Amazon
+This kind of significant skew is present in Lobsters, which is what allows it to
+run smoothly even when only a small fraction of results are cached. Significant
+skew shows up across a wide range of other real-world
+datasets~\cite{power1,power2,network-skew,large-skew-analysis}, including many
+social networks~\cite{network-skew2, community-skew}. In a large public Amazon
 dataset~\cite{amazon-skew}, the 100,000 most popular book titles (less than 5\%)
 account for roughly 50\% of all book sales, and 75\% of the sales are for the
-top 500,000 titles~\cite{zhang2020permutation}. In the Millennium
-simulation~\cite{large-skew}, an important astrophysical data set that contains
-more than 18 million trees, mass distribution among the trees is highly skewed,
-with the 7 most frequent values appearing over 20 million times each, while
-almost 75\% of the values appear no more than 10
-times~\cite{large-skew-analysis}. This kind of significant skew also appears in
-Lobsters, which is what allows it to run smoothly even when only a small
-fraction of results are cached.
+top 500,000 titles~\cite{zhang2020permutation}.
 
-The degree of skew dictates how aggressively you can reduce the amount of memory
-used by partial state. But it can be difficult to estimate this ahead of time
-for a complex application. The Zipf distribution~\cite{zipf} used in the vote
-benchmark provides what may be a useful heuristic, since it allows
-probabilistically computing the fraction of the data set that is accessed over a
-period of time. Given some number of elements $N$ and a skew parameter $\alpha$,
-the normalized frequency of the $k$th element in a Zipf distribution is given by
+In the vote benchmark, the decision of which articles to fetch and vote for is
+artificially skewed using a Zipfian probability distribution~\cite{zipf}; a
+probability model that commonly describes skewed frequency distributions in
+natural and random datasets. Specifically, given some number of elements $N$ and
+a skew parameter $\alpha$, the normalized frequency of the $k$th element in a
+Zipf distribution is given by
 
 \begin{displaymath}
-  f(k;\alpha,N)={\frac {1/k^{\alpha}}{\sum \limits _{n=1}^{N}(1/n^{\alpha})}}
+  f\left(k;\alpha,N\right)={\frac {1/k^{\alpha}}{\sum \limits _{n=1}^{N}(1/n^{\alpha})}}
 \end{displaymath}
 
-Every time the benchmark performs a read or a write, it samples a value from
-this distribution. Zipf distributes the values such that values at lower $k$ are
-more frequently sampled than those at higher $k$. How frequently is dictated by
-the $\alpha$ parameter. The expected number of keys hit after a certain number
-of samples, $S$ (given by throughput $\times$ period), is then the sum of the
-probability that each element $k$ is sampled at least once during the benchmark,
-given by
+Every time the vote benchmark performs a read or a write, it samples a value,
+$k$, in such a way that the likelihood of choosing a given $k$ is given by
+$f\left(k;\alpha,N\right)$. A higher value for $\alpha$ means that smaller $k$
+values will be sampled more frequently than larger $k$ values, increasing the
+skew.
+
+It is difficult to estimate the degree of skew for a complex application ahead
+of time. But, because many datasets exhibit skew following something akin to a
+Zipfian distribution, an analysis of vote may still yield some helpful
+heuristics for application developers.
+
+In vote, after $S$ samples (given by throughput $\times$ period), the expected
+number of keys hit is the sum of the probability that each element $k$ is
+sampled at least once during the benchmark, given by
 
 \begin{displaymath}
   F(\alpha,N)={\sum \limits _{k=1}^{N} \left(1 - \left(1 - f(k; \alpha, N)\right)^{S}\right)}
@@ -435,16 +616,15 @@ given by
 \begin{figure}[h]
   \centering
   \includegraphics{graphs/vote-formula.pdf}
-  \caption{Probabilistic model of the fraction of 5M keys that are accessed
+  \caption{Probabilistic model of the fraction of 10M keys that are accessed
   (``hot'') during each eviction period ($\approx$ 2s) as throughput increases.
   Each line shows a different amount of skew. Skew (X/Y) denotes that X\% of
-  requests come from Y\% of keys. More keys pushes the curve down. With good
-  eviction, memory use will follow this curve.}
+  requests come from Y\% of keys. More keys pushes the curve down.}
   \label{f:vote-formula}
 \end{figure}
 
 Figure~\ref{f:vote-formula} plots $F(\alpha, N)/N$ after one eviction cycle
-($\approx$ 2s) for different degrees of skew ($\alpha$) with $N=5\text{M}$ as
+($\approx$ 2s) for different degrees of skew ($\alpha$) with $N=10\text{M}$ as
 throughput varies. That value corresponds to the expected fraction of keys
 accessed between any two eviction cycles, and effectively sets a lower bound on
 the fraction of the query results that must be cached. It thus also dictates
@@ -456,9 +636,9 @@ accessed query results.
 In practice, Noria can rarely get quite as low as the graph indicates. Eviction
 is performed on the write path, so if the workload is write-bound, the system
 may not keep up if eviction happens as aggressively as is needed to reach these
-bounds. For example, at 800k requests/s with 90/1 skew, the model predicts that
-only $\approx3.5$\% of keys need be materialized, but Noria can only get to
-$\approx28$\% of the fully materialized cache size before write latency
+bounds. For example, at 1M requests/s with 90/1 skew, the model predicts that
+only $\approx2.5$\% of keys need be materialized, but Noria can only get to
+$\approx21$\% of the fully materialized cache size before write latency
 increases dramatically.
 
 \begin{inprogress}
@@ -467,133 +647,7 @@ increases dramatically.
     2) lengthen the eviction interval;
     3) run with lower skew at lower throughput; or
     4) run with a lower write rate (currently 99/1).
-  None of these are ideal, but 3.5\% vs 28\% is also not particularly
+  None of these are ideal, but 3.5\% vs 21\% is also not particularly
   compelling. We could run at lower load, but then the formula number also
   lowers comparatively.
 \end{inprogress}
-
-\section{Rolling Your Own}
-\label{s:eval:existing}
-
-Many applications already require lower latency and higher throughput than
-straightforward SQL queries against traditional relational databases can
-provide. Developers often go through a sequence of manual optimizations to try
-to mitigate this.
-
-The first step is usually to pre-compute certain computed values and store them
-directly in the database. For example, in Lobsters, each story has a
-``hotness'', which is a score of how popular a story is, and thus how far up it
-should appear in listings. This value depends on a lot of parameters, such as
-the number of votes, the number of comments, etc. It would be prohibitively
-expensive to compute a story's hotness directly in the queries,
-especially in the context of computing the front page view, since it requires
-the hotness for \emph{all}. Instead, the Lobsters developers add a computed
-column, \texttt{hotness}, to the \texttt{story} table. This column is then
-updated whenever relevant data changes, such as when:
-
-\begin{itemize}
-    \item a story is upvoted or downvoted.
-    \item a comment is added to a story.
-    \item a comment on a story is upvoted or downvoted.
-    \item a comment or vote is deleted.
-    \item one story is merged into another.
-\end{itemize}
-
-There are several such computed columns in Lobsters, and all write paths must
-ensure that they correctly update all related computed values. This process is
-manual and error-prone. With Noria, this kind of manual manual materialization
-is not necessary\,---\,Noria performs and maintains relevant materializations as
-needed.
-
-If database optimizations do not suffice for the application's performance
-needs, developers usually add a cache in front of the database. This cache
-often takes the form of a key-value store which holds frequently accessed,
-computed results. When it issues a query, the application checks the (fast)
-cache first, and only if the results are not available in cache is the backend
-consulted.
-
-A dedicated cache speeds up reads that hit, but introduces significant
-application complexity. Just like for manual query optimizations, all parts of
-the application that modify data related to any given cache entry must know to
-also invalidate or update the cache. In addition, the developers must ensure
-that if multiple clients miss on a given entry, they do not hit the backend
-database all at once. This is especially important if a popular entry is
-invalidated, as it may cause a ``thundering herd'' effect where a large number
-of clients swarm the backend and overwhelm it. Furthermore, since the clients
-must now access two separate systems, mechanisms must be in place to ensure that
-the cache remains consistent with the underlying data. This is difficult since
-data may be updated at any time, including just after a client has fetched the
-(then) latest data from the database to update the cache.
-
-Implementing caching ``correctly'' requires highly sophisticated
-machinery~\cite{facebook-memcache, transactional-cache, orm-cache, sql-cache}
-which developers may not even think to employ. A survey from 2016 found that
-0.3-3.0\% of application code spread across 2.1-10.8\% of the application's
-source files is caching-related, and that cache-related issues make up 1-5\% of
-all issues~\cite{caching-is-hard}. Since Noria integrates the cache with the
-database, it relieves the application from considering these problems \,---\,the
-cache is maintained directly by the database, and the application code needs no
-modifications to gain the benefits of caching.
-
-Despite how error-prone the approach is, ad-hoc, per-application caching is
-still common in practice. And while Noria eliminates most of the developer
-burden of getting caching right, it must offer competitive performance with
-manually constructed caching solutions to present a viable alternative.
-Unfortunately, this is difficult to evaluate, since high-performance solutions
-are often developed specifically for a given application, and not available as
-general-purpose tools. And effectively applying the general-purpose tools that
-\textbf{are} available, like memcache and redis, requires significant effort on
-the part of the application authors (or the evaluators). To manually add caching
-support to Lobsters' ~80 queries, including thundering herd mitigation and
-incremental updates, would be a massive undertaking.
-
-In an attempt to approximate how a carefully planned and optimized application
-caching deployment might perform, the next experiment runs the vote benchmark
-against Redis~\cite{redis} with the following modifications:
-
-\begin{itemize}
- \item Every access hits in cache, to emulate perfect thundering herd mitigation
-   and invalidation-avoidance schemes.
- \item Nearly all accesses (99.9\%) are reads, since writes would be
-   bottlenecked by the backing store.
- \item All accesses are for a single integer value, to emulate a system that has
-   perfect cache coverage. Request access keys are chosen according to a Zipfian
-    distribution with $\alpha = 1.15$, so that 1\% of keys make up 90\% of
-    requests.
- \item Data is not stored anywhere except Redis.
- \item Accesses are batched to reduce serialization cost and increase
-   throughput. Specifically, reads are \texttt{MGET}s, and writes are pipelined
-    \texttt{INCRBY}s.
-\end{itemize}
-
-This is not a realistic use of Redis as a cache, and ignores the complexities of
-integrating the cache with the application, but it allows us to ``assume the
-best'' about the underlying caching strategy and system. The benchmark runs for
-four minutes, and then samples latencies for another two minutes.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics{graphs/vote-redis.pdf}
-  \caption{Achieved throughput vs 90th \%-ile request latency in cache-optimized
-  vote. Offered load increases along the points on each line. Vertical
-  lines are $16\times$ the cliff of the corresponding experiment.}
-  \label{f:vote-redis}
-\end{figure}
-
-Figure~\ref{f:vote-redis} shows a throughput-latency plot that explores the
-performance profiles of Redis and Noria under these experimental conditions%
-\footnote{Noria runs with the same modified access patterns as outlined for
-Redis.}. For comparison, it also includes a MySQL + Redis implementation that
-stores votes and articles in MySQL, and uses the na\"ive write-back cache
-strategy outlined above. Since Redis is not multi-threaded, and so can only use
-one of the server's 16 cores, the figure also includes the Redis performance
-extrapolated to 16 cores. To achieve this performance in practice, the
-application's already-perfect caching scheme would also need to shard perfectly.
-
-Due to the simplifications in this particular benchmark, the experimental
-results serve primarily to determine upper bounds for possible performance:
-Noria achieves 25\% of the theoretical best you could ever do with Redis. Since
-the caching is unlikely to be perfect as in these experiments, Noria's
-performance is likely to be close to what a ``real'' caching system achieves.
-And Noria achieves this performance while providing rich SQL queries without
-application-specific caching logic.

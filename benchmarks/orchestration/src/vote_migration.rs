@@ -58,7 +58,7 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
                 let mut benchmark = crate::noria_bin(ssh, "vote-migration");
                 benchmark
                     .arg("--migrate=90")
-                    .arg("--runtime=240")
+                    .arg("--runtime=160")
                     .arg("--do-it-all")
                     .arg("--articles=10000000")
                     .stdout(std::process::Stdio::null());

@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 clap = "2"
-cliff = "0.3.1"
+cliff = "0.3.2"
 color-eyre = "0.5"
 futures-util = { version = "0.3", default-features = false, features = [ "async-await", "alloc" ] }
 openssh = "0.6"
