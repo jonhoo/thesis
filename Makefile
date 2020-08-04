@@ -56,7 +56,9 @@ graphs/vote-redis.pdf: graphs/common.py graphs/vote-redis.py \
 	benchmarks/results/vote-redis/parsed.pickle
 	python graphs/vote-redis.py graphs/vote-redis
 
-graphs/vote-formula.pdf: graphs/common.py graphs/vote-formula.py benchmarks/results/vote-formula/results.log
+graphs/vote-formula.pdf: graphs/common.py graphs/vote-formula.py \
+	benchmarks/results/vote-formula/results.log \
+	benchmarks/results/vote/parsed.pickle
 	python graphs/vote-formula.py graphs/vote-formula
 
 graphs/vote-%.pdf: graphs/common.py benchmarks/results/vote/parsed.pickle graphs/vote-%.py

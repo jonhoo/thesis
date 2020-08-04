@@ -3,14 +3,11 @@ const NUM: usize = 10000000;
 fn main() {
     println!("skew\talpha\tthroughput\tpercentage");
     let rates = [
-        5_000, 10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 750_000, 1_000_000, 2_000_000,
+        5_000, 10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 750_000, 1_000_000,
     ];
 
     // How large a fraction is access in "one eviction period"?
-    // Noria evicts once per second, but keeping in mind that eviction may take some time
-    // and such, let's overestimate memory use so we don't overstate Noria's performance.
-    // So we use an eviction period of 2 seconds.
-    let period = 2;
+    let period = 1;
 
     for &(skew, alpha) in &[("80/20", 0.886), ("80/5", 0.99), ("90/1", 1.15)] {
         let harmonic = harmonic(NUM, alpha);

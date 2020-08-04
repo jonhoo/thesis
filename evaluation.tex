@@ -617,14 +617,14 @@ sampled at least once during the benchmark, given by
   \centering
   \includegraphics{graphs/vote-formula.pdf}
   \caption{Probabilistic model of the fraction of 10M keys that are accessed
-  (``hot'') during each eviction period ($\approx$ 2s) as throughput increases.
+  (``hot'') during each eviction period ($\approx$ 1s) as throughput increases.
   Each line shows a different amount of skew. Skew (X/Y) denotes that X\% of
   requests come from Y\% of keys. More keys pushes the curve down.}
   \label{f:vote-formula}
 \end{figure}
 
 Figure~\ref{f:vote-formula} plots $F(\alpha, N)/N$ after one eviction cycle
-($\approx$ 2s) for different degrees of skew ($\alpha$) with $N=10\text{M}$ as
+($\approx$ 1s) for different degrees of skew ($\alpha$) with $N=10\text{M}$ as
 throughput varies. That value corresponds to the expected fraction of keys
 accessed between any two eviction cycles, and effectively sets a lower bound on
 the fraction of the query results that must be cached. It thus also dictates
@@ -633,21 +633,37 @@ query results, the application would likely need those keys again shortly after
 evicting them, and Noria would continuously compute and then discard frequently
 accessed query results.
 
-In practice, Noria can rarely get quite as low as the graph indicates. Eviction
-is performed on the write path, so if the workload is write-bound, the system
-may not keep up if eviction happens as aggressively as is needed to reach these
-bounds. For example, at 1M requests/s with 90/1 skew, the model predicts that
-only $\approx2.5$\% of keys need be materialized, but Noria can only get to
-$\approx21$\% of the fully materialized cache size before write latency
-increases dramatically.
+Also indicated on the figure is the lowest ratio achieved between operator state
+size%
+\footnote{This is measured using internal estimates of operator state size, not
+VmRSS, so as to only measure the fraction of keys cached.}
+with and without partial state in the vote benchmark at 250k operations per
+second. The measured value of 0.8\% gets close to the expected value of 0.46\%
+computed by the formula for the 90/1 skew that the vote benchmark uses. If the
+eviction is tuned to be even more aggressive, the benchmark can no longer keep
+up. This suggests that Noria is indeed able to function at close to the
+predicted cache ratio, and that the model bears some association to observed
+behavior.
 
-\begin{inprogress}
-  We have a couple of options here:
-    1) try to find ways to optimize eviction;
-    2) lengthen the eviction interval;
-    3) run with lower skew at lower throughput; or
-    4) run with a lower write rate (currently 99/1).
-  None of these are ideal, but 3.5\% vs 21\% is also not particularly
-  compelling. We could run at lower load, but then the formula number also
-  lowers comparatively.
-\end{inprogress}
+At very high offered load, Noria can rarely get quite as low as the graph
+indicates. For example, at 1M operations per second, Noria must maintain 21\% of
+keys even though the model predicts that 1.4\% should be sufficient. There are
+multiple related reasons for this.
+
+First, Noria currently implements only \emph{randomized} eviction, so frequently
+accessed keys will occasionally be evicted. When they do, a large number of
+requests must wait for its result to be recomputed. With a less naive eviction
+scheme, such as LRU, such evictions can be avoided, and hot keys will never
+miss.
+
+Second, more upqueries must be serviced per second. Since upqueries are
+performed by the data flow, which is single-threaded along any given path, the
+upquery processing itself becomes a bottleneck. To maintain acceptable latency,
+Noria is forced to keep many more keys in cache than the model predicts so that
+not too many upqueries occur.
+
+And third, Noria's eviction runs at a fixed interval of one second. As offered
+load increases, so too does the number of keys read, and the number of keys
+cached in that one second. The eviction logic thus has more keys it needs to
+evict each time it runs. This in turn takes up more data flow cycles on the
+write path that could otherwise be dedicated to serving upqueries.

@@ -74,7 +74,7 @@ pub(crate) async fn one(
         let mut targets = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
         } else if !partial {
-            Box::new(cliff::LoadIterator::from(vec![1_000_000]))
+            Box::new(cliff::LoadIterator::from(vec![250_000, 1_000_000]))
                 as Box<dyn cliff::CliffSearch + Send>
         } else if write_every == 10_000 {
             let mut s = cliff::ExponentialCliffSearcher::until(1_000_000, 1_000_000);

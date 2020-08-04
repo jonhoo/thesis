@@ -7,12 +7,11 @@ use tsunami::Tsunami;
 
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
-const GB: usize = 1024 * MB;
 
 /// vote_mem; requires at least two machines: a server and 1+ clients
 #[instrument(name = "vote-mem", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    crate::explore!([(1_000_000, 100, "skewed", 4)], one, ctx, true)
+    crate::explore!([(250_000, 100, "skewed", 4)], one, ctx, true)
 }
 
 #[instrument(err, skip(ctx))]
@@ -65,7 +64,7 @@ pub(crate) async fn one(
         let mut limits = if let Some(limits) = limits {
             Box::new(cliff::LoadIterator::from(limits)) as Box<dyn cliff::CliffSearch + Send>
         } else {
-            Box::new(cliff::BinaryMinSearcher::until(2 * GB, 32 * MB))
+            Box::new(cliff::BinaryMinSearcher::until(512 * MB, 4 * MB))
                 as Box<dyn cliff::CliffSearch + Send>
         };
         let mut zero = Some(0);
