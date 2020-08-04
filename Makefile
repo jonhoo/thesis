@@ -5,7 +5,15 @@ all:
 
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
-	    evaluation.tex \
+	    00-introduction.tex \
+	    01-background.tex \
+	    02-noria.tex \
+	    03-related-work.tex \
+	    04-partial-model.tex \
+	    05-partial.tex \
+	    06-evaluation.tex \
+	    07-discussion.tex \
+	    A1-discussion.tex \
 	    graphs/lobsters-throughput.pdf \
 	    graphs/lobsters-memory.pdf \
 	    graphs/lobsters-memlimit-cdf.pdf \

@@ -1,0 +1,18 @@
+\section{Interaction with sharding}
+
+\section{When can partial state be used?}
+
+\begin{itemize}
+ \item SELECT COUNT(*) FROM table;
+ \item Add ``karma'' query:
+   \begin{itemize}
+    \item If already have ``karma'' column, trivial in DB. But, equivalent in
+      Noria to saying that query was there from the start, so no migration.
+    \item If \textbf{not} already have ``karma'' column, DB has two choices:
+     \begin{enumerate}
+      \item Compute column == expensive, and same as Noria would do
+      \item Make query compute value on-demand -- same cost, but repeated!
+     \end{enumerate}
+   \end{itemize}
+ \item TopK
+\end{itemize}

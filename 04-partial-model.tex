@@ -1,0 +1,7 @@
+There are two reasons why the results for a query may not be known: either the
+query as a whole has not been seen before and must be incorporated, or the
+results for the application's particular parameter values are missing from the
+materialized view. This can occur either because that particular set of
+parameter values have never been requested before, or because those results have
+since been evicted. In either case, Noria must execute an upquery before it can
+respond to the application's request.

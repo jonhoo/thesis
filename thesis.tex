@@ -101,86 +101,40 @@ and represents the joint work of the coauthors of that paper.
 
 \chapter{Introduction}
 
-\section{Motivation}
-
-\begin{enumerate}
- \item Why is materialization useful for real-world use-cases?
- \item In what ways are existing materialization techniques lacking?
- \item How does partial state improve the usefulness of materialization?
-\end{enumerate}
-
-Caching.
-OSDI paper.
-Caching is labor intensive + error prone (Facebook memcached paper).
-DB view materialization (like DBToaster) ``all or nothing''.
-Commercial DB view materialization limited and slow (ref OSDI paper).
-By folding the cache into the database, database knows how to keep it up
-to date\,---\,avoids having that logic threaded through the application.
-Partial state (and caching in general) enables \textbf{selective} materialization.
-Materialization is generally useful when reads are more common than
-writes, since it shifts the computation from reads to writes.
-But, without partial state, materialization is an ``off/on'' option —
-either you materialize all the results for a query, or none [TODO: not
-quite true — more subtlety here — depends what you mean by ``query''
-(e.g., parameterized or not)].
-
-\section{Challenges}
-\section{Approach}
-\section{Noria}
-\section{Contribution}
-\section{Dissertation Outline}
+\input{00-introduction.tex}
 
 \chapter{Background}
 
+\input{01-background.tex}
+
 \chapter{Noria}
+
+\input{02-noria.tex}
 
 \chapter{Related Work}
 
-\begin{inprogress}
-I need to explain \textbf{somewhere} the various ways in which fully
-materialized systems can approximate partial. Primarily: a lookup key join table
-(like DD), or fully materializing complete queries (i.e., w/o parameters).
-\end{inprogress}
+\input{03-related-work.tex}
 
 \chapter{A Model of Partial State}
 
-There are two reasons why the results for a query may not be known: either the
-query as a whole has not been seen before and must be incorporated, or the
-results for the application's particular parameter values are missing from the
-materialized view. This can occur either because that particular set of
-parameter values have never been requested before, or because those results have
-since been evicted. In either case, Noria must execute an upquery before it can
-respond to the application's request.
+\input{04-partial-model.tex}
 
 \chapter{Practical Partial State}
 
+\input{05-partial.tex}
+
 \chapter{Evaluation}
 
-\input{evaluation.tex}
+\input{06-evaluation.tex}
 
 \chapter{Discussion}
 
-\section{Interaction with sharding}
-
-\section{When can partial state be used?}
-
-\begin{itemize}
- \item SELECT COUNT(*) FROM table;
- \item Add ``karma'' query:
-   \begin{itemize}
-    \item If already have ``karma'' column, trivial in DB. But, equivalent in
-      Noria to saying that query was there from the start, so no migration.
-    \item If \textbf{not} already have ``karma'' column, DB has two choices:
-     \begin{enumerate}
-      \item Compute column == expensive, and same as Noria would do
-      \item Make query compute value on-demand -- same cost, but repeated!
-     \end{enumerate}
-   \end{itemize}
- \item TopK
-\end{itemize}
+\input{07-discussion.tex}
 
 \appendix
 \chapter{Noria In Simpler Terms}
+
+\input{A1-discussion.tex}
 
 \backmatter
 
