@@ -21,8 +21,101 @@ either you materialize all the results for a query, or none [TODO: not
 quite true — more subtlety here — depends what you mean by ``query''
 (e.g., parameterized or not)].
 
+The dataflow architecture has seen a resurgence in recent years, with systems
+like Kafka\cite{kafka}, Spark\cite{spark,spark-streaming}, Flink\cite{flink}, and
+Naiad\cite{naiad} all seeing interest from academia and industry alike. The term
+``dataflow'' covers a wide range of systems: streaming systems (like Kafka),
+stream processing systems (like Spark and Flink), and dataflow computation
+systems (like Naiad). These systems vary in their design goals, their intended
+uses, and their system architecture. Yet they all share the property that they
+take data as \emph{input}, and feed processed data forward through a graph of
+\emph{operators}.
+
+This data-flow design is attractive for ready-heavy applications where the
+computation is relatively fixed over time, and it is the data that changes.
+We can store the results of the computation to serve reads quickly, and use the
+known data dependencies to keep those results efficiently up to date as the data
+changes. Explicitly modeling the compute and data flow this way also allows
+dataflow systems to easily scale to multiple cores or physical hosts; any
+dataflow edge can be realized as a function call, a thread synchronization
+point, or a network channel, and the model still ``works''.
+
+These systems all face a decision when it comes to \emph{stateful} operators\,
+---\,operators that must maintain some state in order to process their inputs.
+To compute the result of a join for example, the values in the ``other side'' of
+the join must be available to the operator that performs the join.
+Traditionally, dataflow systems have made one of two decisions: ignore such
+operators, make all the state the operator needs available, or keep only a
+subset of the state. Each of these caters to a particular type of application.
+Non-stateful dataflow is primarily useful as a messaging fabric. Fully stateful
+dataflow works well for applications that operate over small data sets, or where
+the application's working set spans nearly the entire data set.
+
+A third intermediate solution called \emph{windowing} is an option for some
+applications. Windowed state only keeps \emph{recent} data, which ensures that
+the state remains small over time. However, this also means that old state is
+not reflected in computational outputs. If an application needs to compute over
+the full application state, such as all users or all articles, windowing does
+not work. Windowing is primarily used for analytics applications, where
+historical data is less relevant.
+
+But unfortunately, not all applications fit into one of these categories. In
+particular, user-facing applications whose working set is significantly smaller
+than their total dataset size are not well served by these options. Stateless
+operation is not feasible, since evaluating the dataflow from scratch each time
+would incur significant extra latency. Fully stateful operation is similarly
+unattractive\,---\,computational resources would need to be provisioned for
+computing over all the application's data, even though only a small subset of
+the computation output is observed. And windowing is frequently not applicable
+to these applications; since users may request data that lives outside the
+window, that data must still be available.
+
+This thesis presents the Noria dataflow system; a dataflow system that supports
+\emph{partially-stateful dataflow}. In Noria, operators act as though they have
+access to the full state of their inputs, while in reality that state is lazily
+constructed behind the scenes; a given piece of the input state for an operator
+is only produced and stored when the operator asks for that piece. From that
+point forward, the state is continuously updated to reflect new data added to
+the system. If an operator only accesses part of its input state, the remaining
+parts are not computed or stored.
+
+This approach provides a number of benefits. First, its memory use is
+\textbf{proportional to the working set} of the application, rather than to the
+size of the data. Second, it works for applications that \textbf{cannot use
+windowing}. Third, it allows the system to \textbf{eagerly discard}, and avoid
+computation for, data that later operators have never needed, as long as that
+data can later be re-produced. And finally, it allows the application to
+\textbf{selectively evict} from stateful operators as the working set changes.
+
+Another key advantage of partial state is that it makes it possible to extend a
+running dataflow program \textbf{lazily}. Noria can cheaply accommodate new
+segments of dataflow by instantiating the new dataflow as initially empty. That
+new dataflow is then populated through application activity, rather than by
+incurring a large upfront cost.
+
+My thesis will cover the design and implementation of partially stateful
+dataflow in Noria in detail, including several key components that were only
+briefly sketched or not present at all in the earlier OSDI paper on
+Noria\cite{noria} that I co-authored. I will discuss the specific problems that
+arise in depth, and provide solutions to those problems.
+
 \section{Challenges}
 \section{Approach}
 \section{Noria}
-\section{Contribution}
+\section{Contributions}
+
+The contributions of my thesis, subject to this proposal, will be:
+
+\begin{itemize}
+ \item An algorithm for implementing upqueries.
+ \item Support for partial in sharded, complex applications.
+ \item Key correctness invariants for partially stateful dataflow.
+ \item Case analysis of the issues that arise when introducing partial state to
+	 a distributed, high-performance stateful dataflow processing system.
+ \item Techniques for overcoming those issues while preserving system
+	 correctness, performance, and scalability.
+ \item Micro and macro evaluations of the performance and memory impact of
+	 introducing partial state to an application's dataflow.
+\end{itemize}
+
 \section{Dissertation Outline}

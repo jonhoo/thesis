@@ -5,3 +5,32 @@ materialized view. This can occur either because that particular set of
 parameter values have never been requested before, or because those results have
 since been evicted. In either case, Noria must execute an upquery before it can
 respond to the application's request.
+
+Partial state is key to Noria's feasibility\,---\,without it, all results for
+every prepared query must be computed and maintained, at a significant memory
+and compute cost. With partial state, query results are instead populated on
+demand, and only parts of the results relevant to the application's particular
+query parameters are computed and maintained. Partial state also enables Noria
+to implement eviction, so that the materialization cost is kept low even as the
+underlying workload changes.
+
+The essence of the design is to introduce a notion of ``missing state'' to the
+dataflow engine. And alongside it, a mechanism to retroactively, and
+efficiently, compute over past inputs to repopulate that missing state on
+demand. This mechanism is called the ``upquery''. An upquery reaches through the
+dataflow towards its inputs, and triggers re-processing of dataflow messages
+needed to compute missing state. By modeling re-population of state this way,
+most of the dataflow can remain oblivious to the fact that state can be missing.
+Operators implement only regular, ``forward'' data-flow, and the dataflow fabric
+takes care of issuing upqueries and re-executing operators over old data as
+needed.
+
+This design, while alluring, introduces a number of challenges in practice. Many
+of these stem from operators that may now need to communicate with their inputs
+to populate needed state. Those inputs may again need to retrieve that state
+from their inputs, and so on until the source of the needed data is reached.
+Upqueries logically flow in the ``opposite'' direction of the data, something
+existing dataflow systems do not generally allow. Upqueries also race with other
+upqueries, and with concurrent modifications propagating through the dataflow,
+and the dataflow must be careful to not let permanent inconsistencies arise as a
+result of this.
