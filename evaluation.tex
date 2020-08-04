@@ -75,7 +75,7 @@ Experiments run on Amazon EC2 r5n.4xlarge instances, which have 16 vCPUs and
 generating clients are split across one or more m5n.4xlarge instances depending
 on the desired load factor.
 
-The benchmark setups are all ``partially open-loop''~\cite{frank-open-loop}:
+The benchmarks are all ``partially open-loop''~\cite{frank-open-loop}:
 clients generate load according to a workload-dictated distribution of
 interarrival-times, and has a limited number of backend requests outstanding,
 queueing additional requests. This ensures that clients maintain the measurement
