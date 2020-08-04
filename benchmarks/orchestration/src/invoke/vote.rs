@@ -108,15 +108,15 @@ pub(crate) async fn run(
 
                     if let (Some(pct), Some(sjrn)) = (pct, sjrn) {
                         let pct: Result<u32, _> = pct.parse();
-                        let sjrn: Result<u32, _> = sjrn.parse();
+                        let sjrn: Result<f64, _> = sjrn.parse();
                         if let (Ok(pct), Ok(sjrn)) = (pct, sjrn) {
                             got_lines = true;
 
                             if (field == "read" && pct == 95) || (field == "write" && pct == 50) {
-                                if sjrn > 20_000 {
+                                if sjrn > 20_000.0 {
                                     tracing::error!(
                                         endpoint = field,
-                                        latency = sjrn,
+                                        latency = %sjrn,
                                         pct,
                                         "high sojourn latency"
                                     );

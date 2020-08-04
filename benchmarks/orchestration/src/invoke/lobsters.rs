@@ -131,14 +131,14 @@ pub(crate) async fn run(
                     tracing::error!(case = "bad line", message = &*line);
                     continue;
                 };
-                let us: usize = if let Ok(us) = us.parse() {
+                let us: f64 = if let Ok(us) = us.parse() {
                     us
                 } else {
                     tracing::error!(case = "bad line", message = &*line);
                     continue;
                 };
-                if us > 200_000 {
-                    tracing::error!(endpoint = field, sojourn = us, "high sojourn latency");
+                if us > 200_000.0 {
+                    tracing::error!(endpoint = field, sojourn = %us, "high sojourn latency");
                     on_overloaded();
                 }
             }
