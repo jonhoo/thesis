@@ -106,28 +106,23 @@ fig = plt.figure(constrained_layout=True)
 gs = GridSpec(2, 1, figure=fig, height_ratios = [0.8, 0.2])
 hi = fig.add_subplot(gs[0, :])
 lo = fig.add_subplot(gs[1, :])
-limits.sort()
 limits = [512, 256, 128, 96]
-limits.sort()
 colors = common.memlimit_colors(len(limits))
-limits = limits + [0]
 i = 0
 base = common.load('lobsters', only_good = False)
+base = base.query('op == "all" & until == 1 & partial == True & metric == "sojourn" & scale == %d' % (plot_scale))
+# estimate base table size
+est = base.query('memlimit == %f' % 0.25)
+no_dur = est.query('durable == False')['vmrss'].item()
+dur = est.query('durable == True')['vmrss'].item()
+delta = no_dur - dur
 for limit in limits:
     limit /= 1024.0
     d = data.query('memlimit == %f' % limit).reset_index()
-    opmem = base.query('until == 1 & partial == True & scale == %d & memlimit == %f' % (plot_scale, limit))['vmrss'].max()
-    if limit == 0:
-        partial = d.query("partial == True")
-        # full = d.query("partial == False")
-        opmem_full = base.query('until == 1 & partial == False & scale == %d & memlimit == 0' % (plot_scale))['vmrss'].max()
-        lo.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
-        hi.plot(partial["latency"], partial["pct"], color = 'black', ls = "-", label = '%s (no eviction)' % (common.bts(opmem)))
-        # ax.plot(full["latency"], full["pct"], color = 'black', ls = "--", label = '%s (no partial)' % (common.bts(opmem_full)))
-    else:
-        lo.plot(d["latency"], d["pct"], color = colors[i], label = '%s' % (common.bts(opmem)))
-        hi.plot(d["latency"], d["pct"], color = colors[i], label = '%s' % (common.bts(opmem)))
-        i += 1
+    opmem = base.query('durable == False & memlimit == %f' % (limit))['vmrss'].item()
+    lo.plot(d["latency"], d["pct"], color = colors[len(limits) - i - 1])
+    hi.plot(d["latency"], d["pct"], color = colors[len(limits) - i - 1], label = '%s + %s' % (common.bts(delta), common.bts(opmem - delta)))
+    i += 1
 
 hi.set_ylim(75, 101)
 hi.set_yticks([75, 90, 95, 100])
@@ -136,7 +131,7 @@ hi.set_xscale('log')
 hi.set_xlim(4, 100)
 hi.set_xticks([5, 10, 20, 50])
 hi.set_xticklabels(["5ms", "10ms", "20ms", "50ms"])
-hi.legend(loc = 'lower right')
+hi.legend(loc = 'lower right', title = 'Base table + view VmRSS')
 
 lo.set_ylim(0, 75)
 lo.set_yticks([0, 25, 50, 75])

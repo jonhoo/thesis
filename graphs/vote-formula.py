@@ -43,13 +43,13 @@ for skew in skews:
     if skew == "uniform":
         ax.plot(d["throughput"], d["percentage"], '.-.', color='black', label='uniform')
     else:
-        ax.plot(d["throughput"], d["percentage"], '.-', color=colors[i], label='%s ($\\alpha = %.3f$)' % (skew, d["alpha"].min()))
+        ax.plot(d["throughput"], d["percentage"], '.-', color=colors[i], label='%s ($\\alpha$=%.3f)' % (skew, d["alpha"].min()))
         i += 1
 
 ax.plot([250000], [perc], '*', ms=15, color='black')
 bbox_props = dict(boxstyle="larrow", fc=common.colors['noria'], ec="g", lw=2)
-t = ax.text(400000, 3.4, "Vote at 250k", ha="center", va="center", rotation=45,
-            size=15,
+t = ax.text(480000, 4.8, "Achieved in vote benchmark", ha="center", va="center", rotation=45,
+            size=13,
             bbox=bbox_props)
 
 ax.xaxis.set_major_formatter(common.kfmt)

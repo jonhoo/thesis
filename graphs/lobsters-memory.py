@@ -42,9 +42,7 @@ bars1 = mem.bar([x - width/2 for x in xticks], [prune['vmrss'].item(), full.quer
 bars1[0].set_color(common.colors['noria'])
 bars1[1].set_color(common.colors['full'])
 
-bars2 = mem.bar([x + width/2 for x in xticks], [prune_dur['vmrss'].item(), full.query('durable == True')['vmrss'].item()], width, alpha = 0.99, hatch = '//')
-bars2[0].set_color(common.colors['noria'])
-bars2[1].set_color(common.colors['full'])
+bars2 = mem.bar([x + width/2 for x in xticks], [prune_dur['vmrss'].item(), full.query('durable == True')['vmrss'].item()], width, color = '#666')
 
 mem.set_xticks(xticks)
 mem.set_xticklabels(xs)
