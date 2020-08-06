@@ -150,6 +150,7 @@ pub(crate) async fn run(
             }
         }
         _ = exit.recv() => {
+            tracing::warn!("exiting benchmark early as requested");
             return Ok(());
         }
     };
@@ -291,7 +292,6 @@ pub(crate) async fn run(
                 on_overloaded();
             }
             results.flush().await?;
-            drop(results);
         }
         tracing::debug!("all results saved");
     } else {

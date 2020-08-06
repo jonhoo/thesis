@@ -57,6 +57,10 @@ pub(crate) async fn run(
 
     tracing::trace!(time = ?prime_took, "priming succeeded");
 
+    if *exit.borrow() {
+        return Ok(());
+    }
+
     tracing::debug!("benchmark");
     let mut bench = lobsters_client(c, server, scale, noria)
         .arg("--runtime=320")
@@ -150,6 +154,9 @@ pub(crate) async fn run(
     tokio::select! {
         r = fin => {
             let _ = r?;
+            if *exit.borrow() {
+                return Ok(());
+            }
         }
         _ = exit.recv() => {
             tracing::warn!("exiting benchmark early as requested");
@@ -263,7 +270,6 @@ pub(crate) async fn run(
             }
             results.flush().await?;
         }
-
         tracing::debug!("all results saved");
     } else {
         tracing::debug!("partial results saved");
