@@ -184,8 +184,8 @@ pub(crate) async fn one(
                         },
                         c,
                         &server,
+                        crate::invoke::lobsters::Backend::Noria,
                         &mut ctx,
-                        true,
                     )
                     .await?;
 

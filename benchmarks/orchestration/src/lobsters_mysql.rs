@@ -14,25 +14,17 @@ max_prepared_stmt_count = 131056
 /// lobsters-mysql; requires two machines: a client and a server
 #[instrument(name = "lobsters-mysql", skip(ctx))]
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
-    let _ = one((), None, ctx).await?;
-    Ok(())
+    crate::explore!([(true,), (false,),], one, ctx, false)
 }
 
 #[instrument(err, skip(ctx))]
 pub(crate) async fn one(
-    _: (),
+    parameters: (bool,),
     loads: Option<Vec<usize>>,
     mut ctx: Context,
 ) -> Result<usize, Report> {
+    let (optimized,) = parameters;
     let mut last_good_scale = 0;
-
-    // make sure we shouldn't already be exiting.
-    // this also sets it up so that _any_ recv from exit means we should exit.
-    if let Some(false) = ctx.exit.recv().await {
-    } else {
-        tracing::info!("exiting as instructed");
-        return Ok(0);
-    }
 
     let mut aws = crate::launcher();
     aws.set_mode(aws::LaunchMode::on_demand());
@@ -170,6 +162,8 @@ pub(crate) async fn one(
 
         let mut scales = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        } else if !optimized {
+            Box::new(cliff::ExponentialCliffSearcher::until(1, 2))
         } else {
             Box::new(cliff::ExponentialCliffSearcher::until(128, 32))
         };
@@ -190,7 +184,11 @@ pub(crate) async fn one(
                 let scale_span = tracing::info_span!("scale", scale);
                 async {
                     tracing::info!("start benchmark target");
-                    let prefix = format!("lobsters-mysql-{}-0m", scale);
+                    let mut backend = String::from("mysql");
+                    if !optimized {
+                        backend.push_str("_noopt");
+                    }
+                    let prefix = format!("lobsters-{}-{}-0m", backend, scale);
 
                     // no need to start anything here -- we start MariaDB in setup
                     // and then the priming takes care of dropping/creating the DB.
@@ -203,8 +201,8 @@ pub(crate) async fn one(
                         },
                         c,
                         &server,
+                        crate::invoke::lobsters::Backend::Mysql { optimized },
                         &mut ctx,
-                        false,
                     )
                     .await?;
 

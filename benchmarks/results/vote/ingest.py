@@ -13,7 +13,7 @@ except:
    import pickle
 import sys
 
-vote_fn = re.compile("(full|partial)(_nj)?\.(\d+)a\.(\d+)t\.(\d+)r\.(\d+)c\.(\d+)m\.(uniform|skewed)\.log")
+vote_fn = re.compile("(full|partial)(_nj)?(_dur)?\.(\d+)a\.(\d+)t\.(\d+)r\.(\d+)c\.(\d+)m\.(uniform|skewed)\.log")
 def parse(df, path):
     match = vote_fn.fullmatch(os.path.basename(path))
     if match is None:
@@ -25,12 +25,13 @@ def parse(df, path):
 
     partial = match.group(1) == "partial"
     join = match.group(2) != "_nj"
-    articles = int(match.group(3))
-    target = int(match.group(4))
-    write_every = int(match.group(5))
-    clients = int(match.group(6))
-    memlimit = float(int(match.group(7))) / 1024.0 / 1024.0 / 1024.0
-    distribution = match.group(8)
+    durable = match.group(3) == "_dur"
+    articles = int(match.group(4))
+    target = int(match.group(5))
+    write_every = int(match.group(6))
+    clients = int(match.group(7))
+    memlimit = float(int(match.group(8))) / 1024.0 / 1024.0 / 1024.0
+    distribution = match.group(9)
     generated = 0.0
     actual = 0.0
     sload1 = 0.0
@@ -76,6 +77,7 @@ def parse(df, path):
     meta = {
         'target': target,
         'partial': partial,
+        'durable': durable,
         'join': join,
         'articles': articles,
         'clients': clients,
@@ -106,7 +108,7 @@ def parse(df, path):
     data["distribution"] = data["distribution"].astype("string")
 
     # set the correct index
-    data.set_index(["target", "partial", "join", "distribution", "write_every", "clients", "articles", "memlimit", "op", "until", "metric"], inplace=True)
+    data.set_index(["target", "partial", "durable", "join", "distribution", "write_every", "clients", "articles", "memlimit", "op", "until", "metric"], inplace=True)
     data = data.sort_index()
     return df.append(data)
 

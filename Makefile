@@ -16,6 +16,7 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    A1-discussion.tex \
 	    graphs/lobsters-throughput.pdf \
 	    graphs/lobsters-memory.pdf \
+	    graphs/lobsters-opmem.pdf \
 	    graphs/lobsters-memlimit-cdf.pdf \
 	    graphs/lobsters-durability-cdf.pdf \
 	    graphs/lobsters-timeline.pdf \

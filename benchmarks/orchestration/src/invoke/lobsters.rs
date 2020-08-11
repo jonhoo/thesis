@@ -8,14 +8,20 @@ use tokio::{
 
 pub(crate) const IN_FLIGHT: usize = 8192;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Backend {
+    Noria,
+    Mysql { optimized: bool },
+}
+
 pub(crate) async fn run(
     prefix: &str,
     scale: usize,
     mut on_overloaded: impl FnMut(),
     c: &openssh::Session,
     server: &tsunami::Machine<'_>,
+    backend: Backend,
     ctx: &mut Context,
-    noria: bool,
 ) -> Result<(), Report> {
     let Context {
         ref server_type,
@@ -26,7 +32,7 @@ pub(crate) async fn run(
     let s = &server.ssh;
 
     tracing::debug!("prime");
-    let mut prime = lobsters_client(c, server, scale, noria);
+    let mut prime = lobsters_client(c, server, scale, backend);
     let prime_start = Instant::now();
     let prime = prime
         .arg("--runtime=0")
@@ -62,7 +68,7 @@ pub(crate) async fn run(
     }
 
     tracing::debug!("benchmark");
-    let mut bench = lobsters_client(c, server, scale, noria)
+    let mut bench = lobsters_client(c, server, scale, backend)
         .arg("--runtime=320")
         .arg("--histogram=benchmark.hist")
         .stdout(std::process::Stdio::piped())
@@ -211,7 +217,11 @@ pub(crate) async fn run(
         on_overloaded();
     }
 
-    let vmrss_for = if noria { "noria-server" } else { "mysqld" };
+    let vmrss_for = if let Backend::Noria = backend {
+        "noria-server"
+    } else {
+        "mysqld"
+    };
     let vmrss = crate::server::vmrss_for(s, vmrss_for)
         .await
         .wrap_err("failed to get server memory use");
@@ -256,7 +266,7 @@ pub(crate) async fn run(
             .wrap_err("failed to save remote histogram")?;
         drop(results);
 
-        if noria {
+        if let Backend::Noria = backend {
             tracing::trace!("saving server stats");
             let mut results = tokio::fs::File::create(format!("{}-statistics.json", prefix))
                 .await
@@ -282,25 +292,34 @@ fn lobsters_client<'c>(
     ssh: &'c openssh::Session,
     server: &'c tsunami::Machine<'c>,
     scale: usize,
-    noria: bool,
+    backend: Backend,
 ) -> openssh::Command<'c> {
-    let mut cmd = if noria {
-        let mut cmd = crate::noria_bin(ssh, "lobsters-noria");
-        cmd.arg("--deployment")
-            .arg("benchmark")
-            .arg("-z")
-            .arg(format!(
-                "{}:2181",
+    let mut cmd = match backend {
+        Backend::Noria => {
+            let mut cmd = crate::noria_bin(ssh, "lobsters-noria");
+            cmd.arg("--deployment")
+                .arg("benchmark")
+                .arg("-z")
+                .arg(format!(
+                    "{}:2181",
+                    server.private_ip.as_ref().expect("private ip unknown")
+                ));
+            cmd
+        }
+        Backend::Mysql { optimized } => {
+            let mut cmd = crate::noria_bin(ssh, "lobsters-mysql");
+            cmd.arg("--queries");
+            if optimized {
+                cmd.arg("original");
+            } else {
+                cmd.arg("natural");
+            }
+            cmd.arg(format!(
+                "mysql://lobsters@{}/soup",
                 server.private_ip.as_ref().expect("private ip unknown")
             ));
-        cmd
-    } else {
-        let mut cmd = crate::noria_bin(ssh, "lobsters-mysql");
-        cmd.arg("--queries").arg("original").arg(format!(
-            "mysql://lobsters@{}/soup",
-            server.private_ip.as_ref().expect("private ip unknown")
-        ));
-        cmd
+            cmd
+        }
     };
     cmd.arg("--scale")
         .arg(scale.to_string())

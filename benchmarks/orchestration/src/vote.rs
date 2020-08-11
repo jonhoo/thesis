@@ -10,14 +10,15 @@ use tsunami::Tsunami;
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
         [
-            (100, "skewed", 4, false, 0, true),
-            (100, "skewed", 4, true, 0, true),
-            (10_000, "skewed", 4, true, 0, false),
-            (100, "skewed", 4, true, 256 * 1024 * 1024, true),
-            (100, "skewed", 4, true, 320 * 1024 * 1024, true),
-            (100, "skewed", 4, true, 384 * 1024 * 1024, true),
-            (100, "skewed", 4, true, 448 * 1024 * 1024, true),
-            (100, "skewed", 4, true, 512 * 1024 * 1024, true),
+            (100, "skewed", 4, false, 0, true, false),
+            (100, "skewed", 4, true, 0, true, false),
+            (10_000, "skewed", 4, true, 0, false, false),
+            (100, "skewed", 4, true, 256 * 1024 * 1024, true, false),
+            (100, "skewed", 4, true, 320 * 1024 * 1024, true, false),
+            (100, "skewed", 4, true, 384 * 1024 * 1024, true, false),
+            (100, "skewed", 4, true, 448 * 1024 * 1024, true, false),
+            (100, "skewed", 4, true, 512 * 1024 * 1024, true, false),
+            (100, "skewed", 4, true, 512 * 1024 * 1024, true, true),
         ],
         one,
         ctx,
@@ -27,11 +28,11 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
 
 #[instrument(err, skip(ctx))]
 pub(crate) async fn one(
-    parameters: (usize, &'static str, usize, bool, usize, bool),
+    parameters: (usize, &'static str, usize, bool, usize, bool, bool),
     loads: Option<Vec<usize>>,
     mut ctx: Context,
 ) -> Result<usize, Report> {
-    let (write_every, distribution, nclients, partial, memlimit, join) = parameters;
+    let (write_every, distribution, nclients, partial, memlimit, join, durable) = parameters;
     let mut last_good_target = 0;
 
     let mut aws = crate::launcher();
@@ -71,8 +72,19 @@ pub(crate) async fn one(
             .collect();
         tracing::debug!("connected");
 
+        if durable {
+            tracing::debug!("mount ramdisk");
+            crate::output_on_success(s.shell("sudo mount -t tmpfs -o size=60G tmpfs /mnt"))
+                .await
+                .wrap_err("mount ramdisk")?;
+        }
+
         let mut targets = if let Some(loads) = loads {
             Box::new(cliff::LoadIterator::from(loads)) as Box<dyn cliff::CliffSearch + Send>
+        } else if durable {
+            // all we care about is the 1M data point
+            Box::new(cliff::LoadIterator::from(vec![1_000_000]))
+                as Box<dyn cliff::CliffSearch + Send>
         } else if !partial {
             Box::new(cliff::LoadIterator::from(vec![250_000, 1_000_000]))
                 as Box<dyn cliff::CliffSearch + Send>
@@ -106,18 +118,27 @@ pub(crate) async fn one(
                     if !join {
                         backend.push_str("_nj");
                     }
+                    if durable {
+                        backend.push_str("_dur");
+                    }
                     let prefix = format!(
                         "{}.10000000a.{}t.{}r.{}c.{}m.{}",
                         backend, target, write_every, nclients, memlimit, distribution,
                     );
 
                     tracing::trace!("starting noria server");
-                    let mut noria_server = crate::server::build(s, server, None);
+                    let dir = if durable { Some("/mnt") } else { None };
+                    let mut noria_server = crate::server::build(s, server, dir);
                     if !partial {
                         noria_server.arg("--no-partial");
                     }
+                    let durability = if durable {
+                        "--durability=persistent"
+                    } else {
+                        "--durability=memory"
+                    };
                     let noria_server = noria_server
-                        .arg("--durability=memory")
+                        .arg(durability)
                         .arg("--no-reuse")
                         .arg("--shards=0")
                         .arg("-m")
