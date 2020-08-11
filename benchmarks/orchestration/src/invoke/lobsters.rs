@@ -87,6 +87,7 @@ pub(crate) async fn run(
     let fin = async {
         while let Some(line) = stdout.next().await {
             let line = line.wrap_err("failed to read client output")?;
+            // println!("{}", line);
             results.write_all(line.as_bytes()).await?;
             results.write_all(b"\n").await?;
 
@@ -157,6 +158,20 @@ pub(crate) async fn run(
         Ok::<_, Report>(())
     };
 
+    tracing::trace!("grabbing stderr");
+    let eh = bench.stderr().take().unwrap();
+    let stderr = tokio::spawn(async move {
+        let mut eh = tokio::io::BufReader::new(eh).lines();
+        let mut stderr = String::new();
+        while let Some(line) = eh.next().await {
+            let line = line.wrap_err("failed to read client stderr")?;
+            // eprintln!("{}", line);
+            stderr.push_str(&line);
+            stderr.push_str("\n");
+        }
+        Ok::<_, Report>(stderr)
+    });
+
     tokio::select! {
         r = fin => {
             let _ = r?;
@@ -175,14 +190,9 @@ pub(crate) async fn run(
         on_overloaded();
     }
 
-    use tokio::io::AsyncReadExt;
-    let mut stderr = String::new();
-    bench
-        .stderr()
-        .take()
-        .unwrap()
-        .read_to_string(&mut stderr)
-        .await?;
+    tracing::trace!("gathering stderr");
+    let stderr = stderr.await.unwrap()?;
+    tracing::debug!("waiting for benchmark to terminate");
     let status = bench.wait().await?;
     if !status.success() {
         tracing::warn!("benchmark failed:\n{}", stderr);
