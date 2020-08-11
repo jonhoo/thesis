@@ -219,26 +219,46 @@ price increase. Instances with 256GB of memory only come with 32 cores
 \section{Rolling Your Own}
 \label{s:eval:alts}
 
-\begin{inprogress}
-  Split this by manual query optimization (handled by view materialization) and
-  traditional caching (handled by partial).
-\end{inprogress}
-
 Many applications already require lower latency and higher throughput than
-straightforward SQL queries against traditional relational databases can
-provide. Developers often go through a sequence of manual optimizations to try
-to mitigate this.
+straightforward SQL queries against traditional relational databases provide.
+Developers often implement manual optimizations to improve their application
+performance, and introduce additional complexity into their applications in the
+process. These optimizations usually come in one of two forms: denormalization
+and caching. This section discusses each of these optimization techniques in
+turn, as well as how Noria makes them unnecessary.
 
-The first step is usually to pre-compute certain computed values and store them
-directly in the database. For example, in Lobsters, each story has a
-``hotness'', which is a score of how popular a story is, and thus how far up it
-should appear in listings. This value depends on a lot of parameters, such as
-the number of votes, the number of comments, etc. It would be prohibitively
-expensive to compute a story's hotness directly in the queries,
-especially in the context of computing the front page view, since it requires
-the hotness for \emph{all} stories. Instead, the Lobsters developers add a
-computed column, \texttt{hotness}, to the \texttt{story} table. This column is
-then updated whenever relevant data changes, such as when:
+\subsection{Denormalization}
+
+The relational database model~\cite{relational} encourages developers to use
+``normalized'' schema in which redundant data%
+\footnote{The relational model differentiates between strongly and weakly
+redundant data\,---\,``redundant'' here refers to strong redundancy.}
+that can be derived from other data is not stored. Instead, the model suggests
+that derived or computed data be produced on-demand using relational operators
+like joins and aggregations. The original paper then adds:
+
+\begin{quote}
+Only in an environment with a heavy load of queries relative to other kinds
+of interaction with the data bank would strong redundancy be justified in the
+stored set of relations.
+\end{quote}
+
+As discussed in the motivation section for this thesis, many web applications
+fall into exactly this category. Queries are far more common than inserts or
+updates, and with a normalized schema they must constantly expend resources to
+re-compute such derived data. For this reason, web developers often explicitly
+denormalize their schema to include data that would be prohibitively expensive
+to compute on-demand.
+
+For example, in Lobsters, each story has a ``hotness'': a score of how popular a
+story is, and thus how far up it should appear in listings. This value depends
+on a lot of parameters, such as the number of votes, the number of comments,
+etc. It would be prohibitively expensive to compute a story's hotness directly
+in the queries, especially in the context of computing the front page view,
+which requires the hotness for \emph{all} stories to rank them. Instead, the
+Lobsters developers add a computed column, \texttt{hotness}, to the
+\texttt{story} table. This column is then updated whenever relevant data
+changes, such as when:
 
 \begin{itemize}
     \item a story is upvoted or downvoted.
@@ -248,23 +268,31 @@ then updated whenever relevant data changes, such as when:
     \item one story is merged into another.
 \end{itemize}
 
-There are several such computed columns in Lobsters. Developers must inspect all
-write paths, and change them to ensure that they correctly update all related
-computed values. This process is manual and error-prone, but also necessary:
-without these manual optimizations, Lobsters running against MySQL cannot keep
-up with even a single request per second.
+There are several such computed columns in Lobsters. For each one, developers
+must inspect all write paths, and change them to ensure that they correctly
+update all related computed values. This process is manual and error-prone, but
+also necessary: without these manual optimizations, Lobsters running against
+MySQL cannot keep up with even a single request per second.
 
-If database optimizations do not suffice for the application's performance
-needs, developers usually add a cache in front of the database. This cache
-often takes the form of a key-value store which holds frequently accessed,
-computed results. When it issues a query, the application checks the (fast)
-cache first, and only if the results are not available in cache is the backend
-consulted.
+With Noria, such manual denormalization is unnecessary. View materialization
+automatically stores and maintains derived data so that it is efficient to
+query. The developer can continue to use normalized schemas and queries, and
+does not need to modify their application code to manage denormalized columns
+and tables.
+
+\subsection{Caching}
+
+If denormalization does not sufficiently improve the application's performance,
+the next step is usually to add a cache in front of the database. This cache
+often takes the form of a key-value store, like Redis or Memcache, which holds
+frequently accessed, computed results. When the application issues a query, it
+checks the (fast) cache first, and only if the results are not available in
+cache is the (slower) backend consulted.
 
 A dedicated cache speeds up reads that hit, but introduces significant
-application complexity. Just like for manual query optimizations, all parts of
-the application that modify data related to any given cache entry must know to
-also invalidate or update the cache. In addition, the developers must ensure
+application complexity. Just like for manual denormalization, all parts of the
+application that modify data related to any given cache entry must know to also
+invalidate or update the cache. In addition, the developers must ensure
 that if multiple clients miss on a given entry, they do not hit the backend
 database all at once. This is especially important if a popular entry is
 invalidated, as it may cause a ``thundering herd'' effect where a large number
@@ -281,9 +309,13 @@ from 2016 found that 0.3-3.0\% of application code spread across 2.1-10.8\% of
 the application's source files is caching-related, and that cache-related issues
 make up 1-5\% of all issues~\cite{caching-is-hard}.
 
-\textbf{With Noria, these kinds of manual materialization techniques are not
-necessary.} Noria performs and maintains the relevant materializations as
-needed, and the application needs no cache-related code.
+With Noria, there is no need to maintain such a query result cache, as Noria's
+in-memory materialized views provide high-throughput, low-latency queries
+directly from the database. Thanks to partial state, Noria's materialized views
+are usable even for applications whose full cache state exceeds the amount of
+memory available on the server host. Since Noria automatically maintains the
+materialized views, the application also does not need code to manage cache
+invalidation or to address challenges like thundering herds.
 
 \section{The Memory/Latency Trade-off}
 \label{s:eval:cost}
@@ -692,7 +724,7 @@ size%
 VmRSS, so as to only measure the fraction of keys cached.}
 with and without partial state in the vote benchmark at 250k operations per
 second. The measured value of 0.8\%, or 80k out of 10M articles, gets close to
-the expected value of 0.46\%, or 46k articles, computed by the formula for the
+the expected value of 0.46\%, or 46k out of 10M articles, computed by the formula for the
 90/1 skew that the vote benchmark uses. If the eviction is tuned to be even more
 aggressive, the benchmark can no longer keep up. This suggests that Noria is
 indeed able to function at close to the predicted cache ratio, and that the
