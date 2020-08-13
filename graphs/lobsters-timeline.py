@@ -29,9 +29,13 @@ ax.fill_between(d["until"], d["p99"], d["max"], step="pre", color=colors[4], lab
 ax.step(
     d["until"],
     d["mean"],
-    'k.-',
+    '.-',
     where="pre",
-    label="Mean"
+    label="Mean",
+    color="black",
+    markerfacecolor="white",
+    marker="<",
+    ms=7
 )
 
 ax.set_ylabel('Page latency')

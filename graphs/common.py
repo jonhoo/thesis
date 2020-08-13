@@ -52,11 +52,11 @@ def bts(b):
 
 # https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=6
 colors = {
-    'full': '#1f78b4',
-    'durable': '#a6cee3',
-    'noria': '#33a02c',
-    'mysql': '#e31a1c',
-    'redis': '#fb9a99',
+    'full': '#b2abd2',
+    'durable': '#b2abd2',
+    'noria': '#5e3c99',
+    'mysql': '#e66101',
+    'redis': '#fdb863',
 }
 
 # https://colorbrewer2.org/#type=sequential&scheme=RdPu&n=8
