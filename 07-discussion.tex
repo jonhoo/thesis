@@ -1,18 +1,167 @@
-\section{Interaction with sharding}
+This thesis presents the partially stateful model, as well as its implementation
+in Noria. And while the model is complete in isolation, there are a number of
+secondary considerations, features, and alternatives that are worth discussing.
+Those are discussed in this chapter.
 
-\section{When can partial state be used?}
+\begin{inprogress}
+Some of this should maybe be future work?
+\end{inprogress}
 
-\begin{itemize}
- \item SELECT COUNT(*) FROM table;
- \item Add ``karma'' query:
-   \begin{itemize}
-    \item If already have ``karma'' column, trivial in DB. But, equivalent in
-      Noria to saying that query was there from the start, so no migration.
-    \item If \textbf{not} already have ``karma'' column, DB has two choices:
-     \begin{enumerate}
-      \item Compute column == expensive, and same as Noria would do
-      \item Make query compute value on-demand -- same cost, but repeated!
-     \end{enumerate}
-   \end{itemize}
- \item TopK
-\end{itemize}
+\section{Efficient Upqueries}
+
+If upquerying for missing state in a view would require scanning all rows of
+upstream state, Noria currently disables partial state for that view. An example
+of a query that does this is shown in Listing~\ref{l:scanning-votes}. If a query
+comes in with a parameter value of 3, and that state is missing, Noria must
+count the votes for \emph{all} articles in order to find the articles that have
+exactly three votes. Since an article's vote count can also change to three
+without this being explicit in the recorded input, the current vote count for
+all articles must also be known to determine if any given input causes the
+cached results for \texttt{?=3} to change. Ultimately, this means that the view
+for this query more or less \emph{needs} to be fully materialized in order to
+maintain any part of it.
+
+\begin{listing}[h]
+  \begin{minted}{sql}
+    SELECT votes.article_id
+    FROM votes
+    GROUP BY votes.article_id
+    WHERE COUNT(votes.user_id) = ?
+  \end{minted}
+  \caption{Vote query that requires scanning \texttt{votes} on each execution.}
+  \label{l:scanning-votes}
+\end{listing}
+
+The heuristic Noria uses to determine if a view should be partial is simple: a
+view is partial if the columns used for lookups are present as keys in an index
+on fully materialized state upstream. This ensures that an upquery must never
+scan all inputs or maintain all state to handle future updates. Instead, the
+index will be used so that only relevant state is fetched. And since the
+parameter is present in the upstream state, it must be a value in each relevant
+row, which can then be used to determine what cached state it should update.
+
+It is useful to contemplate what would happen for an on-demand relational
+database that was given this query. It would need to scan and compute over the
+entire relevant base table on every query. For all but the smallest tables, this
+would be prohibitively expensive. Noria thus opts to materialize the view, even
+though it cannot be partial, to make the query feasible to execute.
+
+Whether this heuristic is overly pessimistic, and may miss views that \emph{can}
+be made partial remains an open question.
+
+\section{Efficient Migrations}
+
+Section~\ref{s:eval:mig} demonstrated that partial state can make certain
+migrations very efficient. This requires that the view \emph{can} be partial, as
+per the discussion above. But even for views that can be partial, work may be
+required in order to make upqueries for that view efficient. This work generally
+comes down to adding an index to some existing state, which requires scanning
+the data stored in that view. Constructing an index tends to be significantly
+faster than computing the full cached results of the new view, but it is a
+non-trivial cost nonetheless.
+
+For example, consider the query in Listing~\ref{l:karma} when added to the vote
+benchmark from Listing~\ref{l:votes}. To simplify the argument, assume that the
+\texttt{VoteCount} view is for some reason \emph{not} partially stateful (i.e.,
+it holds all the rows). For upqueries of the new view to be efficient, it must
+be possible to query all the articles (along with their vote counts) for a given
+author in the \texttt{ViewCount} view that existed previously. This means we
+must add an index on the \texttt{author} column of that view's state, which is
+not free.
+
+\begin{listing}[h]
+  \begin{minted}{sql}
+    SELECT VoteCount.author, SUM(VoteCount.nvotes) AS karma
+    FROM VoteCount -- the view from Listing~\ref{l:votes}
+    GROUP BY VoteCount.author
+    WHERE VoteCount.author = ?
+  \end{minted}
+  \caption{Query that computes the sum total score of a user's articles
+  (their ``karma'').}
+  \label{l:scanning-votes}
+\end{listing}
+
+\begin{inprogress}
+  If \texttt{VoteCount} is partial, it \emph{is} free, because indexes for
+  partially stateful views always start out empty. Each index of a partially
+  stateful view is completely independent! There are no "shared" rows across
+  indexes. But we probably want there to be.
+\end{inprogress}
+
+Here too a comparison with what would happen when using a traditional relational
+database is useful. When the application developer decides that they want to run
+this new query, they have two choices: either compute it on-demand, or
+denormalize the schema by adding a new computed ``karma'' column to the
+(hypothesized) \texttt{users} table. Neither option is great. The former is slow
+to execute, and the latter requires computing the karma for every article.
+The index Noria must construct for efficient upqueries is cheaper to construct
+than such a computed \texttt{karma} column, which makes Noria's scan seems
+reasonable. The considerations from \S\ref{s:eval:alts} also apply.
+
+% SELECT COUNT(*) FROM table;
+
+Whether Noria \emph{always} does no more work than what a developer would
+make a traditional relational database do if they wanted to make a view
+efficient to query remains an open question.
+
+\section{Ordered State}
+
+Certain ordered operations, like max aggregations (\texttt{SELECT MAX}) and
+top-k-style queries (\texttt{ORDER BY LIMIT}), occasionally require re-fetching
+underlying state as the data changes. If the maximum value in a max aggregation
+or a row in a top-k view is removed, the new view content can only be determined
+by re-evaluating the query.
+
+The necessary upquery be performed efficiently if the underlying state is
+maintained in the appropriate order, but Noria does not currently support the
+necessary ordered indexes. Instead, Noria provides approximate versions of such
+operators. In particular, Noria's top-k operator maintains the top $2k$ items,
+so that if an item is removed, the top $k$ items are still known. To get back to
+$2k$ (to allow future removals), the operator fills the top view with the
+highest rows it has seen so far.
+
+This scheme avoids the need for upqueries, and works well as long as removals
+from the top list are uncommon and the top list rotates over time. Otherwise,
+the approach is brittle; if many top rows are removed, or the top is changing
+very infrequently, the top list may eventually hold none of the actual top
+items. Support for ordered indexes, and limited upqueries against those indexes,
+would fix this problem.
+
+\section{Ranged Upqueries}
+
+\section{Sharding}
+
+\section{Differential Dataflow}
+
+\section{Emulating Partial State}
+
+\subsection{Using Full + Join}
+
+\subsection{Using Shared Storage}
+
+\subsection{Using Shared Operators?}
+
+\section{Fault Tolerance}
+
+\section{Consistency and Transactions}
+
+\section{Write Latency == Staleness}
+
+\section{Upstream Database Integration}
+
+\section{Maintaining Downstream Systems}
+
+\section{Eviction Strategy}
+
+\section{Column-Based Storage}
+
+\section{Cursors}
+
+\section{When is Noria not the Answer?}
+
+\section{Warm Restarts}
+
+\section{Partial Key Subsumption}
+
+Partial over A and A,B. If we have A = 3, we must also have A,B for any B where
+A = 3.

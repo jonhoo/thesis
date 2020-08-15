@@ -428,7 +428,7 @@ also handling that added load.
 
 \begin{listing}[h]
   \begin{minted}{sql}
-    SELECT articles.*, COUNT(votes.user_id)
+    SELECT articles.*, COUNT(votes.user_id) AS nvotes
     FROM articles
     LEFT JOIN votes ON (articles.id = votes.article_id)
     GROUP BY articles.id
