@@ -38,7 +38,7 @@ proposal.pdf: 000-proposal.tex bibliography.bib \
 %.pdf: %.tex
 	latexmk -pdf $<
 
-RESULTS = lobsters lobsters-mysql vote vote-migration vote-redis vote-formula
+RESULTS = lobsters lobsters-mysql vote vote-migration vote-redis vote-formula vote-nojoin
 
 .PHONY: sources $(RESULTS)
 
