@@ -129,7 +129,81 @@ would fix this problem.
 
 \section{Ranged Upqueries}
 
+Throughout this thesis, upqueries have been described in terms of point lookups
+of the form \texttt{WHERE x = ? AND y = ?}. However, the design of partial state
+is also amenable to supporting ranged queries (\texttt{WHERE x = ? AND y < ?}).
+Much of the necessary work lies in changing the appropriate index structures and
+including range information in upqueries, which is all straightforward. The
+trickiest part of the change is to ensure that future updates are not dropped if
+they fall within a requested range. For example, consider the following course
+of events:
+
+\begin{enumerate}
+  \item An insert arrives with \texttt{x = 42}.
+  \item An upquery arrives with \texttt{x < 50}.
+  \item An insert arrives with \texttt{x = 49}.
+\end{enumerate}
+
+The second insert must be forwarded downstream so that it will update the
+materialized state for \texttt{x < 50}. For Noria to realize that this is the
+case, it must ``remember'' the \texttt{x < 50} upquery. More generally, it must
+remember what \emph{ranges} of values are present downstream, not just what
+individual keys. The solution here is to use an interval tree to track which
+parts of the key space is present. An interval tree efficiently stores, merges,
+and splits ranges as new ones are introduce (by new upqueries) and retired (by
+evictions).
+
 \section{Sharding}
+
+Noria supports sharding operators in the dataflow to increase write performance.
+A brief description of how Noria's sharding works is given here, followed by an
+outline for how partial state must be adapted to work with sharding.
+
+\subsection{Sharding in Noria}
+
+\begin{inprogress}
+  To decide sharding: use lookup key used by operator. if lookup into self, use
+  that self key. otherwise, use sharding of lookup target. if no lookups, shard
+  like parent.
+
+  To shard an operator: insert sharder above, insert shard merger (~= union)
+  below. Eliminate unnecessary sharders/mergers.
+
+  Sharding is static hash partitioning (dynamic + range sharding is todo).
+
+  Sharding is tracked based on "ultimately source column". (column tracing)
+\end{inprogress}
+
+\subsection{Sharding Partial State}
+
+Partial with sharding mainly follows the rules of partial across forked dataflow
+(\S\ref{todo}), with the following modifications:
+
+First, if the node that receives the upquery, R, is sharded the same way as the
+querying node, Q, the upquery must be sent \emph{only} to the same shard of R as
+the one that is querying. This applies even if the upquery key differs from the
+sharding key, since while other shards may have relevant data, that data would
+be discarded before reaching the current node anyway. This kind of upquery is
+called a \emph{narrow} upquery.
+
+Second, when a narrow upquery response reaches the \emph{first} shard merger on
+its path, the union must not buffer it, since the other upstream shards will not
+be sending responses.
+
+Third, When the upquery response for an upquery that originated at a sharded
+node reaches the \emph{last} sharder on its path, that sharder must direct that
+response only to the querying shard.
+
+\subsection{Upquery Explosion}
+
+\begin{inprogress}
+  "Double Broad". Upquery goes to all upstream shards. Each upstream shard
+  upqueries all of \emph{its} upstream shards. $n^d$, which isn't good.
+  Potential solution: optimized for either all shards upquery, or none do. Break
+  exponential factor by having each intermediate shard query a non-overlapping
+  subset of upstream shards, and make merger wait for all and duplicate
+  response. Question is how to coordinate this.
+\end{inprogress}
 
 \section{Differential Dataflow}
 
