@@ -1,0 +1,50 @@
+# generated ops/s: 250076.22
+# actual ops/s: 250076.09
+# op	pct	sojourn	remote
+write	50	342	340	(all µs)
+write	95	480	478	(all µs)
+write	99	814	812	(all µs)
+write	100	5975	5971	(all µs)
+read	50	180	178	(all µs)
+read	95	324	323	(all µs)
+read	99	684	686	(all µs)
+read	100	4487	4487	(all µs)
+# generated ops/s: 250042.92
+# actual ops/s: 250042.80
+# op	pct	sojourn	remote
+write	50	347	345	(all µs)
+write	95	487	484	(all µs)
+write	99	815	813	(all µs)
+write	100	5771	5755	(all µs)
+read	50	176	174	(all µs)
+read	95	303	304	(all µs)
+read	99	581	584	(all µs)
+read	100	4227	4227	(all µs)
+# generated ops/s: 249993.13
+# actual ops/s: 249993.04
+# op	pct	sojourn	remote
+write	50	343	341	(all µs)
+write	95	484	482	(all µs)
+write	99	829	827	(all µs)
+write	100	5191	5191	(all µs)
+read	50	171	170	(all µs)
+read	95	323	323	(all µs)
+read	99	738	743	(all µs)
+read	100	3819	3819	(all µs)
+# generated ops/s: 250048.57
+# actual ops/s: 250048.35
+# op	pct	sojourn	remote
+write	50	345	342	(all µs)
+write	95	485	483	(all µs)
+write	99	845	844	(all µs)
+write	100	4907	4903	(all µs)
+read	50	169	168	(all µs)
+read	95	344	350	(all µs)
+read	99	815	830	(all µs)
+read	100	4363	4359	(all µs)
+# server type: r5n.4xlarge
+# client type: m5n.4xlarge
+# commit: ef06007178da9e3d1130f51e581d43964905bb01
+# server load: 11.54 8.48
+# server memory (kB): 8645052
+# client[0] load: 6.9 5.18
