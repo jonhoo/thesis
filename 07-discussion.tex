@@ -205,15 +205,85 @@ response only to the querying shard.
   response. Question is how to coordinate this.
 \end{inprogress}
 
-\section{Differential Dataflow}
-
 \section{Emulating Partial State}
 
-\subsection{Using Full + Join}
+A natural question to ask is whether the benefits of partial state can be
+achieved without the complexity that upqueries introduce. In particular, can a
+dataflow system that only supports full materialization emulate partial state
+effectively? Thoroughly exploring the answers to this question may be worth a
+thesis in its own right, but some of the more obvious approaches are discussed
+below.
 
-\subsection{Using Shared Storage}
+\subsection{Lateral Joins}
 
-\subsection{Using Shared Operators?}
+The commercial materialized view stream processor Materialize~\cite{materialize}
+supports \emph{lateral} joins~\cite{lateral-join}, which is described as
+
+\begin{quote}
+  [A] join modifier [that] allows relations used in a join to ``see'' the
+  bindings in relations earlier in the join.
+\end{quote}
+
+In particular, lateral joins let the application author write a query that has
+access to the contents of some unrelated table. For example,
+Listing~\ref{l:emulate-partial-vote} shows how a lateral join can be used to
+emulate a partially materialize vote count view like the one from
+Listing~\ref{l:votes}. The fundamental idea here is to have a table of
+``filled'' keys, and have only the results for those keys be included in the
+final materialized view.
+
+\begin{listing}[h]
+  \begin{minted}{sql}
+CREATE MATERIALIZED VIEW VoteCount AS
+SELECT article_id, votes FROM
+  (SELECT DISTINCT article_id FROM queries) filled,
+  LATERAL (
+      SELECT COUNT(*)
+      FROM votes
+      WHERE article_id = filled.article_id
+  );
+  \end{minted}
+  \caption{Using a lateral join to emulate partial state in vote.}
+  \label{l:emulate-partial-vote}
+\end{listing}
+
+This approach works well to emulate partial state in simple situations, but
+requires significant manual effort for a large application. In Lobsters, for
+example, the application author must re-write their applications to use such
+lateral joins, and must include application logic to maintain the auxiliary
+tables used to indicate what keys are materialized. It may be possible to
+automate this process, though doing so likely requires significant research.
+
+Effort notwithstanding, emulating partial state in this way also presents an
+``all or nothing'' choice for applications for a given key. Either, all state
+for that key is computed, or none of it is. With partial state, the state for a
+key in the ultimate materialized view can be evicted without also evicting the
+current vote count. The former may be significantly larger than the latter,
+since it includes other columns, but is cheap to recompute. The latter on the
+other hand is small, but potentially very expensive to re-compute.
+
+\subsection{Sharing}
+
+Partial state allows a single query of the form \texttt{WHERE x = ?} to satisfy
+lookups for any value of \texttt{?}. Without partial state, the system has two
+options: to remove the filter on \texttt{x} from the query and filter after the
+fact, or to instantiate a separate query for each concrete value of \texttt{?}
+supplied by the application. The former uses a significant amount of memory, but
+is also complicated to get right; \texttt{x} may for example affect what values
+are aggregated together. The latter is simpler, and uses less memory, but
+requires duplicating the dataflow operators for each query, and keeping separate
+state for each one.
+
+Recent work introduced arrangements~\cite{arrangements} as a way to mitigate
+this problem. Arrangements allow sharing indexes and state across related
+operators to avoid duplication. However, even with arrangements, the same
+computation may be executed over a given input record more than once if it is
+needed by more than one instance of a query. Furthermore, eviction is made more
+difficult with arrangements, as the entire arrangement must be updated to
+accommodate any new or evicted parameter value. Noria supports joint query
+optimization~\cite{noria}, which combined with arrangements could reduce much of
+the duplicated effort by instantiating each query multiple times, though this
+does not improve the eviction process.
 
 \section{Fault Tolerance}
 
