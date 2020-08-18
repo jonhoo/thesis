@@ -7,6 +7,10 @@ Those are discussed in this chapter.
 Some of this should maybe be future work?
 \end{inprogress}
 
+\begin{inprogress}
+Should some of these go under "Noria background"?
+\end{inprogress}
+
 \section{Efficient Upqueries}
 
 If upquerying for missing state in a view would require scanning all rows of
@@ -72,7 +76,7 @@ not free.
 \begin{listing}[h]
   \begin{minted}{sql}
     SELECT VoteCount.author, SUM(VoteCount.nvotes) AS karma
-    FROM VoteCount -- the view from Listing~\ref{l:votes}
+    FROM VoteCount -- the view from the vote benchmark
     GROUP BY VoteCount.author
     WHERE VoteCount.author = ?
   \end{minted}
@@ -165,12 +169,15 @@ outline for how partial state must be adapted to work with sharding.
   To decide sharding: use lookup key used by operator. if lookup into self, use
   that self key. otherwise, use sharding of lookup target. if no lookups, shard
   like parent.
+\end{inprogress}
 
+\begin{inprogress}
   To shard an operator: insert sharder above, insert shard merger (~= union)
   below. Eliminate unnecessary sharders/mergers.
+\end{inprogress}
 
+\begin{inprogress}
   Sharding is static hash partitioning (dynamic + range sharding is todo).
-
   Sharding is tracked based on "ultimately source column". (column tracing)
 \end{inprogress}
 
@@ -287,9 +294,51 @@ does not improve the eviction process.
 
 \section{Fault Tolerance}
 
-\section{Consistency and Transactions}
+If an operator's state is lost, Noria's current recovery strategy is to remove
+and re-introduce the operator, and all of its descendants, as if they were new
+queries. This can happen because the Noria worker hosting that operator fails,
+or simply because the system is restarted. This scheme works, but means that any
+past materialization work is lost and must be re-done.
+
+A mechanism for taking snapshots of materialized state that can be recovered
+later would help mitigate this. However, such a design also requires care to
+ensure that any state populated \emph{since} the snapshot is correctly
+incorporated. In particular, if downstream state now includes entries that
+reflect data missing from the snapshot, that downstream state must be evicted.
+Otherwise, updates for that data will be discarded at the recovered operator
+when it discovers that the related state is missing in its state.
+
+\section{Stronger Consistency}
+
+Noria is eventually consistent, and so is the partial state implementation
+outlined in this thesis. That said, adding partial state to a system with
+stronger consistency guarantees should not require extensive changes. In fact,
+parts of the design could likely be simplified; union buffering, for example,
+would likely no longer be necessary, and could be replaced with some kind of
+multi-versioned concurrency control.
 
 \section{Write Latency == Staleness}
+
+By design, Noria's read and write paths are disconnected from one another: reads
+can usually proceed even if the write path is busy. This is both the reason why
+Noria's read performance is so high, and why it gives weaker consistency
+guarantees that competing systems. For example, on a 32-core machine, the
+application may experience a write throughput ceiling at a few hundred thousand
+updates per second, as the write path is processed by only a small number of
+cores. Meanwhile, reads can happen across any number of cores; even if the write
+path is entirely saturated, Noria may be able to handle millions of additional
+reads per second.
+
+While a saturated write path does not slow down the execution of queries whose
+results are materialized, it does affect the read path in two important ways:
+miss-to-hit time and result staleness. If a query misses, the dataflow must
+compute and populate the missing state so that the read can proceed. This is the
+same dataflow that handles writes, so the time until the missing read hits
+instead will increase if the dataflow is busy. Similarly, while queries that do
+not miss can proceed immediately, the returned results will not reflect updates
+that have not yet been processed by the dataflow. Therefore, if the dataflow is
+busy, the time between when an update is issued and when it is reflected in
+later queries will increase.
 
 \section{Upstream Database Integration}
 
@@ -302,8 +351,6 @@ does not improve the eviction process.
 \section{Cursors}
 
 \section{When is Noria not the Answer?}
-
-\section{Warm Restarts}
 
 \section{Partial Key Subsumption}
 
