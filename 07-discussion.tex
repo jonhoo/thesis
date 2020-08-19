@@ -342,7 +342,57 @@ later queries will increase.
 
 \section{Upstream Database Integration}
 
+Existing applications that wish to adopt Noria may not want to adopt it
+wholesale. They may wish to continue using their existing data backend because
+they rely on its transactional properties for parts of their workload, because
+they have existing backup solutions in place, or simply to make the transition
+incrementally.
+
+The most straightforward way to add Noria to an existing system architecture is
+to feed all changes to the primary database tables into Noria. Noria will then
+maintain its copies of the base tables, with indexes it manages itself. However,
+this has the downside of duplication all of the application's data between the
+primary backend and Noria.
+
+A more attractive alternative is to integrate the existing backend into Noria's
+base tables. Noria would still have to be notified as changes are made to the
+data so that it can propagate those changes to the maintained views, but that
+data would not also have to be stored in Noria's base tables.
+
+Unfortunately, implementing this design naively introduces a race condition:
+there is now a window of time where a change that has been made to the base data
+is visible to upqueries to the base tables, but the corresponding update has not
+yet entered the dataflow. This is a problem, because if an upquery response
+reflects that new data, and then an update arrives and adds that same data, the
+data will be reflected twice!
+
+\begin{inprogress}
+  Give a proposed solution?
+\end{inprogress}
+
 \section{Maintaining Downstream Systems}
+
+Since Noria internally propagates updates that reflect deltas to past state, a
+natural idea is to extend those deltas to downstream systems. For example, Noria
+could notify a reactive web application when the result set for the view it is
+currently showing is modified, and include in that notification what exactly
+changed. In response, the application could reflect that change, all without
+sending another query to the database.
+
+Extending Noria in this way should not present too many problems, though it does
+raise an interesting question around partial state. In particular, what happens
+if an application ``subscribes'' to a query, and then that query's result set is
+evicted? Since it is evicted, Noria will not maintain it any longer, and the
+application's view will grow stale. Similarly, what happens if the application
+attempts to subscribe to a query whose results are not currently known? Or, what
+if the application goes offline briefly, and now wishes to gather only the
+changes to the result set since it was last online?
+
+It may be that the solution here is simple\,---\,provide a query-and-subscribe
+operator that populates missing state if needed, and then ensure that results
+for outstanding subscriptions are never evicted. The view could also retain a
+log of recent changes to the view to replay if a slightly stale client wants to
+catch up. Ultimately, many designs are possible here.
 
 \section{Eviction Strategy}
 
