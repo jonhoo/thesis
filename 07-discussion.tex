@@ -190,21 +190,30 @@ outline for how partial state must be adapted to work with sharding.
 
 \subsection{Sharding in Noria}
 
-\begin{inprogress}
-  To decide sharding: use lookup key used by operator. if lookup into self, use
-  that self key. otherwise, use sharding of lookup target. if no lookups, shard
-  like parent.
-\end{inprogress}
+Noria shards operators primarily based on how they access state. For example, an
+aggregation performs lookups into its own state, and is sharded by the key
+column of those lookups. Any other sharding would mean that processing one
+update would require coordination among all shards. A join is sharded by the
+join key for the same reason. Base tables are sharded by the table's primary
+key. Operators that do not perform lookups (e.g., unions) continue the sharding
+of their ancestors to avoid unnecessary shuffles.
 
-\begin{inprogress}
-  To shard an operator: insert sharder above, insert shard merger (~= union)
-  below. Eliminate unnecessary sharders/mergers.
-\end{inprogress}
+To shard an operator, Noria introduces two additional nodes in the dataflow: a
+\emph{sharder} placed upstream of the sharded operator, and a \emph{shard
+merger} downstream of it. The sharder routes incoming updates to the appropriate
+shard of the sharded operator, and the shard merger is a union operator that
+combines the output of all the shards to a single downstream output stream.
+Noria then eliminates unnecessary sharders and shard mergers, such as if an
+operator and its ancestor are sharded the same way.
 
-\begin{inprogress}
-  Sharding is static hash partitioning (dynamic + range sharding is todo).
+Noria implements static hash partitioning: how an operator is sharded is
+determined when it is added to the dataflow, and does not change over the
+runtime of the application. Sharding by value ranges and adjusting the sharding
+dynamically is left for future work.
+
+\begin{comment}
   Sharding is tracked based on "ultimately source column". (column tracing)
-\end{inprogress}
+\end{comment}
 
 \subsection{Sharding Partial State}
 
@@ -222,20 +231,26 @@ Second, when a narrow upquery response reaches the \emph{first} shard merger on
 its path, the union must not buffer it, since the other upstream shards will not
 be sending responses.
 
-Third, When the upquery response for an upquery that originated at a sharded
+Third, when the upquery response for an upquery that originated at a sharded
 node reaches the \emph{last} sharder on its path, that sharder must direct that
 response only to the querying shard.
 
 \subsection{Upquery Explosion}
 
-\begin{inprogress}
-  "Double Broad". Upquery goes to all upstream shards. Each upstream shard
-  upqueries all of \emph{its} upstream shards. $n^d$, which isn't good.
-  Potential solution: optimized for either all shards upquery, or none do. Break
-  exponential factor by having each intermediate shard query a non-overlapping
-  subset of upstream shards, and make merger wait for all and duplicate
-  response. Question is how to coordinate this.
-\end{inprogress}
+An unfortunate phenomenon manifests itself for certain queries when partial
+state and sharding combine in detrimental ways. If R is sharded differently from
+Q; Q is partial; and Q's materialized ancestor, P, is sharded differently from
+Q, then a miss in R may cause $k^2$ upqueries to be issued to P, where $k$ is
+the sharding factor. The miss in R generates an upquery to every shard of Q, and
+every shard of Q sends an upquery to every shard of P.
+
+The three modifications above are sufficient to ensure that this situation is
+handled \emph{correctly}, but additional research is needed to reduce the number
+of upqueries needed. One promising avenue may be to optimize for the case where
+all the shards of Q miss. If every shard of Q knows that every other shard will
+upquery P, they may be able to coordinate the upqueries such that any given key
+is only upqueried for once. The sharder node can then ensure that the upquery
+results are sent to all the shards. This is left for future work.
 
 \section{Emulating Partial State}
 
