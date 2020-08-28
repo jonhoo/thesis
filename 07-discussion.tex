@@ -11,6 +11,29 @@ Some of this should maybe be future work?
 Should some of these go under "Noria background"?
 \end{inprogress}
 
+\section{When is Noria not the Answer?}
+
+Noria aims to improve the efficiency of certain classes of database-backed
+applications, but is not a one-size-fits-all solution. Noria's materialized
+views generally, and partial state specifically, are build specifically for
+applications that:
+
+\begin{enumerate}
+  \item Are \textbf{ready-heavy}. Noria's design is centered around making reads
+    cheap, often at the cost of write performance. For workloads where writes
+    are as frequent, or more frequent, than reads, other systems will work
+    better.
+  \item Tolerate \textbf{eventual consistency}, at least for large parts of the
+    application's workload. Much of Noria's performance advantages over other
+    systems stems from the relaxed consistency model. If much of the
+    application's workload requires stronger consistency guarantees, there is
+    little for Noria to speed up.
+  \item Have \textbf{skewed accesses}. If the application's access patterns are
+    all completely uniform, caching is much less impactful unless all results
+    are cached. In that case, partial state, and the complexity it introduces,
+    provides little value.
+\end{enumerate}
+
 \section{Efficient Upqueries}
 
 If upquerying for missing state in a view would require scanning all rows of
@@ -109,6 +132,7 @@ make a traditional relational database do if they wanted to make a view
 efficient to query remains an open question.
 
 \section{Ordered State}
+\label{s:disc:ordered}
 
 Certain ordered operations, like max aggregations (\texttt{SELECT MAX}) and
 top-k-style queries (\texttt{ORDER BY LIMIT}), occasionally require re-fetching
@@ -132,6 +156,7 @@ items. Support for ordered indexes, and limited upqueries against those indexes,
 would fix this problem.
 
 \section{Ranged Upqueries}
+\label{s:disc:ranged}
 
 Throughout this thesis, upqueries have been described in terms of point lookups
 of the form \texttt{WHERE x = ? AND y = ?}. However, the design of partial state
@@ -308,6 +333,12 @@ reflect data missing from the snapshot, that downstream state must be evicted.
 Otherwise, updates for that data will be discarded at the recovered operator
 when it discovers that the related state is missing in its state.
 
+\section{Eventual Consistency}
+
+\begin{inprogress}
+  What can go wrong?
+\end{inprogress}
+
 \section{Stronger Consistency}
 
 Noria is eventually consistent, and so is the partial state implementation
@@ -396,13 +427,100 @@ catch up. Ultimately, many designs are possible here.
 
 \section{Eviction Strategy}
 
+Partial state enables Noria to evict state that is infrequently accessed. It
+does not dictate any particular eviction strategy as long as the partial state
+invariants are maintained. In particular, if state is evicted at some operator,
+any downstream state derived from the evicted state must also be evicted.
+
+This thesis does not attempt to innovate in the space of eviction schemes, and
+implements simple randomized eviction: when memory use exceeds a given
+threshold, keys are evicted randomly from the three largest states in each of
+the three largest domains. The number of keys is chosen proportionally to the
+size of each state. This scheme works decently, and requires little coordination
+or complexity, but suffers when the system runs close to capacity. Frequently
+accessed keys may still be evicted due to pure chance, and when that happens the
+system falls behind.
+
+To push Noria to higher load, a smarter eviction strategy like least-recently
+used should be implemented. The primary obstacle to overcome is that evictions
+must happen in the dataflow write path, but the information needed to inform
+eviction decisions usually come from the read path. Care must be taken to avoid
+excessive synchronization between these, otherwise Noria's read performance
+would be bottlenecked by the performance of the write path.
+
 \section{Column-Based Storage}
+
+Noria's in-memory storage is highly unoptimized. Specifically, every row in
+every state is allocated in its own vector. This causes significant memory
+allocator churn, and introduces non-trivial memory overhead. Since Noria knows
+the schema of each view in advance, and all rows in the view have the same
+schema, a column-based storage format would likely be a much better fit for
+many views. Noria could even use heuristics to choose between row- and
+column-based storage depending on the semantics of each operator.
 
 \section{Cursors}
 
-\section{When is Noria not the Answer?}
+Websites frequently have paginated listings, or pages that are filled in with
+more content as you scroll. Behind the scenes, these techniques are both
+implemented using the same abstract mechanism: the cursor. There are many ways to
+implement a cursor, but the most common is using the SQL \texttt{LIMIT}
+operator.
+
+On page one of a listing page with 10 results per page, the listing query is run
+with \texttt{LIMIT 10}. On page two, the same query is run either with
+\texttt{OFFSET 10} to skip the results from page one, or with a \texttt{WHERE}
+clause that excludes the results that have already been shown. For example, if
+the listing query orders results by id, the \texttt{WHERE} clause could be
+\texttt{id > ?} where \texttt{?} is the last id on the previous page.
+
+Some databases support persistent cursors as well. With a persistent cursor, the
+database keeps track of what subset of the results for a query the application
+has already seen, and the application can ask to read more results from that
+existing cursor.
+
+Noria currently cannot represent cursors like these since it does not maintain
+the order of in-memory state (\S\ref{s:disc:ordered}). \texttt{OFFSET} might not
+skip the same results as shown on the previous page, and \texttt{WHERE x > ?} is
+not supported. If support for ordered state was added, Noria would support these
+types of queries much like existing databases.
+
+To make paginated queries \emph{partial}, additional challenges must be solved.
+First, ranged upqueries must be implemented to support \texttt{x > ?}
+conditionals (\S\ref{s:disc:ranged}). Then, a decision must be made as to how
+\texttt{LIMIT} should interact with upqueries. There are two primary design
+options: \emph{post-limiting} and \emph{pre-limiting}.
+
+In a post-limited design, the query is executed without pagination-related
+clauses internally, and all of its results are materialized. The limit and
+offset are then applied ``at the end'': when a query execution request comes in,
+only an appropriate subset of the materialized results are returned. This
+solution requires no changes to the partial state logic, but also makes it
+necessary to materialize all pages of each query result, even if only the first
+few pages are ever accessed. Realistically, a solution that takes this approach
+would also include a hard upper limit on how many results are materialized.
+
+In a pre-limited design, materialized state includes only results for pages that
+have been accessed. This is attractive since it uses less memory, and fewer
+results must be maintained. But, it also requires more complex changes to
+partial state. In particular, operators must now have a way to determine if a
+state change causes records to appear in, or disappear from, materialized pages
+downstream. If they do not, updates may be discarded early even though they
+would change downstream materialized state.
+
+Furthermore, since intermediate operators may remove (e.g., filters) or add
+(e.g., joins) rows to the resultset, the limit requested by the application may
+not map directly to the number of results yielded by the corresponding upquery.
+Therefore, page-specific upqueries may need to run multiple ``iterations'' to
+fetch additional results if the first response did not return enough rows.
 
 \section{Partial Key Subsumption}
 
-Partial over A and A,B. If we have A = 3, we must also have A,B for any B where
-A = 3.
+Noria's implementation of partial state does not currently take advantage of
+situations where upquery keys overlap. For example, consider the case of an
+operator X where one downstream operator upqueries on column A, and another
+upqueries on the pair of columns A and B. X currently keeps two indices: one on
+A, and one on A+B. Each index keeps track of missing entries independently. So,
+even if we previously executed and filled in an upquery for A = 3, a subsequent
+request for A = 3, B = foo could miss and cause another upquery to be issued.
+The operator has sufficient information that it should be able to resolve this
+index miss locally, but Noria does not currently implement this optimization.
