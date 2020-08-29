@@ -493,9 +493,12 @@ yet entered the dataflow. This is a problem, because if an upquery response
 reflects that new data, and then an update arrives and adds that same data, the
 data will be reflected twice!
 
-\begin{inprogress}
-  Give a proposed solution?
-\end{inprogress}
+A possible solution here is to take a page out of the multiversion concurrency
+control playbook, and ensure that lookups into base table state do not see the
+effects of any updates that have not yet passed through its Noria operator
+equivalent. Ideally, this would be based on the existing transactional
+capabilities of the upstream database, but it may also be possible to emulate
+using an audit table that records table changes. This is left for future work.
 
 \section{Maintaining Downstream Systems}
 
