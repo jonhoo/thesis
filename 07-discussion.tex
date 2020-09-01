@@ -15,11 +15,11 @@ Should some of these go under "Noria background"?
 
 Noria aims to improve the efficiency of certain classes of database-backed
 applications, but is not a one-size-fits-all solution. Noria's materialized
-views generally, and partial state specifically, are build specifically for
+views generally, and partial state specifically, are built specifically for
 applications that:
 
 \begin{enumerate}
-  \item Are \textbf{ready-heavy}. Noria's design is centered around making reads
+  \item Are \textbf{read-heavy}. Noria's design is centered around making reads
     cheap, often at the cost of write performance. For workloads where writes
     are as frequent, or more frequent, than reads, other systems will work
     better.
@@ -28,11 +28,24 @@ applications that:
     systems stems from the relaxed consistency model. If much of the
     application's workload requires stronger consistency guarantees, there is
     little for Noria to speed up.
-  \item Have \textbf{skewed accesses}. If the application's access patterns are
-    all completely uniform, caching is much less impactful unless all results
-    are cached. In that case, partial state, and the complexity it introduces,
-    provides little value.
+  \item Experience \textbf{good locality}. If the application's access patterns
+    are all completely uniform, caching is much less impactful unless \emph{all}
+    results are cached. In that case, partial state, and the complexity it
+    introduces, provides little value. Instead, Noria works best if data and
+    access distributions are skewed, and demonstrate good temporal and spatial
+    locality.
+  \item Have \textbf{non-trivial computed state}, both in size and complexity.
+    If all computed state fits in a small amount of memory, a materialized view
+    system without partial state would work just as well. If all queries are
+    simple point queries without aggregations or joins, Noria's incremental
+    cache update logic is unnecessary, and a simpler cache invalidation scheme
+    may work better.
 \end{enumerate}
+
+It is also worth noting that Noria may not perform as well as a fully developed,
+manually tuned backend caching system. While Noria would allow the removal of
+caching logic from the application, its general-purpose architecture may miss
+out on application-specific optimizations implemented by a tailor-built system.
 
 \section{Efficient Upqueries}
 
