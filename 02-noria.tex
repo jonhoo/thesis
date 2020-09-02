@@ -1,3 +1,176 @@
+In this thesis, partial state is implemented in Noria~\cite{noria}, a stateful,
+dynamic, parallel, and distributed dataflow system designed for the storage,
+query processing, and caching needs of typical web applications. Because of the
+strong connection between Noria and partial state, this chapter describes the
+design and implementation of Noria in sufficient depth to follow the remainder
+of the thesis.
+
+\section{High-level Overview}
+
+\begin{listing}[h]
+  \begin{minted}{sql}
+/* base tables */
+CREATE TABLE stories
+  (id int, author int, title text, url text);
+CREATE TABLE votes (user int, story_id int);
+CREATE TABLE users (id int, username text);
+/* internal view: vote count per story  */
+CREATE INTERNAL VIEW VoteCount AS
+  SELECT story_id, COUNT(*) AS vcount
+    FROM votes GROUP BY story_id;
+/* external view: story details */
+CREATE VIEW StoriesWithVC AS
+  SELECT id, author, title, url, vcount
+    FROM stories
+    JOIN VoteCount ON VoteCount.story_id = stories.id
+   WHERE stories.id = ?;
+  \end{minted}
+  \caption{Noria program for a key subset of the Lobsters news
+           aggregator~\cite{lobsters} that counts users' votes for stories.}
+  \label{f:vote-src}
+\end{listing}
+
+Noria runs on one or more multicore servers that communicate with clients and
+with one another using RPCs. A Noria deployment stores both \emph{base tables}
+and \emph{derived views}. Roughly, base tables contain the data typically stored
+persistently, and derived views hold data an application might choose to cache
+to improve performance. Compared to conventional database use, Noria base tables
+might be smaller, as Noria derives data that an application may otherwise
+pre-compute and store denormalized in base tables for performance. Views, by
+contrast, will likely be larger than a typical cache footprint, because Noria
+derives more data, including some intermediate results. Noria stores base tables
+persistently on disk, either on one server or sharded across multiple servers,
+but stores views in server memory.
+
+Noria's interface resembles parameterized SQL queries. The application supplies
+a \emph{Noria program}, which registers base tables and views with parameters
+supplied by the application when it retrieves data. Figure~\ref{f:vote-src}
+shows an example Noria program for a news aggregator application where users can
+vote for stories (\texttt{?} is a parameter). The Noria program includes base
+table definitions, \emph{internal} views used as shorthands in other
+expressions, and \emph{external} views that the application later queries. It
+can be thought of as an extended schema for the application that includes its
+queries. Noria supports much, but not all, SQL syntax.
+
+To retrieve data, the application supplies Noria with an external view
+identifier (e.g., \texttt{StoriesWithVC}) and one or more sets of parameter
+values. Noria then responds with the records in the view that match those
+values. To modify records in base tables, the application performs insertions,
+updates, and deletions, similar to a SQL database. Data is represented as
+structured records in tabular form~\cite{spanner, bigtable}.
+
+Noria differs substantially from traditional databases in how queries are
+executed. Rather than compute a query's results on demand when the
+application executes it, Noria does so when the query view is defined.
+Noria then caches, or \emph{materializes}, the contents of that view, and serves
+queries to that view directly from that cache. To keep the materialized current,
+Noria internally instantiates a dataflow program to continuously process the
+application's writes and update the views as appropriate.
+
+This kind of view materialization makes Noria particularly well-suited for
+read-heavy applications that tolerate eventual consistency, since it shifts
+query execution cost from reads, which are frequent, to writes, which are
+infrequent. Noria focuses entirely on relational operators, rather than the
+iterative or graph computations that are the focus of other dataflow
+systems~\cite{naiad, differential-dataflow}.
+
+The application may change its Noria program to add new views, to modify or
+remove existing views, and to adapt base table schemas. Noria expects such
+changes to be common and aims to complete them quickly.
+
+\section{Dataflow Execution}
+
+To keep its materialized views from growing stale as the underlying data
+changes, Noria uses dataflow. Noria compiles all the application queries into a
+joint dataflow program, which it routes all application writes through. The
+dataflow is a directed acyclic graph of relational operators such as
+aggregations, joins, and filters. Base tables are the roots of this graph, and
+external views form the leaves. Noria extends the graph with new base tables,
+operators, and views as the application adds new queries.
+
+When an application write arrives, Noria applies it to a durable base table and
+injects it into the dataflow as an \emph{update}. Operators process the update
+and emit derived updates to their children; eventually updates reach and modify
+the external views. Updates are \emph{deltas}~\cite{roll, differential-dataflow}
+that can add to, modify, and remove from downstream state. For example, a count
+operator emits deltas that indicate how the count for a key has changed; a join
+may emit an update that installs new rows in downstream state; and a deletion
+from a base table generates a ``negative'' update that revokes derived records.
+Negative updates remove entries when Noria applies them to state, and retain
+their negative ``sign'' when combined with other records (e.g., through joins).
+Negative updates hold exactly the same values as the positives they revoke and
+thus follow the same dataflow paths.
+
+Noria supports \emph{stateless} and \emph{stateful} operators. Stateless
+operators, such as filters and projections, need no context to process updates;
+stateful operators, such as count, min/max, and top-$k$, maintain state to avoid
+inefficient re-computation of aggregate values from scratch. Stateful operators,
+like external views, keep one or more indexes to speed up operation. Noria adds
+indexes based on \emph{indexing obligations} imposed by operator semantics; for
+example, an operator that aggregates votes by user ID requires a user ID index
+to process new votes efficiently. Noria's joins are stateless, but require that
+the state of their inputs be materialized to allow an update arriving at one
+input to join with all relevant state from the other.
+
+\subsection{Consistency Semantics}
+
+To achieve high parallel processing performance, Noria's dataflow avoids
+global progress tracking or coordination. An update injected by a base table
+takes time to propagate through the dataflow, and the update may appear in
+different views at different times. Noria operators and the contents of its
+external views are thus \emph{eventually-consistent}. Eventual consistency is
+attractive for performance and scalability, and is sufficient for many web
+applications~\cite{eventually-consistent, memcached-facebook, pnuts}.
+
+Noria does ensure that if writes quiesce, all external views eventually hold
+results that are the same as if the queries had been executed directly against
+the base table data. Making this work correctly requires some care. For example,
+like most dataflow systems, Noria requires that operators are deterministic
+functions over their own state and the inputs from their ancestors. Furthermore,
+operators must be distributive so that evaluating the query using
+tuple-at-a-time processing is equivalent to evaluating the whole query at once.
+Noria operators must also be commutative so that operators with multiple inputs,
+like unions and joins, can process their inputs in any order without
+coordination.%
+\footnote{Maintaining eventual consistency with partial state requires
+additional mechanisms, as discussed in \S\ref{s:practical}.}
+The standard relational operators that Noria supports all have this property.
+
+% TODO
+
+%
+Web applications sometimes rely on database transactions, e.g., to atomically
+update pre-computed values.
+%
+Noria approach's is compatible with basic, optimistically-concurrent
+multi-statement transactions, but Noria also often obviates the need for them.
+%
+For example, Lobsters uses transactions only to avoid write-write conflicts on
+vote counts and stories' ``hotness'' scores.
+%
+A multi-statement transaction is required only because baseline Lobsters
+pre-computes hotness for performance.
+%
+Noria instead computes hotness in the dataflow, which avoids write-write
+conflicts without a transaction, albeit at the cost of eventual consistency for
+reads.
+%
+We omit further discussion of transactions with Noria in this paper; we plan to
+describe them in future work.
+%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Challenges}
+
+%
+An efficient Noria design faces two key challenges: first, it must limit the
+size of its state and views (\S\ref{s:partial}); and second, changes to the
+Noria program must adapt the dataflow without downtime in serving clients
+(\S\ref{s:dynamic-dataflow}).
+%
+
+---
+
 Noria implements the partially stateful dataflow model for incremental view
 maintenance in databases. It focuses on building a better database backend for
 read-heavy applications where a long-running dataflow program maintains any
@@ -24,3 +197,29 @@ changes the state visible to reads through the leaf's materialization. Updates
 are \emph{signed} (i.e., they can be ``negative'' or ``positive''), with
 negative updates reflecting revocations of past results, and modifications
 represented as a negative-positive update pair.
+
+---
+
+How do we know that Noria is eventually consistent?
+
+First, how do we know that Noria without partial state is eventually
+consistent. And second, how do we know that Noria remains eventually
+consistent with partial state.
+
+We don't have a formal proof for either. Ignoring implementation bugs, the
+informal argument goes something like:
+
+For partial state, we need to show that each of the things that have been
+changed preserve eventual consistency. First, sending a snapshot of past state
+(upquery response) is equivalent to sending the individual updates that made
+up that snapshot since the operators are distributive and commutative. Second,
+upquery results can race with related updates, which is handled by the various
+challenges I listed in the proposal:
+
+ - sending them inline in the dataflow (for single-branch)
+ - union buffering (for unioned branched dataflow)
+ - special join upquery handling (for joined branched dataflow)
+
+And third, partial state means that lookups can miss internally in the
+dataflow, which is handled by join eviction when related state may still be
+present downstream, and by discarding the update when it is not.
