@@ -76,7 +76,8 @@ systems~\cite{naiad, differential-dataflow}.
 
 The application may change its Noria program to add new views, to modify or
 remove existing views, and to adapt base table schemas. Noria expects such
-changes to be common and aims to complete them quickly.
+changes to be common and aims to complete them quickly, without restarting the
+dataflow engine.
 
 \section{Dataflow Execution}
 
@@ -112,7 +113,57 @@ to process new votes efficiently. Noria's joins are stateless, but require that
 the state of their inputs be materialized to allow an update arriving at one
 input to join with all relevant state from the other.
 
-\subsection{Consistency Semantics}
+\subsection{Example Execution}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics{diagrams/Example Execution.pdf}
+  \caption{Noria's dataflow program to maintain Listing~\ref{f:vote-src}. Text
+  describes the update path highlighted in blue.}
+  \label{f:example-exec}
+\end{figure}
+
+Figure~\ref{f:example-exec} shows the dataflow that Noria constructs for
+maintaining the Noria program in Listing~\ref{f:vote-src}. At the top are the
+entry points into the dataflow\,---\,the operators that represent the schema
+base tables\,---\,one for the \texttt{stories} table, and one for the
+\texttt{votes} table. Connected to the \texttt{votes} table is a counting
+aggregation operator ($\sum$), which corresponds to the internal
+\texttt{VoteCount} view. It then feeds into a join operator ($\bowtie$), which
+in turn connects to the external \texttt{StoryWithVC} view.
+
+To understand how Noria uses this program to maintain the external view,
+consider what happens when a new vote is inserted into \texttt{votes}. The
+insertion is introduced into the dataflow as a single-row update with a positive
+sign at the \texttt{votes} operator. It stores the update to durable storage,
+and then forwards the update as-is to its children; in this case, the count
+operator.
+
+The count operator performs a lookup into its own output state for the current
+count of the new row's group by column value. The semantics of a count is that
+an insertion increments that number by one, so the operator emits a replacement
+update for the old state. In particular, the update it produces contains a
+negatively-signed record for the old count, and a positively-signed record for
+the update count. The replacement also includes the group by column value.
+
+When the join operator receives this replacement update from the count, it
+performs a lookup into its other ancestor, \texttt{stories}, for records that
+match the join column value of each record of the incoming update. In this case,
+both records (the negative and the positive) have the same story identifier as
+the join value, so only a single record is returned\,---\,the matching story.
+The operator then joins each record in the update with each matching result.
+This produces an update that (still) contains one negative and one positive
+record, but where each record now includes additional columns from the
+\texttt{stories} table.
+
+Ultimately, this two-record update arrives at the operator that represents the
+external \texttt{StoryWithVC} view. The changes from the update are applied one
+by one, with the negative record removing the entry in the view with the old
+vote count, and the positive record adding the replacement entry. Once the
+update has been applied, the changes are made visible to readers who will then
+start seeing the updated vote count for the story in question.
+
+\section{Consistency Semantics}
 
 To achieve high parallel processing performance, Noria's dataflow avoids
 global progress tracking or coordination. An update injected by a base table
@@ -136,90 +187,13 @@ coordination.%
 additional mechanisms, as discussed in \S\ref{s:practical}.}
 The standard relational operators that Noria supports all have this property.
 
-% TODO
-
-%
+\paragraph{Transactions.}
 Web applications sometimes rely on database transactions, e.g., to atomically
-update pre-computed values.
-%
-Noria approach's is compatible with basic, optimistically-concurrent
-multi-statement transactions, but Noria also often obviates the need for them.
-%
-For example, Lobsters uses transactions only to avoid write-write conflicts on
-vote counts and stories' ``hotness'' scores.
-%
-A multi-statement transaction is required only because baseline Lobsters
-pre-computes hotness for performance.
-%
-Noria instead computes hotness in the dataflow, which avoids write-write
-conflicts without a transaction, albeit at the cost of eventual consistency for
-reads.
-%
-We omit further discussion of transactions with Noria in this paper; we plan to
-describe them in future work.
-%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Challenges}
-
-%
-An efficient Noria design faces two key challenges: first, it must limit the
-size of its state and views (\S\ref{s:partial}); and second, changes to the
-Noria program must adapt the dataflow without downtime in serving clients
-(\S\ref{s:dynamic-dataflow}).
-%
-
----
-
-Noria implements the partially stateful dataflow model for incremental view
-maintenance in databases. It focuses on building a better database backend for
-read-heavy applications where a long-running dataflow program maintains any
-number of materialized user-defined views, specified in SQL. Noria uses joint
-query optimization techniques to find ways to integrate new views and queries
-with the running dataflow. The system is also highly concurrent and distributed,
-and supports sharding cliques of operators to share resource costs and increase
-sustainable throughput.
-
-Dataflow is a broad term, so I want to take a moment to discuss Noria's specific
-dataflow implementation. Noria takes SQL queries from the application, and folds
-them into a single, unified dataflow program. The dataflow is a directed,
-acyclic graph, with the base tables at the ``top'', and application-accessible
-views at the ``bottom''. The nodes in between represent the SQL operators that
-make up the query of every view. Reads (\texttt{SELECT} queries) access
-materializations at the leaves only, while writes (\texttt{INSERT},
-\texttt{UPDATE}, and \texttt{DELETE} queries) flow into the graph at the roots.
-
-After a write has been persisted by the base table operator, it flows into the
-dataflow graph as an ``update'', following the graph's edges. Every operator the
-update passes through processes the update according to the operator semantics,
-and emits a derived update. Eventually the update arrives at a leaf view and
-changes the state visible to reads through the leaf's materialization. Updates
-are \emph{signed} (i.e., they can be ``negative'' or ``positive''), with
-negative updates reflecting revocations of past results, and modifications
-represented as a negative-positive update pair.
-
----
-
-How do we know that Noria is eventually consistent?
-
-First, how do we know that Noria without partial state is eventually
-consistent. And second, how do we know that Noria remains eventually
-consistent with partial state.
-
-We don't have a formal proof for either. Ignoring implementation bugs, the
-informal argument goes something like:
-
-For partial state, we need to show that each of the things that have been
-changed preserve eventual consistency. First, sending a snapshot of past state
-(upquery response) is equivalent to sending the individual updates that made
-up that snapshot since the operators are distributive and commutative. Second,
-upquery results can race with related updates, which is handled by the various
-challenges I listed in the proposal:
-
- - sending them inline in the dataflow (for single-branch)
- - union buffering (for unioned branched dataflow)
- - special join upquery handling (for joined branched dataflow)
-
-And third, partial state means that lookups can miss internally in the
-dataflow, which is handled by join eviction when related state may still be
-present downstream, and by discarding the update when it is not.
+update pre-computed values. Noria does not implement transactions, though its
+support for derived views often obviates the need for them. For example, web
+applications often use transactions to keep denormalized schemas synchronized: a
+``like count'' column in the table that stores posts or an ``average rating''
+column in the table that stores products. Noria obviates the need for such
+denormalizations, and the transactions needed to maintain them, by automatically
+ensuring that computed derived values are kept up to date with respect to the
+base data.

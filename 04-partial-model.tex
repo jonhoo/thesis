@@ -34,3 +34,80 @@ existing dataflow systems do not generally allow. Upqueries also race with other
 upqueries, and with concurrent modifications propagating through the dataflow,
 and the dataflow must be careful to not let permanent inconsistencies arise as a
 result of this.
+
+%
+%\begin{figure}[t]
+% \centering
+% %\setlength{\belowcaptionskip}{-6pt}
+% \includegraphics{figures/design-join-query.pdf}
+% %\includegraphics{figures/design-ancestor-query-legend.pdf}
+% %\captionsetup{margin=2pt}
+% \caption{Noria's data-flow operators can query into upstream state:
+%   a join issues \UQan \upquery (\textbf{I}) to retrieve
+%   a record from upstream state to produce a join result
+%   (\textbf{II}).}
+% \label{f:design-backwards-queries}
+%\end{figure}
+%
+
+%
+An efficient Noria design faces two key challenges: first, it must limit the
+size of its state and views (\S\ref{s:partial}); and second, changes to the
+Noria program must adapt the dataflow without downtime in serving clients
+(\S\ref{s:dynamic-dataflow}).
+%
+
+---
+
+Noria implements the partially stateful dataflow model for incremental view
+maintenance in databases. It focuses on building a better database backend for
+read-heavy applications where a long-running dataflow program maintains any
+number of materialized user-defined views, specified in SQL. Noria uses joint
+query optimization techniques to find ways to integrate new views and queries
+with the running dataflow. The system is also highly concurrent and distributed,
+and supports sharding cliques of operators to share resource costs and increase
+sustainable throughput.
+
+Dataflow is a broad term, so I want to take a moment to discuss Noria's specific
+dataflow implementation. Noria takes SQL queries from the application, and folds
+them into a single, unified dataflow program. The dataflow is a directed,
+acyclic graph, with the base tables at the ``top'', and application-accessible
+views at the ``bottom''. The nodes in between represent the SQL operators that
+make up the query of every view. Reads (\texttt{SELECT} queries) access
+materializations at the leaves only, while writes (\texttt{INSERT},
+\texttt{UPDATE}, and \texttt{DELETE} queries) flow into the graph at the roots.
+
+After a write has been persisted by the base table operator, it flows into the
+dataflow graph as an ``update'', following the graph's edges. Every operator the
+update passes through processes the update according to the operator semantics,
+and emits a derived update. Eventually the update arrives at a leaf view and
+changes the state visible to reads through the leaf's materialization. Updates
+are \emph{signed} (i.e., they can be ``negative'' or ``positive''), with
+negative updates reflecting revocations of past results, and modifications
+represented as a negative-positive update pair.
+
+---
+
+How do we know that Noria is eventually consistent?
+
+First, how do we know that Noria without partial state is eventually
+consistent. And second, how do we know that Noria remains eventually
+consistent with partial state.
+
+We don't have a formal proof for either. Ignoring implementation bugs, the
+informal argument goes something like:
+
+For partial state, we need to show that each of the things that have been
+changed preserve eventual consistency. First, sending a snapshot of past state
+(upquery response) is equivalent to sending the individual updates that made
+up that snapshot since the operators are distributive and commutative. Second,
+upquery results can race with related updates, which is handled by the various
+challenges I listed in the proposal:
+
+ - sending them inline in the dataflow (for single-branch)
+ - union buffering (for unioned branched dataflow)
+ - special join upquery handling (for joined branched dataflow)
+
+And third, partial state means that lookups can miss internally in the
+dataflow, which is handled by join eviction when related state may still be
+present downstream, and by discarding the update when it is not.
