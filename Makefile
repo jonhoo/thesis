@@ -5,10 +5,9 @@ all:
 
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
-	    00-introduction.tex \
-	    01-background.tex \
-	    02-noria.tex \
-	    03-related-work.tex \
+	    01-introduction.tex \
+	    02-background.tex \
+	    03-noria.tex \
 	    04-partial-model.tex \
 	    05-partial.tex \
 	    06-evaluation.tex \
