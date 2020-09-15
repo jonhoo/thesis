@@ -197,39 +197,6 @@ evictions).
 
 \section{Sharding}
 
-Noria supports sharding operators in the dataflow to increase write performance.
-A brief description of how Noria's sharding works is given here, followed by an
-outline for how partial state must be adapted to work with sharding.
-
-\subsection{Sharding in Noria}
-
-Noria shards operators primarily based on how they access state. For example, an
-aggregation performs lookups into its own state, and is sharded by the key
-column of those lookups. Any other sharding would mean that processing one
-update would require coordination among all shards. A join is sharded by the
-join key for the same reason. Base tables are sharded by the table's primary
-key. Operators that do not perform lookups (e.g., unions) continue the sharding
-of their ancestors to avoid unnecessary shuffles.
-
-To shard an operator, Noria introduces two additional nodes in the dataflow: a
-\emph{sharder} placed upstream of the sharded operator, and a \emph{shard
-merger} downstream of it. The sharder routes incoming updates to the appropriate
-shard of the sharded operator, and the shard merger is a union operator that
-combines the output of all the shards to a single downstream output stream.
-Noria then eliminates unnecessary sharders and shard mergers, such as if an
-operator and its ancestor are sharded the same way.
-
-Noria implements static hash partitioning: how an operator is sharded is
-determined when it is added to the dataflow, and does not change over the
-runtime of the application. Sharding by value ranges and adjusting the sharding
-dynamically is left for future work.
-
-\begin{comment}
-  Sharding is tracked based on "ultimately source column". (column tracing)
-\end{comment}
-
-\subsection{Sharding Partial State}
-
 Partial with sharding mainly follows the rules of partial across forked dataflow
 (\S\ref{todo}), with the following modifications:
 

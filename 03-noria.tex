@@ -197,3 +197,101 @@ column in the table that stores products. Noria obviates the need for such
 denormalizations, and the transactions needed to maintain them, by automatically
 ensuring that computed derived values are kept up to date with respect to the
 base data.
+
+\section{Parallelism}
+
+Servers have many cores, and any high-performance system must be able to take
+advantage of multiple cores to take full advantage of the hardware. Noria does
+so in several ways. First, it allows reads to happen independently from any
+number of threads concurrently. Second, it allows different threads to process
+writes in disjoint parts of the dataflow concurrently. And third, it supports
+sharding individual operators, or cliques of operators, so that multiple threads
+can process disjoint subsets of the data concurrently through the same dataflow
+segment. These three mechanisms are described further below.
+
+\subsection{Read Independence}
+
+Since Noria is primarily oriented towards read-heavy workloads, its architecture
+is optimized for allowing reads to go ahead at full speed whenever possible. In
+particular, Noria does not synchronize reads with reads \emph{or} writes. Unless
+a read encounters missing partial state, it never blocks waiting for another
+thread.
+
+This is achieved through a concurrency primitive that maintains two instances of
+each materialized view, with deduplication between them. Reads go to one view,
+and writes to the other. Readers only see updates to the view when a writer
+exposes those changes explicitly\,---\,the writer flips an atomic pointer to the
+other view, and then waits for all readers to exit the old view before modifying
+it again. This can be done on every update, as Noria currently does, or only
+occasionally to amortize the cross-core communication penalty. Crucially,
+readers do not take locks, and generally operate only on core-local cache lines.
+
+This design allows Noria to use any number of threads to serve reads from any
+view. As long as there are cores available, new threads can be added to perform
+view lookups and request serialization and deserialization.
+
+\begin{inprogress}
+  This design is further discussed in Appendix B?
+\end{inprogress}
+
+\subsection{Partitioning}
+
+As part of dataflow planning, Noria divides the dataflow graph into a number of
+sub-graphs called \textit{thread domains}. Only a single thread can process
+updates in a given thread domain at a time (except with sharding; see below),
+and any update that enters a thread domain is processed to completion within
+the domain before another update is processed.
+
+State is never shared between thread domains, which means no locks are needed.
+Thread domains only ever communicate with one another through messages sent
+across the edges of the dataflow, or in the case of upqueries, by sending
+messages through dedicated upquery paths set up by the partial subsystem. All
+such communication can happen either over the network if the other thread domain
+is on a different host, or over an in-memory channel if it is local.
+
+Since thread domains share nothing, some state may be duplicated across
+boundaries. For example, a join operator at an incoming edge of a thread domain
+must be able to perform lookups into the state of its ancestor, which sits in a
+different thread domain. In such a case, Noria will create a thread-local copy
+of the join's ancestor's state that it can use locally. Noria's thread domain
+assignment heuristics will attempt to draw domain boundaries  such that this
+kind of duplication is unnecessary. For example, it will prefer drawing a domain
+boundary just before an aggregation (which does not need to look up in the state
+of its ancestor), and avoid drawing a domain boundary just before a join.
+
+\subsection{Sharding}
+
+To accommodate applications with such a high volume of writes that the
+processing at a single operator is a bottleneck, Noria supports sharding an
+operator. Multiple threads split the work of handling updates to a sharded
+operator, and operate like independent, disjoint parts of the dataflow.
+
+Noria implements static hash partitioning: how an operator is sharded is
+determined when it is added to the dataflow, and does not change over the
+runtime of the application. Sharding by value ranges and adjusting the sharding
+dynamically is left for future work.
+
+Noria shards operators primarily based on how they access state. For example, an
+aggregation performs lookups into its own state, and is sharded by the key
+column of those lookups. Any other sharding would mean that processing one
+update would require coordination among all shards. A join is sharded by the
+join key for the same reason. Base tables are sharded by the table's primary
+key. Operators that do not perform lookups (e.g., unions) continue the sharding
+of their ancestors to avoid unnecessary shuffles.
+
+To shard an operator, Noria introduces two additional nodes in the dataflow: a
+\emph{sharder} placed upstream of the sharded operator, and a \emph{shard
+merger} downstream of it. The sharder routes incoming updates to the appropriate
+shard of the sharded operator, and the shard merger is a union operator that
+combines the output of all the shards to a single downstream output stream.
+Noria then eliminates unnecessary sharders and shard mergers, such as if an
+operator and its ancestor are sharded the same way.
+
+Sharding boundaries are naturally also thread boundaries, though two connected
+thread domains may also be sharded differently. Or, phrased differently, Noria
+may partition a chain of operators that are all sharded by the same column into
+multiple thread domains to increase parallelism.
+
+\begin{comment}
+  Sharding is tracked based on "ultimately source column". (column tracing)
+\end{comment}
