@@ -11,8 +11,8 @@ of the thesis.
   \begin{minted}{sql}
 /* base tables */
 CREATE TABLE stories
-  (id int, author int, title text, url text);
-CREATE TABLE votes (user int, story_id int);
+  (id int, title text);
+CREATE TABLE votes (story_id int, user int);
 CREATE TABLE users (id int, username text);
 /* internal view: vote count per story  */
 CREATE INTERNAL VIEW VoteCount AS
@@ -100,7 +100,9 @@ from a base table generates a ``negative'' update that revokes derived records.
 Negative updates remove entries when Noria applies them to state, and retain
 their negative ``sign'' when combined with other records (e.g., through joins).
 Negative updates hold exactly the same values as the positives they revoke and
-thus follow the same dataflow paths.
+thus follow the same dataflow paths. The combined deltas emitted by an operator
+from the beginning of time constitutes the operator's current state, though this
+state may not be stored anywhere.
 
 Noria supports \emph{stateless} and \emph{stateful} operators. Stateless
 operators, such as filters and projections, need no context to process updates;

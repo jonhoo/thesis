@@ -1,23 +1,186 @@
-There are two reasons why the results for a query may not be known: either the
-query as a whole has not been seen before and must be incorporated, or the
-results for the application's particular parameter values are missing from the
-materialized view. This can occur either because that particular set of
-parameter values have never been requested before, or because those results have
-since been evicted. In either case, Noria must execute an upquery before it can
-respond to the application's request.
+Noria, as described in \S\ref{s:noria}, uses significant amounts of memory. All
+results for all queries must be materialized, and unlike traditional caching
+approaches, unimportant cached results cannot be evicted to free up memory. To
+address the high memory use of traditional materialized views, this thesis
+proposes \textit{partially materialized state}. Partial state enables Noria to
+store and maintain only a subset of a materialized view's contents, and to
+compute missing state on demand. Partial state also enables Noria to implement
+eviction, so that the materialization cost is kept low even as the underlying
+workload changes.
 
-Partial state is key to Noria's feasibility\,---\,without it, all results for
-every prepared query must be computed and maintained, at a significant memory
-and compute cost. With partial state, query results are instead populated on
-demand, and only parts of the results relevant to the application's particular
-query parameters are computed and maintained. Partial state also enables Noria
-to implement eviction, so that the materialization cost is kept low even as the
-underlying workload changes.
+This chapter discusses the partially stateful model and its components. The next
+chapter examines the practical challenges that arise when partial state is
+implemented in a dataflow system.
 
-The essence of the design is to introduce a notion of ``missing state'' to the
-dataflow engine. And alongside it, a mechanism to retroactively, and
-efficiently, compute over past inputs to repopulate that missing state on
-demand. This mechanism is called the ``upquery''. An upquery reaches through the
+\section{Missing State}
+
+At the core of the partial model is the notion of \textit{missing state}.
+Missing state indicates that a particular value is not yet known, and must be
+computed on demand if the application queries for it. State can be marked as
+missing both in state that is internal to the dataflow, like the state of an
+aggregation, and in externally visible state like Noria's query result caches.
+In Noria, most state starts out as missing, and is populated driven by what data
+the application queries for.
+
+Missing state manifests as missing entries in indices in the system. For
+example, an aggregation that groups by the author of a given article would have
+an index over the author column. An entry can be missing in that index to
+signify that the aggregated value for a given author is unknown. If state
+carries multiple indices, a particular base table row may be present in one
+index, but missing in another. Indexes over a given state are either all partial
+or none of them are.
+
+If, while processing an update, the system encounters missing state, this
+indicates that the update does not affect query results that the application has
+indicated interest in. In such a case, the system is presented with two options:
+eagerly compute the missing state before proceeding, or discard the update. To
+avoid unnecessarily maintaining unimportant cached results, updates are dropped
+in this case.
+
+An important corollary of the above is that partial state must be enabled
+on all stored state \emph{below} any partial state. More formally:
+
+\begin{invariant}
+  \label{i:partial-above-full}
+  It is illegal for the dataflow to contain state for two nodes $A$ and $B$
+  where $A$ is an ancestor of $B$, $A$ uses partial state, and $B$ does not use
+  partial state.
+\end{invariant}
+
+To see why, consider what would happen if an update arrives at $A$ for a missing
+entry. $A$ would discard that update, and $B$'s state would remain perpetually
+stale.
+
+\section{Upqueries}
+
+If an application requests data that is found to be missing, the system issues
+an \textit{upquery} to compute the requested data. Upqueries flow ``up'' the
+dataflow graph, towards the base tables at the ``top'', and constitute a request
+for the target of the upquery to replay past data. Upqueries may recurse if the
+requested state is not available at the initial target.
+
+The response to an upquery takes the form of a regular update that flows through
+the normal dataflow program. This update is a snapshot that combines all past
+deltas pertinent to the upquery into a single update. That single update holds
+only positive deltas that represent the current set of relevant records.
+
+Operators are generally not aware whether they are processing an update that
+resulted from a base table change or an upquery. The upquery response flows
+in-line with other dataflow updates, and follows the edges of the dataflow.
+
+Upquery responses are special in two key ways. First, they only propagate along
+edges towards the operator that issued the upquery, so that one upquery does not
+populate the relevant data in the state of \emph{every} operator. And second,
+if an operator encounters missing state while processing an upquery response
+update, it does not discard that update, but instead does the work necessary to
+process that update fully. This process is described in further detail below.
+
+\section{Upquery Plans}
+
+When an application query encounters missing state in a view, the system needs
+to know what upqueries to issue. The set of necessary upqueries for each view is
+that view's \textit{upquery plan}. The system determines upquery plans by
+analyzing each view's query when that view is created, and deciding how best
+to recompute its results. It does so by finding all \emph{possible} upquery
+plans, choosing one of them, and then informing all involved domains.
+
+\subsection{Key Provenance}
+
+To determine what upquery plans can be used to reconstitute missing entries in a
+given index, the system must trace the view's parameter column back to a column
+in upstream state. The intuition here is that in order to answer the
+application's query of ``give me the results where column $C$ has value $x$'',
+the system must be able to replay rows where $C = x$ from somewhere. Or, phrased
+differently, when the output for $C = x$ is missing, the system must have a way
+to get at the inputs that \emph{generate} $C = x$. As an example, if a view
+counts books by a given author, and the current count for author $a$ is missing,
+the system must be able to somehow produce all books by author $a$.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics{diagrams/Key Provenance.pdf}
+  \caption{Key provenance for each column in the \texttt{StoriesWithVC} view
+  from Listing~\ref{f:vote-src} and Figure~\ref{f:example-exec}. Notice that
+  \texttt{story\_id} has multiple base table origins, and \texttt{vcount} does
+  not trace back to any base table columns.}
+  \label{f:key-prov}
+\end{figure}
+
+More generally, in order to recompute the results where $C = x$ in some view
+$V$, the system must determine the \textit{key provenance} of $C$; where $C$
+``came from''. The system computes key provenance by tracing columns ``up'' the
+dataflow to where they originate, which results in a provenance graph like the
+one shown in Figure~\ref{f:key-prov} for the \texttt{StoriesWithVC} view from
+Listing~\ref{f:vote-src}. The figure illustrates two important properties of
+key tracing:
+
+\begin{enumerate}
+  \item An output column may trace to multiple input columns if it corresponds
+    to the join column in a join, or if it passes through a union. The
+    \texttt{story\_id} column, for example, originates both in
+    \texttt{stories.id} and \texttt{votes.story\_id}.
+  \item An output column may be entirely computed, and thus have no association
+    with a column in the inputs. The \texttt{vcount} column is computed by the
+    \texttt{VoteCount} aggregation, and does not exist in the input data set.
+\end{enumerate}
+
+In Listing~\ref{f:vote-src}, the system is asked to parameterize
+\texttt{StoriesWithVC} by the \texttt{story\_id} column. The key provenance
+graph tells the system that it can request input data for a given
+\texttt{story\_id} by sending an upquery either to the \texttt{stories} table
+using the \texttt{id} column, or to the \texttt{vote} table using the
+\texttt{story\_id} column. Since there exists a way to replay the input data for
+a missing output entry in this case, the \texttt{StoriesWithVC} view can be made
+partial.
+
+\paragraph{Missing Provenance.}
+Consider what would happen if Listing~\ref{f:vote-src} had \texttt{WHERE vcount
+= ?} as its parameter instead. If an application query misses in that case, the
+upquery would have to be sent to \texttt{VoteCount}, and query for ``all stories
+whose vote count is $x$''. If that state is present, all is well, but if
+\texttt{VoteCount} is itself partial, and is missing the state for
+\texttt{vcount = x}, there's a problem. The system now has no way to compute the
+missing state except by replaying \emph{all} state in \texttt{vote} without an
+index. This would be equivalent to a full table scan in a traditional database.
+The system's only%
+%
+\footnote{The system cannot disable partial state just for
+\texttt{StoriesWithVC}, since that would violate
+Invariant~\ref{i:partial-above-full}.}
+%
+efficient option is to disable partial
+state for \texttt{VoteCount}. This ensures that any upquery to it never misses,
+and therefore a table scan is never needed.
+
+\paragraph{Asymmetric Provenance.}
+The join in Listing~\ref{f:vote-src} uses a inner join ($\bowtie$), and the
+system is therefore free to upquery \emph{either} side. If it upqueries the
+``left'' side of the join, the regular processing pipeline will perform the
+necessary lookups into the ``right'' side of the join, and vice-versa. However,
+if the view query used a left or right \emph{outer} join, the system must
+upquery a particular side of the join. For a left join, it must upquery the left
+ancestor, or risk missing rows in the left ancestor that have no matching rows
+in the right ancestor. For a right join, the same logic applies, but mirrored to
+the right ancestor.
+
+\paragraph{Multiple Paths.}
+If the provenance of a column crosses a union, \emph{all} ancestors of that
+union must be upqueried, as opposed to just one as is the case with upqueries
+through a join. Unlike with a join, the regular dataflow processing of the
+upquery response through a union will not also bring along results from the
+other ancestors, so the requesting operator must ask them all individually.
+
+\subsection{Path Shortening}
+
+\subsection{Index Obligations}
+
+\section{Consistency}
+
+\section{Eviction}
+
+And
+alongside it, a mechanism to retroactively, and efficiently, compute over past
+inputs to repopulate that missing state on demand. This mechanism is called the \emph{upquery}. An upquery reaches through the
 dataflow towards its inputs, and triggers re-processing of dataflow messages
 needed to compute missing state. By modeling re-population of state this way,
 most of the dataflow can remain oblivious to the fact that state can be missing.

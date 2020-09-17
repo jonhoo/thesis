@@ -12,6 +12,11 @@
 % more colors (like RedOrange)
 \usepackage[dvipsnames]{xcolor}
 
+% brewer qualitative colors
+\definecolor{brewergreen}{HTML}{1b9e77}
+\definecolor{brewerorange}{HTML}{d95f02}
+\definecolor{brewerpurple}{HTML}{7570b3}
+
 % so we can splice in PDFs
 \usepackage{pdfpages}
 
@@ -60,7 +65,14 @@
 
 % an environment for todos
 \newenvironment{inprogress}
-  {\color{Red} \paragraph{\color{Red} TODO}}
+  {\color{brewerorange} \paragraph{\color{brewerorange} TODO}}
+  {}
+
+% an environment for invariants
+\newcounter{invn}
+\renewcommand{\theinvn}{\Alph{invn}}
+\newenvironment{invariant}
+  {\color{brewerpurple} \refstepcounter{invn}\paragraph{\color{brewerpurple} Invariant \Alph{invn}.}}
   {}
 
 % for handy reference
@@ -111,6 +123,7 @@ and represents the joint work of the coauthors of that paper.
 \input{02-background.tex}
 
 \chapter{Noria}
+\label{s:noria}
 
 \input{03-noria.tex}
 

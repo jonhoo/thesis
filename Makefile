@@ -23,7 +23,8 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/vote-migration.pdf \
 	    graphs/vote-throughput-memlimit.pdf \
 	    graphs/vote-redis.pdf \
-	    diagrams/Example\ Execution.pdf
+	    diagrams/Example\ Execution.pdf \
+	    diagrams/Key\ Provenance.pdf
 	latexmk -shell-escape -pdf thesis.tex
 
 proposal.pdf: 000-proposal.tex bibliography.bib \
