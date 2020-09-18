@@ -102,7 +102,9 @@ the system must be able to somehow produce all books by author $a$.
   \caption{Key provenance for each column in the \texttt{StoriesWithVC} view
   from Listing~\ref{f:vote-src} and Figure~\ref{f:example-exec}. Notice that
   \texttt{story\_id} has multiple base table origins, and \texttt{vcount} does
-  not trace back to any base table columns.}
+  not trace back to any base table columns. The query only uses
+  \texttt{story\_id} as a parameter, so only its provenance is used to choose
+  the upquery path.}
   \label{f:key-prov}
 \end{figure}
 
@@ -170,9 +172,32 @@ through a join. Unlike with a join, the regular dataflow processing of the
 upquery response through a union will not also bring along results from the
 other ancestors, so the requesting operator must ask them all individually.
 
-\subsection{Path Shortening}
+\paragraph{Path Shortening.}
+Key provenance tracing produces upquery paths that reach all the way back to the
+origin of a column, which is usually located at the base tables. However,
+issuing upqueries all the way to the base tables on every miss would be
+inefficient. Some intermediate state may already have the necessary data, and
+the upquery data could be sourced from there instead. The system trims upquery
+paths such that only the suffix of operators starting at the last materialized
+state are included. If an upquery reaches its origin and finds that the
+requested state is missing there too, a second upquery is issued using the
+origin's upquery paths, and only when that upquery resolves does the original
+upquery resume. Upqueries may recurse all the way up to the base tables this
+way, but avoid doing so if any intermediate state can be re-used.
 
-\subsection{Index Obligations}
+\paragraph{Index Obligations.}
+When an upquery arrives at the materialization it wants to source data from, the
+system needs an efficient way to find the requested data. Concretely, the system
+needs an index on the materialization whose key matches the lookup key of the
+upquery. The key provenance information from Figure~\ref{f:key-prov} gives the
+system all the information it needs to set up these indexes: an index is needed
+on the upquery key column on each state on the chosen upquery paths. In the case
+of the view from Listing~\ref{f:vote-src}, an index is needed on
+\texttt{StoriesWithVC.story\_id}, as well as either \texttt{stories.id} or
+both \texttt{VoteCount.story\_id} and \texttt{votes.story\_id}%
+\footnote{An index is needed on \texttt{votes.story\_id} since the upquery to
+\texttt{VoteCount} may recurse.}, depending on which upquery path the system
+chooses across the join.
 
 \section{Consistency}
 
