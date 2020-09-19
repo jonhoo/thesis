@@ -85,11 +85,12 @@ to know what upqueries to issue. The set of necessary upqueries for each view is
 that view's \textit{upquery plan}. The system determines upquery plans by
 analyzing each view's query when that view is created, and deciding how best
 to recompute its results. It does so by finding all \emph{possible} upquery
-plans, choosing one of them, and then informing all involved domains.
+plans, choosing among them, and then informing all involved domains of the
+chosen plan.
 
-\subsection{Key Provenance}
+\subsection{Key Provenance Tracing}
 
-To determine what upquery plans can be used to reconstitute missing entries in a
+To determine what upqueries can be issued to reconstitute missing entries in a
 given index, the system must trace the view's parameter column back to a column
 in upstream state. The intuition here is that in order to answer the
 application's query of ``give me the results where column $C$ has value $x$'',
@@ -168,39 +169,60 @@ ancestor, or risk missing rows in the left ancestor that have no matching rows
 in the right ancestor. For a right join, the same logic applies, but mirrored to
 the right ancestor.
 
-\paragraph{Multiple Paths.}
+\paragraph{Disjoint Provenance.}
 If the provenance of a column crosses a union, \emph{all} ancestors of that
 union must be upqueried, as opposed to just one as is the case with upqueries
 through a join. Unlike with a join, the regular dataflow processing of the
 upquery response through a union will not also bring along results from the
 other ancestors, so the requesting operator must ask them all individually.
 
-\paragraph{Path Shortening.}
-Key provenance tracing produces upquery paths that reach all the way back to the
-origin of a column, which is usually located at the base tables. However,
-issuing upqueries all the way to the base tables on every miss would be
-inefficient. Some intermediate state may already have the necessary data, and
-the upquery data could be sourced from there instead. The system trims upquery
-paths such that only the suffix of operators starting at the last materialized
-state are included. If an upquery reaches its origin and finds that the
-requested state is missing there too, a second upquery is issued using the
-origin's upquery paths, and only when that upquery resolves does the original
-upquery resume. Upqueries may recurse all the way up to the base tables this
-way, but avoid doing so if any intermediate state can be re-used.
+\subsection{Path Selection}
 
-\paragraph{Index Obligations.}
-When an upquery arrives at the materialization it wants to source data from, the
-system needs an efficient way to find the requested data. Concretely, the system
-needs an index on the materialization whose key matches the lookup key of the
-upquery. The key provenance information from Figure~\ref{f:key-prov} gives the
-system all the information it needs to set up these indexes: an index is needed
-on the upquery key column on each state on the chosen upquery paths. In the case
-of the view from Listing~\ref{f:vote-src}, an index is needed on
-\texttt{StoriesWithVC.story\_id}, as well as either \texttt{stories.id} or
-both \texttt{VoteCount.story\_id} and \texttt{votes.story\_id}%
-\footnote{An index is needed on \texttt{votes.story\_id} since the upquery to
-\texttt{VoteCount} may recurse.}, depending on which upquery path the system
-chooses across the join.
+Once the system has obtain a set of candidate upquery paths through key
+provenance, it must decide on an upquery plan based on those paths. If there is
+only one candidate, the choice is trivial. But with symmetric joins, multiple
+candidate paths may be generated. Here, the system is free to use whatever
+heuristics it sees fit to decide which side of a symmetric join to send
+upqueries to. For example, it may choose to send upqueries to the larger of the
+joined inputs so that fewer lookups are necessary when processing the response.
+
+In addition, key provenance tracing produces upquery paths that reach all the
+way back to the origin of a column, which is usually located at the base tables.
+However, it would be inefficient for operators to issue upqueries all the way to
+the base tables on every miss. Some intermediate state may already have the
+necessary data, and the upquery data could be sourced from there instead. The
+system therefore trims the paths from key provenance such that only the suffix
+of operators starting at the last materialized state are included. If an upquery
+reaches its origin and finds that the requested state is missing there too, a
+second upquery is issued using the origin's upquery paths, and only when that
+upquery resolves does the original upquery resume. Upqueries may recurse all the
+way up to the base tables this way, but avoid doing so if any intermediate state
+can be re-used.
+
+This process leaves the system with a set of paths that the system should
+upquery when it encounters a missing entry in a given state.
+
+\subsection{Implementing a Plan}
+
+Once the system has decided on a plan, that plan is communicated to all domains
+that appear along each path in the plan. This is necessary so that each domain
+knows where to route upquery responses that are part of a given plan, and does
+not disseminate the response to the entire downstream dataflow.
+
+When the system announces the upquery plan, it may also add additional indices
+to existing state to facilitate efficient execution of the new upqueries. In
+particular, when an upquery arrives at the materialization it wants to source
+data from, the system needs an efficient way to find the requested data.
+Concretely, the system needs an index on the materialization whose key matches
+the lookup key of the upquery. The key provenance information from
+Figure~\ref{f:key-prov} gives the system all the information it needs to set up
+these indexes: an index is needed on the upquery key column on each state on the
+chosen upquery paths. In the case of the view from Listing~\ref{f:vote-src}, an
+index is needed on \texttt{StoriesWithVC.story\_id}, as well as either
+\texttt{stories.id} or both \texttt{VoteCount.story\_id} and
+\texttt{votes.story\_id}\footnote{An index is needed on \texttt{votes.story\_id}
+since the upquery to \texttt{VoteCount} may recurse.}, depending on which
+upquery path the system chooses across the join.
 
 \section{Eviction}
 
@@ -251,7 +273,7 @@ non-partial state, the system would be unable to satisfy
 Invariant~\ref{i:missing-suffix} should it ever encounter missing state upstream
 of the non-partial state.
 
-\section{Consistency}
+\section{Eventual Consistency}
 
 \resume
 
