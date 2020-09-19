@@ -88,10 +88,10 @@
 
 % an environment for invariants
 \newcounter{invn}
-\renewcommand{\theinvn}{\Alph{invn}}
+\renewcommand{\theinvn}{\Roman{invn}}
 \newenvironment{invariant}
-  {\color{brewerpurple} \refstepcounter{invn}\paragraph{\color{brewerpurple} Invariant \Alph{invn}.}}
-  {}
+  {\vspace{.5em} \color{brewerorange} \refstepcounter{invn} \noindent \textbf{\color{brewerorange} Invariant \Roman{invn}.}}
+  {\vspace{.5em}}
 
 % for handy reference
 %
