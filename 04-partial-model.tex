@@ -202,6 +202,55 @@ both \texttt{VoteCount.story\_id} and \texttt{votes.story\_id}%
 \texttt{VoteCount} may recurse.}, depending on which upquery path the system
 chooses across the join.
 
+\section{Eviction}
+
+Over time, the subset of data that the application cares about tends to change.
+When it does, query results that were accessed previously may no longer be
+important to maintain as they are no longer accessed. Partial state allows the
+system to cater to such changing application patterns by \textit{evicting} state
+entries after they have been computed. When an entry is evicted, it is marked as
+missing, and subsequent requests for that state trigger an upquery as usual for
+missing state.
+
+When the system evicts an entry from state in the middle of the dataflow, a
+situation similar to what inspired Invariant~\ref{i:partial-above-full} arises.
+The missing entry may cause an update to be discarded even though downstream
+entries must see that update to avoid. For example, consider what happens if an
+operator counts the number of votes per author, and contains a count
+of 7 for the author ``Jane''. Then, the state for ``Jane'' is evicted from some
+operator upstream of the count. If an update now arrives at the operator where
+``Jane'' is missing; it would discard the update, and the downstream count would
+remain perpetually stale.
+
+To avoid such permanently stale entries, the system must ensure that when an
+entry is evicted, any dependent state downstream is also evicted. More formally,
+it must ensure that:
+
+\begin{invariant}
+  \label{i:missing-suffix}
+  If an operator encounters a missing state entry while processing a record $r$
+  in an update, any downstream state that reflects $r$ must be evicted.
+\end{invariant}
+
+Upqueries as described thus far, without evictions, generally uphold this
+invariant\footnote{Though not always; see \S\ref{join-evictions}}. As upqueries
+recurse up the dataflow, missing state is filled in ``from the top down'' until
+the operator that originally issued the upquery is presented with the requested
+state. Any misses that occur during the processing of an upquery causes
+recursive upqueries, which fill that missing state before proceeding.
+
+To uphold the property in the face of evictions, the system issues evictions
+downstream whenever it decides to evict entries from state in the middle of the
+graph. This ensures that any future update that touches the evicted state can
+safely be discarded, as any relevant downstream state has been discarded as
+well.
+
+Invariant~\ref{i:missing-suffix} implies
+Invariant~\ref{i:partial-above-full}\,---\,since state cannot be evicted from
+non-partial state, the system would be unable to satisfy
+Invariant~\ref{i:missing-suffix} should it ever encounter missing state upstream
+of the non-partial state.
+
 \section{Consistency}
 
 \resume
@@ -229,8 +278,6 @@ challenges I listed in the proposal:
 And third, partial state means that lookups can miss internally in the
 dataflow, which is handled by join eviction when related state may still be
 present downstream, and by discarding the update when it is not.
-
-\section{Eviction}
 
 \section{TODO}
 
