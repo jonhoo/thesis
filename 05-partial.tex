@@ -1,3 +1,58 @@
+\resume
+
+\section{Eventual Consistency}
+
+How do we know that Noria is eventually consistent?
+
+First, how do we know that Noria without partial state is eventually
+consistent. And second, how do we know that Noria remains eventually
+consistent with partial state.
+
+We don't have a formal proof for either. Ignoring implementation bugs, the
+informal argument goes something like:
+
+For partial state, we need to show that each of the things that have been
+changed preserve eventual consistency. First, sending a snapshot of past state
+(upquery response) is equivalent to sending the individual updates that made
+up that snapshot since the operators are distributive and commutative. Second,
+upquery results can race with related updates, which is handled by the various
+challenges I listed in the proposal:
+
+ - sending them inline in the dataflow (for single-branch)
+ - union buffering (for unioned branched dataflow)
+ - special join upquery handling (for joined branched dataflow)
+
+And third, partial state means that lookups can miss internally in the
+dataflow, which is handled by join eviction when related state may still be
+present downstream, and by discarding the update when it is not.
+
+\section{TODO}
+
+This design, while alluring, introduces a number of challenges in practice. Many
+of these stem from operators that may now need to communicate with their inputs
+to populate needed state. Those inputs may again need to retrieve that state
+from their inputs, and so on until the source of the needed data is reached.
+Upqueries logically flow in the ``opposite'' direction of the data, something
+existing dataflow systems do not generally allow. Upqueries also race with other
+upqueries, and with concurrent modifications propagating through the dataflow,
+and the dataflow must be careful to not let permanent inconsistencies arise as a
+result of this.
+
+%
+%\begin{figure}[t]
+% \centering
+% %\setlength{\belowcaptionskip}{-6pt}
+% \includegraphics{figures/design-join-query.pdf}
+% %\includegraphics{figures/design-ancestor-query-legend.pdf}
+% %\captionsetup{margin=2pt}
+% \caption{Noria's data-flow operators can query into upstream state:
+%   a join issues \UQan \upquery (\textbf{I}) to retrieve
+%   a record from upstream state to produce a join result
+%   (\textbf{II}).}
+% \label{f:design-backwards-queries}
+%\end{figure}
+%
+
 \section{Challenges}
 \label{s:challenges}
 
