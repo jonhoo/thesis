@@ -121,7 +121,9 @@ input to join with all relevant state from the other.
   \centering
   \includegraphics{diagrams/Example Execution.pdf}
   \caption{Noria's dataflow program to maintain Listing~\ref{f:vote-src}. Text
-  describes the update path highlighted in blue.}
+  describes the update path highlighted in blue. The dataflow inputs are
+  considered the ``top'' of the dataflow, and the leaves are at the ``bottom''.
+  Parents are ``upstream'' of their ``downstream'' children.}
   \label{f:example-exec}
 \end{figure}
 
