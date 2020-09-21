@@ -55,6 +55,7 @@ entry. $A$ would discard that update, and $B$'s state would remain perpetually
 stale.
 
 \section{Upqueries}
+\label{s:upqueries}
 
 If an application requests data that is found to be missing, the system issues
 an \textit{upquery} to compute the requested data. Upqueries flow ``up'' the
@@ -177,6 +178,7 @@ upquery response through a union will not also bring along results from the
 other ancestors, so the requesting operator must ask them all individually.
 
 \subsection{Path Selection}
+\label{s:upquery:selection}
 
 Once the system has obtain a set of candidate upquery paths through key
 provenance, it must decide on an upquery plan based on those paths. If there is
@@ -214,15 +216,17 @@ to existing state to facilitate efficient execution of the new upqueries. In
 particular, when an upquery arrives at the materialization it wants to source
 data from, the system needs an efficient way to find the requested data.
 Concretely, the system needs an index on the materialization whose key matches
-the lookup key of the upquery. The key provenance information from
-Figure~\ref{f:key-prov} gives the system all the information it needs to set up
-these indexes: an index is needed on the upquery key column on each state on the
-chosen upquery paths. In the case of the view from Listing~\ref{f:vote-src}, an
-index is needed on \texttt{StoriesWithVC.story\_id}, as well as either
-\texttt{stories.id} or both \texttt{VoteCount.story\_id} and
-\texttt{votes.story\_id}\footnote{An index is needed on \texttt{votes.story\_id}
-since the upquery to \texttt{VoteCount} may recurse.}, depending on which
-upquery path the system chooses across the join.
+the lookup key of the upquery. In this way, upquery plans adds additional
+indexing obligations the system must take into account.
+
+The key provenance information from Figure~\ref{f:key-prov} gives the system all
+the information it needs to set up these indexes: an index is needed on the
+upquery key column on each state on the chosen upquery paths. In the case of the
+view from Listing~\ref{f:vote-src}, an index is needed on
+\texttt{StoriesWithVC.story\_id}, as well as either \texttt{stories.id} or both
+\texttt{VoteCount.story\_id} and \texttt{votes.story\_id}\footnote{An index is
+needed on \texttt{votes.story\_id} since the upquery to \texttt{VoteCount} may
+recurse.}, depending on which upquery path the system chooses across the join.
 
 \section{Eviction}
 

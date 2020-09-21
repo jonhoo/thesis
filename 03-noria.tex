@@ -102,9 +102,15 @@ rows in downstream state; and a deletion from a base table generates a
 entries when Noria applies them to state, and retain their negative ``sign''
 when combined with other records (e.g., through joins). Negative updates hold
 exactly the same values as the positives they revoke and thus follow the same
-dataflow paths. The combined deltas emitted by an operator from the beginning of
-time constitutes the operator's current state, though this state may not be
-stored anywhere.
+dataflow paths.
+
+The combined deltas emitted by an operator from the beginning of time
+constitutes the operator's current state. This state may not be stored anywhere,
+or the delta stream may be \textit{materialized}, in which case the current
+multiset of records is stored by the system. It is helpful to think of
+\emph{edges} as being materialized, rather than operators or views, since a
+materialization is exactly equivalent to the evaluation of the deltas that have
+flowed across that edge.
 
 Noria supports \emph{stateless} and \emph{stateful} operators. Stateless
 operators, such as filters and projections, need no context to process updates;
@@ -267,6 +273,37 @@ assignment heuristics will attempt to draw domain boundaries  such that this
 kind of duplication is unnecessary. For example, it will prefer drawing a domain
 boundary just before an aggregation (which does not need to look up in the state
 of its ancestor), and avoid drawing a domain boundary just before a join.
+
+\subsubsection{Join Consistency}
+\label{s:join-state-dupe}
+
+The thread-local copy of lookup state, such as for joins, serves a second
+purpose: it mitigates a race condition that would otherwise arise from
+cross-domain state lookups. Consider a join operator J with parents L and R. If
+R's state was in a different domain than J, then the following can happen:
+
+\begin{enumerate}
+  \item R receives and incorporates a delta $d_R$ that adds row $r_R$.
+  \item J receives a delta $d_L$ from L that adds row $r_L$.
+  \item J performs a lookup into R's state based on $d_L$'s join key. The result
+        includes $r_R$, so J emits a delta that adds $r_L \bowtie r_R$.
+  \item $d_R$ arrives at J.
+  \item J performs a lookup into L's state based on $d_R$'s join key. The result
+        necessary includes $r_L$, so J emits a delta that adds $r_L \bowtie r_R$
+        a second time.
+\end{enumerate}
+
+This issue arises because the lookups bypass deltas that are in-flight between R
+and J. The lookups thus get to observe ``the future'', which erroneously causes
+J to incorporate new data at two points in time.
+
+Multi-version concurrency control could likely be used to solve this problem,
+but would be heavyweight solution that also requires much more significant
+synchronization. Especially if J and R happen to be on different physical hosts.
+Duplicating R's state across the domain boundary avoids the problem\,---\,since
+thread domains process all updates within the domain to completion, there can be
+no deltas in flight between R and J, and the lookup will never observe future
+state.
 
 \subsection{Sharding}
 

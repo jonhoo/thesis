@@ -24,7 +24,8 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/vote-throughput-memlimit.pdf \
 	    graphs/vote-redis.pdf \
 	    diagrams/Example\ Execution.pdf \
-	    diagrams/Key\ Provenance.pdf
+	    diagrams/Key\ Provenance.pdf \
+	    diagrams/Chained\ Unions.pdf
 	latexmk -shell-escape -pdf thesis.tex
 
 proposal.pdf: 000-proposal.tex bibliography.bib \
