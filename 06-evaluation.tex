@@ -742,7 +742,7 @@ scheme, such as LRU, such evictions can be avoided, and hot keys will never
 miss.
 
 Second, more upqueries must be serviced per second. Since upqueries are
-performed by the data flow, which is single-threaded along any given path, the
+performed by the dataflow, which is single-threaded along any given path, the
 upquery processing itself becomes a bottleneck. To maintain acceptable latency,
 Noria is forced to keep many more keys in cache than the model predicts so that
 not too many upqueries occur.
