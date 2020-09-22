@@ -47,48 +47,6 @@ manually tuned backend caching system. While Noria would allow the removal of
 caching logic from the application, its general-purpose architecture may miss
 out on application-specific optimizations implemented by a tailor-built system.
 
-\section{Efficient Upqueries}
-
-If upquerying for missing state in a view would require scanning all rows of
-upstream state, Noria currently disables partial state for that view. An example
-of a query that does this is shown in Listing~\ref{l:scanning-votes}. If a query
-comes in with a parameter value of 3, and that state is missing, Noria must
-count the votes for \emph{all} articles in order to find the articles that have
-exactly three votes. Since an article's vote count can also change to three
-without this being explicit in the recorded input, the current vote count for
-all articles must also be known to determine if any given input causes the
-cached results for \texttt{?=3} to change. Ultimately, this means that the view
-for this query more or less \emph{needs} to be fully materialized in order to
-maintain any part of it.
-
-\begin{listing}[h]
-  \begin{minted}{sql}
-    SELECT votes.article_id
-    FROM votes
-    GROUP BY votes.article_id
-    WHERE COUNT(votes.user_id) = ?
-  \end{minted}
-  \caption{Vote query that requires scanning \texttt{votes} on each execution.}
-  \label{l:scanning-votes}
-\end{listing}
-
-The heuristic Noria uses to determine if a view should be partial is simple: a
-view is partial if the columns used for lookups are present as keys in an index
-on fully materialized state upstream. This ensures that an upquery must never
-scan all inputs or maintain all state to handle future updates. Instead, the
-index will be used so that only relevant state is fetched. And since the
-parameter is present in the upstream state, it must be a value in each relevant
-row, which can then be used to determine what cached state it should update.
-
-It is useful to contemplate what would happen for an on-demand relational
-database that was given this query. It would need to scan and compute over the
-entire relevant base table on every query. For all but the smallest tables, this
-would be prohibitively expensive. Noria thus opts to materialize the view, even
-though it cannot be partial, to make the query feasible to execute.
-
-Whether this heuristic is overly pessimistic, and may miss views that \emph{can}
-be made partial remains an open question.
-
 \section{Efficient Migrations}
 
 Section~\ref{s:eval:mig} demonstrated that partial state can make certain
@@ -269,7 +227,7 @@ current vote count. The former may be significantly larger than the latter,
 since it includes other columns, but is cheap to recompute. The latter on the
 other hand is small, but potentially very expensive to re-compute.
 
-\subsection{Sharing}
+\subsection{State Sharing}
 
 Partial state allows a single query of the form \texttt{WHERE x = ?} to satisfy
 lookups for any value of \texttt{?}. Without partial state, the system has two
@@ -320,7 +278,7 @@ denormalizations, and the transactions needed to maintain them, by automatically
 ensuring that computed derived values are kept up to date with respect to the
 base data.
 
-\subsection{Partial State and Strong Consistency}
+\section{Stronger Consistency}
 
 Noria is eventually consistent, and so is the partial state implementation
 outlined in this thesis. That said, adding partial state to a system with
