@@ -1,15 +1,14 @@
 This thesis is built on the belief that view materialization is useful, but
-too costly to use with current solutions. It presents partial state as a
-solution to this problem that allows retaining the benefits of view
-materialization at a fraction of the cost. This chapter evaluates the validity
-of this assumption, and the efficacy of partial state as a solution by
-evaluating the following questions:
+current implementations are too costly. It presents partial state as an
+implementation that allows retaining the benefits of view materialization at a
+fraction of the cost. This chapter evaluates the usefulness of view
+materialiation, and the efficacy of partial state:
 
 \begin{enumerate}
   \item Why is view materialization desirable? (\S\ref{s:eval:why})
-  \item Why is view materialization not feasible currently? (\S\ref{s:eval:why})
-  \item Does partial state improve on the situation? (\S\ref{s:eval:why})
-  \item Why use Noria over ad-hoc solutions? (\S\ref{s:eval:alts})
+  \item Why is view materialization infeasible currently? (\S\ref{s:eval:why})
+  \item Does partial state make view materialization feasible? (\S\ref{s:eval:why})
+  \item Why use Noria over ad-hoc caching solutions? (\S\ref{s:eval:alts})
   \item What are the trade-offs with partial state? (\S\ref{s:eval:cost})
   \item How does Noria compare to ad-hoc solutions? (\S\ref{s:eval:kvperf})
   \item Does partial state speed up view creation? (\S\ref{s:eval:mig})
@@ -100,7 +99,7 @@ interesting:
 
 \begin{enumerate}
     \item Why is view materialization desirable?
-    \item Why is view materialization not feasible currently?
+    \item Why is view materialization infeasible currently?
     \item Does partial state improve on this situation?
 \end{enumerate}
 
@@ -187,7 +186,7 @@ tables, additional indices, or allocations elsewhere in the application. The
 results indicate that partial state in isolation requires only 1.5\% of the
 total operator state to be materialized; significantly less than the
 $\sfrac{1}{3}$ seen in Figure~\ref{f:lobsters-memory}. This suggests that there
-is further potential for reducing partial state's memory footprint.
+is indeed further potential for reducing partial state's memory footprint.
 
 Since partial state uses less memory, applications that do not need higher
 throughput can instead reduce cost by using hosts with less memory. For example,
@@ -255,8 +254,8 @@ whenever relevant data changes, such as when:
 There are several such computed columns in Lobsters. For each one, developers
 had to inspect each write path and modify them to ensure that they correctly
 update all related computed values. This process is manual and error-prone, but
-also necessary: without them, Lobsters running against MySQL cannot keep up with
-even a single request per second.
+also necessary: without them, the Lobsters experiment run against MySQL
+\textbf{cannot keep up with even 1 request per second}.
 
 With Noria, such manual denormalization is unnecessary. View materialization
 automatically stores and maintains derived data so that it is efficient to
@@ -344,10 +343,10 @@ The figure shows that latency is initially high, but after a few seconds, the
 mean and 95th percentile latency drop below 10 milliseconds. By the time a
 minute has passed, the 99th percentile has followed suit. Since only a small
 portion of the total computed state is cached (as shown in
-Figure~\vref{f:lobsters-memory}), this supports the hypothesis that partial
-state achieves low latency once the most commonly accessed results are cached.
-The remaining latency is primarily determined by the number of queries each page
-issues, as each one requires a round-trip to Noria.
+Figure~\vref{f:lobsters-memory}), this experiment supports the hypothesis that
+partial state achieves low latency once the most commonly accessed results are
+cached. The remaining latency is primarily determined by the number of queries
+each page issues, as each one requires a round-trip to Noria.
 
 \subsection{Paying with Tail Latency}
 
@@ -476,7 +475,7 @@ to Noria, the more it can reduce tail latency, and the further it can push
 throughput. Assuming applications see sufficient skew, like in Lobsters, the
 cache warms up quickly.
 
-\section{Absolute Cache Performance}
+\section{Cache Lookup Performance}
 \label{s:eval:kvperf}
 
 Despite how error-prone the approach is (\S\ref{s:eval:alts}), ad-hoc

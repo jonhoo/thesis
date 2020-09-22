@@ -38,18 +38,19 @@ width = 0.35
 #
 
 print('Partial non-durable compared to full: %.1f%%' % (100.0 * float(prune_dur["vmrss"].item()) / full.query('durable == True')["vmrss"].item()))
-bars1 = mem.bar([x - width/2 for x in xticks], [prune['vmrss'].item(), full.query('durable == False')['vmrss'].item()], width)
+bars1 = mem.bar([x - width/2 for x in xticks], [prune['vmrss'].item(), full.query('durable == False')['vmrss'].item()], width, label = "In-memory base tables")
 bars1[0].set_color(common.colors['noria'])
-bars1[1].set_color(common.colors['full'])
+bars1[1].set_color(common.colors['noria'])
 
-bars2 = mem.bar([x + width/2 for x in xticks], [prune_dur['vmrss'].item(), full.query('durable == True')['vmrss'].item()], width)
-bars2[0].set_color('#8e6cc9')
-bars2[1].set_color('#e2dbff')
+bars2 = mem.bar([x + width/2 for x in xticks], [prune_dur['vmrss'].item(), full.query('durable == True')['vmrss'].item()], width, label = "Durable base tables")
+bars2[0].set_color(common.colors['full'])
+bars2[1].set_color(common.colors['full'])
 
 mem.set_xticks(xticks)
 mem.set_xticklabels(xs)
 mem.set_ylim(0, 128 * 1.1) # also fit labels over bars
 mem.set_yticks([0, 32, 64, 96, 128])
+mem.legend(loc = 'upper left')
 
 mem.set_ylabel("Resident virtual memory [GB]")
 
