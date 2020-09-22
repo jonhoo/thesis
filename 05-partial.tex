@@ -2,7 +2,8 @@ The addition of partial state significantly changes how query results are
 computed by the underlying dataflow system, and the system must ensure that
 partial state produces the same results with partial state as it did without.
 This chapter demonstrates how partial state is implemented in Noria such that
-the overall system maintains the invariants from \S\ref{s:noria:consistency}.
+the overall system maintains the invariants from \S\ref{s:noria:consistency}
+(page \pageref{i:no-spurious}).
 
 The biggest change that partial state introduces is that multiple updates may
 now be collapsed and re-processed through the dataflow as a single, consolidated
@@ -12,7 +13,8 @@ reads to violate Invariant~\ref{i:no-spurious} or \ref{i:prefix-consistency}.
 
 Partial state also causes deltas that encounter missing state to be discarded
 early in the dataflow, and the system must ensure that it maintains
-Invariant~\ref{i:missing-suffix} whenever this happens.
+Invariant~\ref{i:missing-suffix} (page \pageref{i:missing-suffix}) whenever this
+happens.
 
 \section{Linear Dataflow}
 
@@ -83,14 +85,14 @@ the same edges that the upquery followed on its way up the dataflow
 upquery path\,---\,state on other branches will never see the upquery response
 in the first place.
 
-\S\ref{s:upquery:selection} noted that upquery paths are trimmed such that they
-only reach back to the \emph{nearest} materialized state to the target. Beyond
-improving efficiency, this is also important for correctness. It ensures that
-there are no stateful operators on the upquery path between the source and the
-destination. If there were, that operator's state would be used as the upquery
-source instead. Since it is safe to process the same record through a stateless
-operator multiple times, this ensures that the processing of the upquery
-response on the path to the target state never duplicates effects.
+Section \ref{s:upquery:selection} noted that upquery paths are trimmed such that
+they only reach back to the \emph{nearest} materialized state to the target.
+Beyond improving efficiency, this is also important for correctness. It ensures
+that there are no stateful operators on the upquery path between the source and
+the destination. If there were, that operator's state would be used as the
+upquery source instead. Since it is safe to process the same record through a
+stateless operator multiple times, this ensures that the processing of the
+upquery response on the path to the target state never duplicates effects.
 
 \section{Merging Dataflow}
 
@@ -136,7 +138,7 @@ it also cannot apply the messages, since B's message includes data that will be
 included in B's eventual upquery response. If it did, that data would be
 duplicated.
 
-\begin{listing}[h]
+\begin{listing}
   \begin{minted}{python}
 if is_upquery_response(d):
   buffered <- buffer[upquery_path_group(d)][key(d)]
@@ -177,7 +179,7 @@ else:
 To mitigate this problem, unions must \textit{buffer} upquery results until
 \emph{all} their inputs have responded. In the meantime, they must \emph{also}
 buffer updates for the buffered upquery keys to ensure that a single, complete,
-upquery response is ultimately emitted. Listing~\ref{l:union-buffer} shows
+upquery response is ultimately emitted. Listing~\vref{l:union-buffer} shows
 pseudocode for the buffering algorithm.
 
 For unions to buffer correctly, they must know which upquery responses belong to
@@ -195,7 +197,7 @@ complex dataflow layouts, this is not always the case.
   \label{f:chained-union}
 \end{figure}
 
-Figure~\ref{f:chained-union} shows a dataflow segment where the precise grouping
+Figure~\vref{f:chained-union} shows a dataflow segment where the precise grouping
 mechanism is important (\texttt{upquery\_path\_group} in the code listing).
 There are three unions in a chain, which makes eight distinct upquery paths. If
 $v$ encounters missing state, it must therefore issue eight upqueries, one for
@@ -365,10 +367,10 @@ each $u_i$ where $c_i \neq c_j$.
 
 \section{Sharding}
 
-Noria supports sharding cliques of operators to increase the throughput
-of particular sections of the dataflow (\S\ref{s:noria:sharding}). And upqueries
+Noria supports sharding cliques of operators to increase the throughput of
+particular sections of the dataflow (\S\ref{s:noria:sharding}). And upqueries
 must also work when the system decides to shard operators in this way. Partial
-with sharding mainly follows the rules of partial across unions
+state with sharding mainly follows the rules of partial across unions
 (\S\ref{s:upqueries:union}), with the following three modifications:
 
 First, if the node that receives the upquery, R, is sharded the same way as the

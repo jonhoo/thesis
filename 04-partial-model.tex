@@ -96,11 +96,10 @@ the system must be able to somehow produce all books by author $a$.
   \centering
   \includegraphics{diagrams/Key Provenance.pdf}
   \caption{Key provenance for each column in the \texttt{StoriesWithVC} view
-  from Listing~\ref{f:vote-src} and Figure~\ref{f:example-exec}. Notice that
-  \texttt{story\_id} has multiple base table origins, and \texttt{vcount} does
-  not trace back to any base table columns. The query only uses
-  \texttt{story\_id} as a parameter, so only its provenance is used to choose
-  the upquery path.}
+  from Listing~\ref{l:vote-src}. Notice that \texttt{story\_id} has multiple
+  base table origins, and \texttt{vcount} does not trace back to any base table
+  columns. The query only uses \texttt{story\_id} as a parameter, so only its
+  provenance is used to choose the upquery path.}
   \label{f:key-prov}
 \end{figure}
 
@@ -108,8 +107,8 @@ More generally, in order to recompute the results where $C = x$ in some view
 $V$, the system must determine the \textit{key provenance} of $C$; where $C$
 ``came from''. The system computes key provenance by tracing columns ``up'' the
 dataflow to where they originate, which results in a provenance graph like the
-one shown in Figure~\ref{f:key-prov} for the \texttt{StoriesWithVC} view from
-Listing~\ref{f:vote-src}. The figure illustrates two important properties of
+one shown in Figure~\vref{f:key-prov} for the \texttt{StoriesWithVC} view from
+Listing~\vref{l:vote-src}. The figure illustrates two important properties of
 key tracing:
 
 \begin{enumerate}
@@ -122,7 +121,7 @@ key tracing:
     \texttt{VoteCount} aggregation, and does not exist in the input data set.
 \end{enumerate}
 
-In Listing~\ref{f:vote-src}, the system is asked to parameterize
+In Listing~\ref{l:vote-src}, the system is asked to parameterize
 \texttt{StoriesWithVC} by the \texttt{story\_id} column. The key provenance
 graph tells the system that it can request input data for a given
 \texttt{story\_id} by sending an upquery either to the \texttt{stories} table
@@ -132,7 +131,7 @@ a missing output entry in this case, the \texttt{StoriesWithVC} view can be made
 partial.
 
 \paragraph{Missing Provenance.}
-Consider what would happen if Listing~\ref{f:vote-src} had \texttt{WHERE vcount
+Consider what would happen if Listing~\ref{l:vote-src} had \texttt{WHERE vcount
 = ?} as its parameter instead. If an application query misses in that case, the
 upquery would have to be sent to \texttt{VoteCount}, and query for ``all stories
 whose vote count is $x$''. If that state is present, all is well, but if
@@ -153,7 +152,7 @@ performed once: when the view is initially added. But this comes at the cost of
 maintaining the entire resultset of the query for all parameter values.
 
 \paragraph{Asymmetric Provenance.}
-The join in Listing~\ref{f:vote-src} uses a inner join ($\bowtie$), and the
+The join in Listing~\ref{l:vote-src} uses a inner join ($\bowtie$), and the
 system is therefore free to upquery \emph{either} side. If it upqueries the
 ``left'' side of the join, the regular processing pipeline will perform the
 necessary lookups into the ``right'' side of the join, and vice-versa. However,
@@ -212,10 +211,10 @@ Concretely, the system needs an index on the materialization whose key matches
 the lookup key of the upquery. In this way, upquery plans adds additional
 indexing obligations the system must take into account.
 
-The key provenance information from Figure~\ref{f:key-prov} gives the system all
-the information it needs to set up these indexes: an index is needed on the
+The key provenance information from Figure~\vref{f:key-prov} gives the system
+all the information it needs to set up these indexes: an index is needed on the
 upquery key column on each state on the chosen upquery paths. In the case of the
-view from Listing~\ref{f:vote-src}, an index is needed on
+view from Listing~\ref{l:vote-src}, an index is needed on
 \texttt{StoriesWithVC.story\_id}, as well as either \texttt{stories.id} or both
 \texttt{VoteCount.story\_id} and \texttt{votes.story\_id}\footnote{An index is
 needed on \texttt{votes.story\_id} since the upquery to \texttt{VoteCount} may
@@ -265,6 +264,5 @@ well.
 
 Invariant~\ref{i:missing-suffix} implies the corollary from earlier that partial
 state cannot exist upstream of non-partial state. Since state cannot be evicted
-from non-partial state, the system would be unable to satisfy
-Invariant~\ref{i:missing-suffix} should it ever encounter missing state upstream
-of the non-partial state.
+from non-partial state, the system would be unable to satisfy the invariant
+should it ever encounter missing state upstream of the non-partial state.

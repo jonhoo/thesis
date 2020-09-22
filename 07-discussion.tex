@@ -100,8 +100,8 @@ the data stored in that view. Constructing an index tends to be significantly
 faster than computing the full cached results of the new view, but it is a
 non-trivial cost nonetheless.
 
-For example, consider the query in Listing~\ref{l:karma} when added to the vote
-benchmark from Listing~\ref{l:votes}. To simplify the argument, assume that the
+For example, consider the query in Listing~\vref{l:karma} when added to the vote
+benchmark from Listing~\vref{l:votes}. To simplify the argument, assume that the
 \texttt{VoteCount} view is for some reason \emph{not} partially stateful (i.e.,
 it holds all the rows). For upqueries of the new view to be efficient, it must
 be possible to query all the articles (along with their vote counts) for a given
@@ -118,7 +118,7 @@ not free.
   \end{minted}
   \caption{Query that computes the sum total score of a user's articles
   (their ``karma'').}
-  \label{l:scanning-votes}
+  \label{l:karma}
 \end{listing}
 
 \begin{inprogress}
@@ -128,8 +128,8 @@ not free.
   indexes. But we probably want there to be.
 \end{inprogress}
 
-Here too a comparison with what would happen when using a traditional relational
-database is useful. When the application developer decides that they want to run
+A comparison with what would happen when using a traditional relational database
+is useful here. When the application developer decides that they want to run
 this new query, they have two choices: either compute it on-demand, or
 denormalize the schema by adding a new computed ``karma'' column to the
 (hypothesized) \texttt{users} table. Neither option is great. The former is slow
@@ -233,9 +233,9 @@ supports \emph{lateral} joins~\cite{lateral-join}, which is described as
 
 In particular, lateral joins let the application author write a query that has
 access to the contents of some unrelated table. For example,
-Listing~\ref{l:emulate-partial-vote} shows how a lateral join can be used to
+Listing~\vref{l:emulate-partial-vote} shows how a lateral join can be used to
 emulate a partially materialize vote count view like the one from
-Listing~\ref{l:votes}. The fundamental idea here is to have a table of
+Listing~\vref{l:votes}. The fundamental idea here is to have a table of
 ``filled'' keys, and have only the results for those keys be included in the
 final materialized view.
 

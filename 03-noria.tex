@@ -27,7 +27,7 @@ CREATE VIEW StoriesWithVC AS
   \end{minted}
   \caption{Noria program for a key subset of the Lobsters news
            aggregator~\cite{lobsters} that counts users' votes for stories.}
-  \label{f:vote-src}
+  \label{l:vote-src}
 \end{listing}
 
 Noria runs on one or more multicore servers that communicate with clients and
@@ -44,7 +44,7 @@ but stores views in server memory.
 
 Noria's interface resembles parameterized SQL queries. The application supplies
 a \emph{Noria program}, which registers base tables and views with parameters
-supplied by the application when it retrieves data. Figure~\ref{f:vote-src}
+supplied by the application when it retrieves data. Listing~\vref{l:vote-src}
 shows an example Noria program for a news aggregator application where users can
 vote for stories (\texttt{?} is a parameter). The Noria program includes base
 table definitions, \emph{internal} views used as shorthands in other
@@ -128,15 +128,15 @@ input to join with all relevant state from the other.
 \begin{figure}[t]
   \centering
   \includegraphics{diagrams/Example Execution.pdf}
-  \caption{Noria's dataflow program to maintain Listing~\ref{f:vote-src}. Text
+  \caption{Noria's dataflow program to maintain Listing~\ref{l:vote-src}. Text
   describes the update path highlighted in blue. The dataflow inputs are
   considered the ``top'' of the dataflow, and the leaves are at the ``bottom''.
   Parents are ``upstream'' of their ``downstream'' children.}
   \label{f:example-exec}
 \end{figure}
 
-Figure~\ref{f:example-exec} shows the dataflow that Noria constructs for
-maintaining the Noria program in Listing~\ref{f:vote-src}. At the top are the
+Figure~\vref{f:example-exec} shows the dataflow that Noria constructs for
+maintaining the Noria program in Listing~\vref{l:vote-src}. At the top are the
 entry points into the dataflow\,---\,the operators that represent the schema
 base tables\,---\,one for the \texttt{stories} table, and one for the
 \texttt{votes} table. Connected to the \texttt{votes} table is a counting
@@ -232,9 +232,9 @@ aims to uphold two additional safety properties:
   all earlier changes to that same base table.
 \end{invariant}
 
-Invariant~\ref{i:no-spurious} ensures that views include no duplicated
-results and no spurious results. Essentially, it guarantees that view results
-represent data that is in the base tables, and no other data.
+Invariant~\ref{i:no-spurious} ensures that views include no duplicated results
+and no spurious results. Essentially, it guarantees that view results represent
+data that is in the base tables, and no other data.
 
 Invariant~\ref{i:prefix-consistency} on the other hand ensures that when the
 system makes progress, it does so in a sane manner. If the application issues
@@ -261,7 +261,7 @@ of $w_2$ may manifest downstream before $w_1$ does.
 Noria's eventual consistency can lead to reads producing strange results
 under certain circumstances in stream processing
 systems~\cite{materialize-eventual}. As an example, consider the query in
-Listing~\ref{l:always-wrong}. If the maximum value changes frequently enough,
+Listing~\vref{l:always-wrong}. If the maximum value changes frequently enough,
 then the outer and inner query may be perpetually ``out-of-sync''. The current
 maximum may not yet be present in the outer query, or a new maximum value may
 not yet be present in the inner query. The net result of this would be that the
@@ -309,7 +309,7 @@ delta will be applied to the final view before the other. This leaves the view
 in an intermediate state where a partial effect of the original update can be
 observed until the other delta arrives.
 
-Listing~\ref{l:duplicates} gives an example of a query with this kind of race
+Listing~\vref{l:duplicates} gives an example of a query with this kind of race
 condition. Imagine that the application changes the \texttt{state} where
 \texttt{id = 42} from 1 to 2. In Noria, this is represented by a removal of the
 now-outdated record, and an addition of the updated record. The removal follows

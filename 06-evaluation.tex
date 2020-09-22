@@ -34,7 +34,7 @@ directly into the queries the real Lobsters code would issue for that same page
 request. The generator supports scaling up the rate of access and user count to
 emulate a larger user base for benchmarking.
 
-\begin{figure}
+\begin{table}
   \begin{tabular}{ p{0.8in} | r | r | r | p{2.9in} }
     Page & \% & W & Q & Description \\
     \hline
@@ -54,11 +54,11 @@ emulate a larger user base for benchmarking.
   that load the given page. W is the number of writes performed by a given page.
   Q is the number of (read) queries a page issues.}
   \label{t:lobsters-pages}
-\end{figure}
+\end{table}
 
 The various pages in Lobsters differ significantly in what queries they issue,
 how many queries they issue, and the extent to which they are read or write
-heavy. Table~\ref{t:lobsters-pages} gives an overview of how often each page is
+heavy. Table~\vref{t:lobsters-pages} gives an overview of how often each page is
 accessed and what loading each page entails. In all evaluation results, latency
 is measured across all requests, no matter what page they are for.
 
@@ -115,7 +115,7 @@ interesting:
   \label{f:lobsters-throughput}
 \end{figure}
 
-Figure~\ref{f:lobsters-throughput} attempts to explain why view materialization
+Figure~\vref{f:lobsters-throughput} attempts to explain why view materialization
 is desirable. It compares the highest sustainable request load of three
 different systems: MySQL, Noria without partial state, and Noria with partial
 state. MySQL is run entirely in RAM by running it on a ramdisk, and on its
@@ -141,7 +141,7 @@ MySQL fully loads all 16 cores at 391 pages per second.}.
   \label{f:lobsters-memory}
 \end{figure}
 
-Figure~\ref{f:lobsters-memory} shows the memory use at 4.6k pages per second
+Figure~\vref{f:lobsters-memory} shows the memory use at 4.6k pages per second
 with and without partial state. It demonstrates both the issues with full
 materialization, and the improvements brought about by partial state. With full
 materialization, Noria must store every result for every query in memory. In
@@ -180,7 +180,7 @@ to increase the relative benefits from partial state.
 \end{figure}
 
 To provide some insight into how far memory use can be reduced,
-Figure~\ref{f:lobsters-opmem} shows the total size of the data contained in all
+Figure~\vref{f:lobsters-opmem} shows the total size of the data contained in all
 non-base operator state in Lobsters. This metric measures \emph{only} the sum of
 the data in each row, and excludes all other memory overheads, such as hash
 tables, additional indices, or allocations elsewhere in the application. The
@@ -323,7 +323,7 @@ computed on-demand in the future.
 The cost of these misses is particularly visible when Noria starts with empty
 state. This is equivalent to starting a more traditional caching system with an
 empty (cold) cache, and having to ``warm'' it by filling in the most popular
-entries. To measure this warming period, Figure~\ref{f:lobsters-timeline} shows
+entries. To measure this warming period, Figure~\vref{f:lobsters-timeline} shows
 the latency profile seen by the Lobsters benchmark over time, starting at the
 point when the first query is issued. Time increases along the x-axis, and the
 measured latency for each time bin is plotted on a logarithmic scale on the
@@ -344,8 +344,8 @@ The figure shows that latency is initially high, but after a few seconds, the
 mean and 95th percentile latency drop below 10 milliseconds. By the time a
 minute has passed, the 99th percentile has followed suit. Since only a small
 portion of the total computed state is cached (as shown in
-Figure~\ref{f:lobsters-memory}), this supports the hypothesis that partial state
-achieves low latency once the most commonly accessed results are cached.
+Figure~\vref{f:lobsters-memory}), this supports the hypothesis that partial
+state achieves low latency once the most commonly accessed results are cached.
 The remaining latency is primarily determined by the number of queries each page
 issues, as each one requires a round-trip to Noria.
 
@@ -364,7 +364,7 @@ issues, as each one requires a round-trip to Noria.
 
 Partial's trade-off is that of memory use versus tail latency; as you allocate
 less memory to Noria, less of your tail can be pre-computed, and thus more of
-your requests must be computed on-demand. Figure~\ref{f:lobsters-mem-latency}
+your requests must be computed on-demand. Figure~\vref{f:lobsters-mem-latency}
 shows this trade-off in the steady state of the application by plotting the CDF
 of the sojourn latency across all requests with increasingly aggressive
 eviction.
@@ -397,7 +397,7 @@ to varying resources, depends on the application in question.
 If base tables are not kept in memory, the cost of recomputing missing state
 from the data in those base tables increases. Exactly how much depends on the
 performance characteristics of the durability backend in use.
-Figure~\ref{f:lobsters-dur-latency} shows a CDF of page latencies when Noria's
+Figure~\vref{f:lobsters-dur-latency} shows a CDF of page latencies when Noria's
 RocksDB backend is used, backed by a ramdisk. Latencies increase by anywhere
 from 20-50\%, depending on the number of misses a given page request
 experiences.
@@ -442,7 +442,7 @@ While this correlation between throughput and memory use exists in Lobsters, it
 is difficult to show clearly as each page issues many different queries, and
 overall load is relatively low. For this reason, the next set of benchmarks use
 a simplified version of one particular query from Lobsters shown in
-Listing~\ref{l:votes}. It counts the number of votes for an article, and
+Listing~\vref{l:votes}. It counts the number of votes for an article, and
 presents that alongside the article information. The benchmark issues requests
 distributed as 99\% reads and 1\% writes (inserts into \texttt{votes}). The
 access pattern is skewed such that 90\% of requests access 1\% of keys across
@@ -461,7 +461,7 @@ batches requests for a maximum of 10ms to reduce serialization overheads.
   \label{f:vote-throughput-memlimit}
 \end{figure}
 
-Figure~\ref{f:vote-throughput-memlimit} demonstrates the connection between
+Figure~\vref{f:vote-throughput-memlimit} demonstrates the connection between
 throughput and memory use. It shows throughput-latency lines for the vote
 benchmark with progressively more aggressive eviction. Each point along each
 line is a higher offered load; its x-coordinate is the achieved throughput, and
@@ -504,7 +504,7 @@ Nevertheless, an experiment to evaluate Noria's absolute performance compared to
 a ``real'' cache is necessary. Without such a comparison, Noria can only claim
 to be ``faster than MySQL'', but not ``as fast as a cache''.
 
-The next experiment runs the vote benchmark from Listing~\ref{l:votes} against
+The next experiment runs the vote benchmark from Listing~\vref{l:votes} against
 Redis~\cite{redis}, a popular high-performance key-value store that is commonly
 used as a caching backend. In an attempt to approximate how a carefully planned
 and optimized application caching deployment might perform, it makes the
@@ -537,7 +537,7 @@ strategy and system.
   \label{f:vote-redis}
 \end{figure}
 
-Figure~\ref{f:vote-redis} shows a throughput-latency plot that explores the
+Figure~\vref{f:vote-redis} shows a throughput-latency plot that explores the
 performance profiles of Redis and Noria under these experimental conditions%
 \footnote{Noria runs with the same modified access patterns as outlined for
 Redis.}.
@@ -604,7 +604,7 @@ for migrations, the next benchmark makes a modification to the ``vote''
 benchmark from Listing~\ref{l:votes}. It introduces a new table,
 \texttt{ratings}, which has ``ratings'' on a scale from 0 to 1 for each article
 instead of just a binary 0 or 1. It also add a new view, shown in
-Listing~\ref{l:ratings}, which combines the existing votes with the new ratings
+Listing~\vref{l:ratings}, which combines the existing votes with the new ratings
 to compute a total article score%
 \footnote{By writing the query this way, votes and ratings can co-exist.}.
 
@@ -624,7 +624,7 @@ both views every 10 milliseconds.
   \label{f:vote-migration}
 \end{figure}
 
-Figure~\ref{f:vote-migration} plots the cache hit rate seen by reads from the
+Figure~\vref{f:vote-migration} plots the cache hit rate seen by reads from the
 new view over time (top), as well as the write throughput over the course of the
 experiment (bottom). Without partial state, the new view is not accessible until
 its construction finishes after $\approx$23 seconds. During that time, the
@@ -709,7 +709,7 @@ once, given by
   \label{f:vote-formula}
 \end{figure}
 
-Figure~\ref{f:vote-formula} plots $F(\alpha, N)/N$ after one second for
+Figure~\vref{f:vote-formula} plots $F(\alpha, N)/N$ after one second for
 different degrees of skew ($\alpha$) with $N=10\text{M}$ as throughput varies.
 One second was chosen as this is how often Noria's eviction code runs. That
 value corresponds to the expected fraction of keys accessed between any two
