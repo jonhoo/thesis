@@ -308,92 +308,17 @@ reflect data missing from the snapshot, that downstream state must be evicted.
 Otherwise, updates for that data will be discarded at the recovered operator
 when it discovers that the related state is missing in its state.
 
-\section{Eventual Consistency}
+\section{Transactions}
 
-Much of the complexity introduced by partial state stems from the need to ensure
-that no cached query result is ever permanently left stale. However, as
-discussed in \S\ref{todo}, Noria\,---\,and by extension, partial state as
-described in this thesis\,---\,does allow results to be stale for shorter
-periods of time. Specifically, Noria acknowledges updates from a client before
-the effects of those updates are reflected in views. Only when the updates have
-propagated through the dataflow do they ultimately become visible.
-
-\begin{listing}[h]
-  \begin{minted}{sql}
-    SELECT data.key FROM data
-    WHERE data.value IN
-      (SELECT MAX(data.value) FROM data)
-  \end{minted}
-  \caption{Query that may perpetually produce no results in Noria.}
-  \label{l:always-wrong}
-\end{listing}
-
-This eventual consistency can lead to reads producing strange results
-under certain circumstances in stream processing
-systems~\cite{materialize-eventual}. As an example, consider the query in
-Listing~\ref{l:always-wrong}. If the maximum value changes frequently enough,
-then the outer and inner query may be perpetually ``out-of-sync''. The current
-maximum may not yet be present in the outer query, or a new maximum value may
-not yet be present in the inner query. The net result of this would be that the
-result set of the query would be empty, even though a traditional database would
-yield a non-empty query result.
-
-If the max value changes less frequently, and Noria has time to process a new
-update through both dataflow paths (the inner and the outer) before the maximum
-changes again, Noria will produce the expected non-empty query result. But
-nonetheless, the application author probably did not expect that this query
-could return an empty result set, however briefly.
-
-Exactly how strange these phenomena get, and how frequently they manifest,
-depends on the nature of the queries and the updates. For example, queries that
-only access each base table once will only ever produce results that are stale,
-but never results that ``look weird''. Queries with self-joins on the other hand
-are particularly prone to these temporary inconsistencies. For example, a join
-that computes a parent-child relationship between records may briefly reflect a
-new record as a child, but not as a parent, or vice-versa.
-
-\begin{listing}[h]
-  \begin{minted}{sql}
-    SELECT id, state FROM data WHERE state = 1
-    UNION
-    SELECT id, state FROM data WHERE state = 2
-  \end{minted}
-  \caption{Query that may briefly produce duplicates in Noria.}
-  \label{l:duplicates}
-\end{listing}
-
-These inconsistencies ultimately arise due to race conditions in the dataflow
-graph. In particular, if two ``parts'' of an update race against each another
-down different dataflow paths that later converge, one ``part'' will be applied
-to the final view before the other. This leaves the view in an intermediate
-state where a partial effect of the original update can be observed until the
-other part arrives.
-
-Listing~\ref{l:duplicates} gives an example of a query with this kind of race
-condition. Imagine that the application changes the \texttt{state} where
-\texttt{id = 42} from 1 to 2. In Noria, this is represented by a removal of the
-now-outdated record, and an addition of the updated record. The removal follows
-the dataflow path for \texttt{WHERE state = 1}, while the addition follows the
-dataflow path for \texttt{WHERE state = 2}. One of those updates will arrive
-first at the union, and the materialized view. If it is the removal, then reads
-will not see a record with \texttt{id = 42} until the addition is processed.
-Conversely, if the addition arrives first, reads will see two records with
-\texttt{id = 42} (one with \texttt{state = 1} and one with \texttt{state = 2})
-until the removal is processed.
-
-To mitigate these kinds of inconsistencies, Noria would either need to enforce
-that no reads can happen between the application of one ``half'' and the other,
-or somehow hide the partial effects of applying only the first part. The former
-requires reads to flow through the dataflow, or at least synchronize closely
-with it, which would likely come at a significant penalty to read latency. The
-latter would be provided through something akin to multiversion concurrency
-control, which allows low-latency reads, but requires timestamps for reads and
-writes. Experience from multiple failed designs for logical timestamps in Noria
-suggest that producing useful logical timestamps without costly global
-coordination is difficult, but not impossible.
-
-Implementing this kind of inconsistency mitigation while retaining Noria's low
-read latency is left for future work.
+Web applications sometimes rely on database transactions, e.g., to atomically
+update pre-computed values. Noria does not implement transactions, though its
+support for derived views often obviates the need for them. For example, web
+applications often use transactions to keep denormalized schemas synchronized: a
+``like count'' column in the table that stores posts or an ``average rating''
+column in the table that stores products. Noria obviates the need for such
+denormalizations, and the transactions needed to maintain them, by automatically
+ensuring that computed derived values are kept up to date with respect to the
+base data.
 
 \subsection{Partial State and Strong Consistency}
 

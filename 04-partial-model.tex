@@ -41,18 +41,11 @@ avoid unnecessarily maintaining unimportant cached results, updates are dropped
 in this case.
 
 An important corollary of the above is that partial state must be enabled
-on all stored state \emph{below} any partial state. More formally:
-
-\begin{invariant}
-  \label{i:partial-above-full}
-  It is illegal for the dataflow to contain state for two nodes $A$ and $B$
-  where $A$ is an ancestor of $B$, $A$ uses partial state, and $B$ does not use
-  partial state.
-\end{invariant}
-
-To see why, consider what would happen if an update arrives at $A$ for a missing
-entry. $A$ would discard that update, and $B$'s state would remain perpetually
-stale.
+on all stored state \emph{below} any partial state. It is illegal for the
+dataflow to contain state for two nodes $A$ and $B$ where $A$ is an ancestor of
+$B$, $A$ uses partial state, and $B$ does not use partial state. To see why,
+consider what would happen if an update arrives at $A$ for a missing entry. $A$
+would discard that update, and $B$'s state would remain perpetually stale.
 
 \section{Upqueries}
 \label{s:upqueries}
@@ -150,8 +143,8 @@ index. This would be equivalent to a full table scan in a traditional database.
 The system's only%
 %
 \footnote{The system cannot disable partial state just for
-\texttt{StoriesWithVC}, since that would violate
-Invariant~\ref{i:partial-above-full}.}
+\texttt{StoriesWithVC}, since that would violate place a partial index above a
+non-partial index, which is illegal.}
 %
 efficient option is to disable partial
 state for \texttt{VoteCount}. This ensures that any upquery to it never misses,
@@ -238,15 +231,14 @@ entries after they have been computed. When an entry is evicted, it is marked as
 missing, and subsequent requests for that state trigger an upquery as usual for
 missing state.
 
-When the system evicts an entry from state in the middle of the dataflow, a
-situation similar to what inspired Invariant~\ref{i:partial-above-full} arises.
-The missing entry may cause an update to be discarded even though downstream
-entries must see that update to avoid. For example, consider what happens if an
-operator counts the number of votes per author, and contains a count
-of 7 for the author ``Jane''. Then, the state for ``Jane'' is evicted from some
-operator upstream of the count. If an update now arrives at the operator where
-``Jane'' is missing; it would discard the update, and the downstream count would
-remain perpetually stale.
+When the system evicts an entry from state in the middle of the dataflow, the
+missing entry may cause an update to be discarded even though downstream entries
+must see that update to avoid. For example, consider what happens if an operator
+counts the number of votes per author, and contains a count of 7 for the author
+``Jane''. Then, the state for ``Jane'' is evicted from some operator upstream of
+the count. If an update now arrives at the operator where ``Jane'' is missing;
+it would discard the update, and the downstream count would remain perpetually
+stale.
 
 To avoid such permanently stale entries, the system must ensure that when an
 entry is evicted, any dependent state downstream is also evicted. More formally,
@@ -271,8 +263,8 @@ graph. This ensures that any future update that touches the evicted state can
 safely be discarded, as any relevant downstream state has been discarded as
 well.
 
-Invariant~\ref{i:missing-suffix} implies
-Invariant~\ref{i:partial-above-full}\,---\,since state cannot be evicted from
-non-partial state, the system would be unable to satisfy
+Invariant~\ref{i:missing-suffix} implies the corollary from earlier that partial
+state cannot exist upstream of non-partial state. Since state cannot be evicted
+from non-partial state, the system would be unable to satisfy
 Invariant~\ref{i:missing-suffix} should it ever encounter missing state upstream
 of the non-partial state.

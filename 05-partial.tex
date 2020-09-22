@@ -1,106 +1,18 @@
 The addition of partial state significantly changes how query results are
-computed by the underlying dataflow system. This chapter demonstrates how
-partial state is implemented in Noria such that it produces results similar to
-those Noria would produce without partial state.
+computed by the underlying dataflow system, and the system must ensure that
+partial state produces the same results with partial state as it did without.
+This chapter demonstrates how partial state is implemented in Noria such that
+the overall system maintains the invariants from \S\ref{s:noria:consistency}.
 
-\section{Defining Correctness}
+The biggest change that partial state introduces is that multiple updates may
+now be collapsed and re-processed through the dataflow as a single, consolidated
+update in response to an upquery. These consolidated updates represent snapshots
+of upstream state, and the system must ensure that these snapshots do not cause
+reads to violate Invariant~\ref{i:no-spurious} or \ref{i:prefix-consistency}.
 
-In order to discuss the degree to which partial achieves this goal, it is
-necessary to first define what constitutes ``correct'' behavior, both in Noria
-without partial, and with the introduction of partial.
-
-\resume
-
-\subsection{Correctness in Noria}
-
-\subsection{Correctness with Partial State}
-
-To give some intuition for why this problem is challenging, we first need to
-understand what the goal of the system as a whole is. Ultimately, the partial
-invariants all serve to maintain one principal property:
-
-\begin{quote}
-	If data stops flowing into the dataflow, the dataflow will eventually
-	quiesce. When it does, for every key in every state, the value for that
-	key is either missing, or it reflects the effects of each input to the
-	system applied exactly once. A subsequent query for any missing key in
-	any materialization populates the state for the missing key consistent
-	with the property above for non-missing state.
-\end{quote}
-
-The intuition here is that Noria must \emph{at least} eventually do the right
-thing. That is, it must make sure that all the data the application inserts into
-the dataflow is considered, that none of it is double-counted, and that no other
-spurious data is added. Unless, of course, the application has inserted dataflow
-operators that double-count, in which case they should be exactly
-double-counted.
-
-We want Noria to provide stronger guarantees than eventual consistency whenever
-possible and, in the common case, it does. Specifically, for most queries, Noria
-ensures that a read from any given view sees complete query results as of some
-recent time at each dataflow input. That is, for a given view, for each input
-that feeds into that view, the view reflects a prefix of the data ingested by
-that input. I call this \emph{prefix consistency}. Each view is also
-continuously kept up to date; any new input is reflected in the view shortly
-after being ingested, subject only to the propagation delay in the dataflow.
-
-Noria does not necessarily provide prefix consistency when there are
-\textbf{multiple} paths from a given dataflow input to a given view, such as
-through a self-join. Depending on the precise semantics of the paths, this can
-cause a view to briefly reflect \textbf{some} of the effects of newly inserted
-data, but not all. For example, consider a self-join that computes a
-parent-child relationship between records. If the application removes a record
-$A$, that dataflow input must be processed along two edges. When it has been
-processed by one edge, but no the other, the downstream view will briefly
-continue to include $A$ as a child, even though it no longer appears as a
-parent. This inconsistency is rectified once the dataflow input is also
-processed on the second edge.
-
-This problem is not directly related to partial state\,---\,Noria exhibits this
-behavior when all state is fully materialized. However, partial state must work
-in the context of such temporary inconsistencies. Furthermore, partial state
-should not exaggerate these problems by introducing additional inconsistencies.
-
-There are several situations that arise in a real dataflow implementation that
-make even this seemingly simple property difficult to uphold. I sketch the
-primary ones below, and give brief descriptions of my proposed solutions. In my
-thesis, I will go into these in greater detail. I will also provide a more
-comprehensive analysis of the possible inconsistencies that can arise if these
-situations are not handled correctly by the partial state logic.
-
-At its core, partial state introduces two new conditions into the dataflow that
-were not previously present. First, multiple updates may now be collapsed and
-re-processed through the dataflow as a single, consolidated update in response
-to an upquery. These consolidated updates represent \textit{snapshots} of
-upstream state, and the system must ensure that these snapshots do not introduce
-duplicate or spurious query results, or fail to include relevant data.
-
-Second, with partial state in place, \emph{any} operator processing may
-encounter missing state. When that happens, the system
-
-How do we know that Noria is eventually consistent?
-
-First, how do we know that Noria without partial state is eventually
-consistent. And second, how do we know that Noria remains eventually
-consistent with partial state.
-
-We don't have a formal proof for either. Ignoring implementation bugs, the
-informal argument goes something like:
-
-For partial state, we need to show that each of the things that have been
-changed preserve eventual consistency. First, sending a snapshot of past state
-(upquery response) is equivalent to sending the individual updates that made
-up that snapshot since the operators are distributive and commutative. Second,
-upquery results can race with related updates, which is handled by the various
-challenges I listed in the proposal:
-
- - sending them inline in the dataflow (for single-branch)
- - union buffering (for unioned branched dataflow)
- - special join upquery handling (for joined branched dataflow)
-
-And third, partial state means that lookups can miss internally in the
-dataflow, which is handled by join eviction when related state may still be
-present downstream, and by discarding the update when it is not.
+Partial state also causes deltas that encounter missing state to be discarded
+early in the dataflow, and the system must ensure that it maintains
+Invariant~\ref{i:missing-suffix} whenever this happens.
 
 \section{Linear Dataflow}
 
@@ -111,7 +23,7 @@ deltas into a single update produces the same results as processing the deltas
 one-at-a-time.
 
 \begin{inprogress}
-  What about discarded updates in the paragraph below?
+  Mention discarded updates in the paragraph below.
 \end{inprogress}
 
 The deltas that flow through the dataflow system represent changes to the
@@ -351,11 +263,13 @@ upquery may produce only a subset of the results for the join.
 
 \subsubsection{Dependent Upqueries}
 
-When a upquery response passes through a join operator, the join performs
-lookups into the state of the other side of the join. With partial state, those
-lookups may themselves encounter missing entries. When this happens, a problem
-arises: the system \emph{must} produce an downstream upquery response because
-the application is waiting for it, but it cannot produce that response since
+Since upqueries only travel through one ancestor of a join, joins do not need to
+buffer upquery responses the same way unions do. However, when a upquery
+response passes through a join operator, the join does perform lookups into the
+state of the other side of the join. With partial state, those lookups may
+themselves encounter missing entries. When this happens, a problem arises: the
+system \emph{must} produce an downstream upquery response because the
+application is waiting for it, but it cannot produce that response since
 required state is missing.
 
 For the purposes of exposition, and without loss of generality, the text below

@@ -176,6 +176,7 @@ update has been applied, the changes are made visible to readers who will then
 start seeing the updated vote count for the story in question.
 
 \section{Consistency Semantics}
+\label{s:noria:consistency}
 
 To achieve high parallel processing performance, Noria's dataflow avoids
 global progress tracking or coordination. An update injected by a base table
@@ -183,35 +184,155 @@ takes time to propagate through the dataflow, and the update may appear in
 different views at different times. Noria operators and the contents of its
 external views are thus \emph{eventually-consistent}. Eventual consistency is
 attractive for performance and scalability, and is sufficient for many web
-applications~\cite{eventually-consistent, memcached-facebook, pnuts}.
+applications~\cite{eventually-consistent, facebook-memcache, pnuts}.
 
-Noria does ensure that if writes quiesce, all external views eventually hold
-results that are the same as if the queries had been executed directly against
-the base table data. Making this work correctly requires some care. For example,
-like most dataflow systems, Noria requires that operators are deterministic
-functions over their own state and the inputs from their ancestors. Furthermore,
-operators must be distributive over delta addition%
-\footnote{$d_1 + d_2$ produces the union of all rows in $d_1$ or $d_2$ with the
-signed multiplicity of each element equal to the algebraic sum of that element's
-signed multiplicity in $d_1$ and $d_2$.}
+Noria ensures that if writes quiesce, all external views eventually hold results
+that are the same as if the queries had been executed directly against the base
+table data. Making this work correctly requires some care. For example, like
+most dataflow systems, Noria requires that operators are deterministic functions
+over their own state and the inputs from their ancestors. Furthermore, operators
+must be distributive over delta addition\footnote{$d_1 + d_2$ produces the union
+of all rows in $d_1$ or $d_2$ with the signed multiplicity of each element equal
+to the algebraic sum of that element's signed multiplicity in $d_1$ and $d_2$.}
 so that evaluating the query using tuple-at-a-time processing is equivalent to
 evaluating the whole query at once. Noria operators must also be commutative so
 that operators with multiple inputs, like unions and joins, can process their
-inputs in any order without coordination.%
-\footnote{Maintaining eventual consistency with partial state requires
-additional mechanisms, as discussed in \S\ref{s:correct}.}
-The standard relational operators that Noria supports all have this property.
+inputs in any order without coordination\footnote{Maintaining eventual
+consistency with partial state requires additional mechanisms, as discussed in
+\S\ref{s:correct}.}. The standard relational operators that Noria supports all
+have this property.
 
-\paragraph{Transactions.}
-Web applications sometimes rely on database transactions, e.g., to atomically
-update pre-computed values. Noria does not implement transactions, though its
-support for derived views often obviates the need for them. For example, web
-applications often use transactions to keep denormalized schemas synchronized: a
-``like count'' column in the table that stores posts or an ``average rating''
-column in the table that stores products. Noria obviates the need for such
-denormalizations, and the transactions needed to maintain them, by automatically
-ensuring that computed derived values are kept up to date with respect to the
-base data.
+\paragraph{How Eventual?}
+While Noria does not guarantee exactly when a write is visible in a given view,
+the time between when a write is acknowledged and when it becomes visible should
+be very short in practice. A view is stale only while the write propagates
+through the dataflow, so the time before the write manifests depends only on the
+height and complexity of the dataflow for the view in question.
+
+\subsection{Prefix Consistency}
+
+Eventual consistency is a woefully vague consistency model\,---\,an eventually
+consistent system is allowed to do anything, or nothing at all, as long as reads
+\emph{eventually} all return the same value. Most definitions of eventual
+consistency also require that that same value reflects the writes issued to the
+system, but not all. In practice, eventual consistency is often ``good enough''
+despite giving few \emph{guarantees}, and many eventually consistent systems
+appear strongly consistent most of the time~\cite{eventual}. Noria in particular
+aims to uphold two additional safety properties:
+
+\begin{invariant}
+  \label{i:no-spurious}
+  All reads reflect each upstream base table change at most once, and no other
+  data.
+\end{invariant}
+
+\begin{invariant}
+  \label{i:prefix-consistency}
+  A read that observes all effects of a given base table change also observes
+  all earlier changes to that same base table.
+\end{invariant}
+
+Invariant~\ref{i:no-spurious} ensures that views include no duplicated
+results and no spurious results. Essentially, it guarantees that view results
+represent data that is in the base tables, and no other data.
+
+Invariant~\ref{i:prefix-consistency} on the other hand ensures that when the
+system makes progress, it does so in a sane manner. If the application issues
+two writes $w_1$ and $w_2$ to a base table in that order, then it will not see
+$w_2$ reflected but not $w_1$.
+
+Informally, these two invariants taken together establish a sort of per-table
+\emph{prefix consistency}. For each base table $b$ that connects to a given view
+$v$, there exists some time $t$ such that all changes in $b$ that precede $t$
+manifest exactly once when reading from $v$. Effects from changes that succeed
+$t$ may manifest fully, partially, or not at all. As Noria continues executing
+its dataflow, $t$ increases, and more writes manifest fully.
+
+Note that prefix consistency applies \emph{per base table}. If the application
+writes $w_1$ to \texttt{votes} and then $w_2$ to \texttt{stories}, the effects
+of $w_2$ may manifest downstream before $w_1$ does.
+
+\begin{inprogress}
+  What about sharded base tables?
+\end{inprogress}
+
+\subsection{What Can Go Wrong?}
+
+Noria's eventual consistency can lead to reads producing strange results
+under certain circumstances in stream processing
+systems~\cite{materialize-eventual}. As an example, consider the query in
+Listing~\ref{l:always-wrong}. If the maximum value changes frequently enough,
+then the outer and inner query may be perpetually ``out-of-sync''. The current
+maximum may not yet be present in the outer query, or a new maximum value may
+not yet be present in the inner query. The net result of this would be that the
+result set of the query would be empty, even though a traditional database would
+yield a non-empty query result.
+
+\begin{listing}[h]
+  \begin{minted}{sql}
+    SELECT data.key FROM data
+    WHERE data.value IN
+      (SELECT MAX(data.value) FROM data)
+  \end{minted}
+  \caption{Query that may perpetually produce no results in Noria.}
+  \label{l:always-wrong}
+\end{listing}
+
+If the max value changes less frequently, and Noria has time to process a new
+update through both dataflow paths (the inner and the outer) before the maximum
+changes again, Noria will produce the expected non-empty query result. But
+nonetheless, the application author probably did not expect that this query
+could return an empty result set, however briefly.
+
+Exactly how strange these phenomena get, and how frequently they manifest,
+depends on the nature of the queries and the updates. For example, queries that
+only access each base table once will only ever produce results that are stale,
+but never results that ``look weird''. Queries with self-joins on the other hand
+are particularly prone to these temporary inconsistencies. For example, a join
+that computes a parent-child relationship between records may briefly reflect a
+new record as a child, but not as a parent, or vice-versa.
+
+\begin{listing}[h]
+  \begin{minted}{sql}
+    SELECT id, state FROM data WHERE state = 1
+    UNION
+    SELECT id, state FROM data WHERE state = 2
+  \end{minted}
+  \caption{Query that may briefly produce duplicates in Noria.}
+  \label{l:duplicates}
+\end{listing}
+
+These inconsistencies ultimately arise due to race conditions in the dataflow
+graph. In particular, if two deltas resulting from a single upstream change race
+against each another down different dataflow paths that later converge, one
+delta will be applied to the final view before the other. This leaves the view
+in an intermediate state where a partial effect of the original update can be
+observed until the other delta arrives.
+
+Listing~\ref{l:duplicates} gives an example of a query with this kind of race
+condition. Imagine that the application changes the \texttt{state} where
+\texttt{id = 42} from 1 to 2. In Noria, this is represented by a removal of the
+now-outdated record, and an addition of the updated record. The removal follows
+the dataflow path for \texttt{WHERE state = 1}, while the addition follows the
+dataflow path for \texttt{WHERE state = 2}. One of those updates will arrive
+first at the union, and the materialized view. If it is the removal, then reads
+will not see a record with \texttt{id = 42} until the addition is processed.
+Conversely, if the addition arrives first, reads will see two records with
+\texttt{id = 42} (one with \texttt{state = 1} and one with \texttt{state = 2})
+until the removal is processed.
+
+To mitigate these kinds of inconsistencies, Noria would either need to enforce
+that no reads can happen between the application of one ``half'' and the other,
+or somehow hide the partial effects of applying only the first part. The former
+requires reads to flow through the dataflow, or at least synchronize closely
+with it, which would likely come at a significant penalty to read latency. The
+latter would be provided through something akin to multi-version concurrency
+control, which allows low-latency reads, but requires timestamps for reads and
+writes. Experience from multiple failed designs for logical timestamps in Noria
+suggest that producing useful logical timestamps without costly global
+coordination is difficult, but not impossible. Implementing this kind of
+inconsistency mitigation while retaining Noria's low read latency is left for
+future work.
 
 \section{Parallelism}
 
