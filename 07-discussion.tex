@@ -195,27 +195,7 @@ parts of the key space is present. An interval tree efficiently stores, merges,
 and splits ranges as new ones are introduce (by new upqueries) and retired (by
 evictions).
 
-\section{Sharding}
-
-Partial with sharding mainly follows the rules of partial across forked dataflow
-(\S\ref{todo}), with the following modifications:
-
-First, if the node that receives the upquery, R, is sharded the same way as the
-querying node, Q, the upquery must be sent \emph{only} to the same shard of R as
-the one that is querying. This applies even if the upquery key differs from the
-sharding key, since while other shards may have relevant data, that data would
-be discarded before reaching the current node anyway. This kind of upquery is
-called a \emph{narrow} upquery.
-
-Second, when a narrow upquery response reaches the \emph{first} shard merger on
-its path, the union must not buffer it, since the other upstream shards will not
-be sending responses.
-
-Third, when the upquery response for an upquery that originated at a sharded
-node reaches the \emph{last} sharder on its path, that sharder must direct that
-response only to the querying shard.
-
-\subsection{Upquery Explosion}
+\section{Sharding Upquery Explosions}
 
 An unfortunate phenomenon manifests itself for certain queries when partial
 state and sharding combine in detrimental ways. If R is sharded differently from

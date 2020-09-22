@@ -196,6 +196,7 @@ that operator. The two primary relational multi-ancestor operators, unions and
 joins, are discussed below.
 
 \subsection{Unions}
+\label{s:upqueries:union}
 
 Unions merely combine the input streams of their ancestors, and includes little
 processing beyond column selection. An operator that wishes to upquery past this
@@ -448,36 +449,40 @@ each $u_i$ where $c_i \neq c_j$.
 
 \section{Sharding}
 
-\resume
-
 Noria supports sharding cliques of operators to increase the throughput
-of particular sections of the dataflow. Shards of an operator execute in
-parallel, without synchronization. Edges that cross from an unsharded
-operator to a sharded one split its outgoing updates using hash
-partitioning. Edges that cross back have an implicit union injected to
-merge the sharded results. Edges that cross from one sharding to a
-different sharding are merged and then split again. Upqueries must also
-work when Noria decides to shard operators in this way.
+of particular sections of the dataflow (\S\ref{s:noria:sharding}). And upqueries
+must also work when the system decides to shard operators in this way. Partial
+with sharding mainly follows the rules of partial across unions
+(\S\ref{s:upqueries:union}), with the following three modifications:
 
-Upqueries across a sharding boundary are a complicated affair. The
-operator that issues the upquery must determine which shard or shards to
-send the upquery to. If it queries multiple shards, the responses from
-those shards are subject to the same multi-ancestor issue as unions.
-When a response to the upquery comes back, it must be specifically
-routed to only the requesting shard, so that it does not accidentally
-populate the state of other shards. This logic must work even if
-multiple shards issue an upquery for the same key concurrently. Or,
-worse yet, if a single upquery must traverse \textbf{multiple} sharding
-boundaries.
+First, if the node that receives the upquery, R, is sharded the same way as the
+querying node, Q, the upquery is sent \emph{only} to the same shard of R as the
+one that is querying. This is called a \textit{narrow} upquery, and avoids
+queries to shards that hold no relevant data. This rule applies even if the
+upquery key differs from the sharding key, since while other shards may have
+relevant data, that data would be discarded before reaching the current node
+anyway. The system decides whether upqueries should be narrow or broad when it
+determines an operator's upquery plan\,---\,key provenance provides sufficient
+information to make the decision.
 
-\paragraph{Noria solution}
-Key provenance informs operators whether an upquery for a given column should be
-sent to all shards, or just one shard, of the upquery source. This information,
-as well as the shard identifier of the requesting operator, is included in the
-upquery itself, and in the eventual response. Sharding unions buffer upquery
-responses that originated from more than one shard (like regular unions). Shard
-``splitters'' ensure that responses only arrive at the requesting shard using
-the requestor information in the response.
+Second, when a narrow upquery response reaches the \emph{first} shard merger
+(effectively a union across shards) on its path, the response must not be
+buffered, unlike other upquery responses across unions. This is because
+the other upstream shards will not be sending responses.
+
+Third, when the upquery response for an upquery that originated at a sharded
+node reaches the \emph{last} sharder on its path, that sharder must direct that
+response only to the querying shard. This is equivalent to the general rule that
+upquery responses only flow along the edges that the upquery traversed. The
+upquery that triggered the response did not touch other shards of the upquery
+originator, and so the response should not go there.
+
+Beyond those three modifications, the existing logic for handling upqueries
+across forked strands of dataflow is sufficient\footnote{Since shard mergers
+have only one operator (but many shards) as their ancestor, they use the shard
+index of the operator that sent each input as a way to distinguish between input
+paths, rather than the index of the operator itself. Otherwise, they operate
+entirely as a union.}.
 
 \begin{inprogress}
   Diamonds?
