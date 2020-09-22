@@ -414,9 +414,11 @@ takes the form of a delta with a negative multiplicity record for \texttt{[7,
 at the join, it may now miss when performing the lookup for ``Talia''. According
 to the partial model so far, the join should now drop \texttt{[7, "Talia"]}, and
 only allow the negative for ``Elena'' to propagate to the downstream
-materialization. When that happens,  the state for article number 7 becomes
-empty (though not missing), and any subsequent read for article number 7
-receives an empty response, which violates correctness.
+materialization. But this violates Invariant~\ref{i:missing-suffix}, since there
+exists downstream state that reflects the discarded update. And indeed, when
+this happens, the state for article number 7 becomes empty (though not missing),
+and any subsequent read for article number 7 receives an empty response, which
+violates correctness.
 
 What happened here was that the entry for key $k$ in the leaf-most
 materialization depends not only on state entries indexed by the same $k$
