@@ -2,10 +2,47 @@ In this thesis, partial state is implemented in Noria~\cite{noria}, a stateful,
 dynamic, parallel, and distributed dataflow system designed for the storage,
 query processing, and caching needs of typical web applications. Because of the
 strong connection between Noria and partial state, this chapter describes the
-design and implementation of Noria in sufficient depth to follow the remainder
-of the thesis.
+design and implementation of Noria in sufficient depth to understand the
+remainder of the thesis.
 
-\section{High-level Overview}
+\section{High-Level Overview}
+
+Noria runs on one or more multicore servers that communicate with clients and
+with one another using RPCs. A Noria deployment stores both \emph{base tables}
+and \emph{derived views}. Roughly, base tables contain the data typically stored
+persistently in relation tables, and derived views hold data an application
+might choose to cache to improve performance.
+
+Compared to conventional database use, Noria base tables might be smaller, as
+Noria derives data that an application may otherwise pre-compute and store
+denormalized in base tables for performance. Noria stores base tables
+persistently on disk, either on one server or sharded across multiple servers,
+but stores views in server memory. Views, by contrast, are likely larger than a
+typical cache footprint, because Noria derives more data, including some
+intermediate results.
+
+Noria's interface resembles parameterized SQL queries. The application supplies
+a \emph{Noria program}, which registers base tables and views with parameters
+supplied by the application when it retrieves data. The Noria program includes
+base table definitions, \emph{internal} views used as shorthands in other
+expressions, and \emph{external} views that the application later queries. It
+can be thought of as an extended schema for the application that includes its
+queries.
+
+Noria differs substantially from traditional databases in how it executes
+queries. Rather than compute a query's results on demand when the application
+executes it, Noria does so when the query view is defined. Noria then caches, or
+\emph{materializes}, the contents of that view, and serves queries to that view
+directly from that cache. To keep the materialized current, Noria internally
+instantiates a dataflow program to continuously process the application's writes
+and update the views as appropriate.
+
+This kind of view materialization makes Noria particularly well-suited for
+read-heavy applications that tolerate eventual consistency, since it shifts
+query execution cost from reads, which are frequent, to writes, which are
+infrequent.
+
+\section{Application Interface}
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -13,7 +50,6 @@ of the thesis.
 CREATE TABLE stories
   (id int, title text);
 CREATE TABLE votes (story_id int, user int);
-CREATE TABLE users (id int, username text);
 /* internal view: vote count per story  */
 CREATE INTERNAL VIEW VoteCount AS
   SELECT story_id, COUNT(*) AS vcount
@@ -30,27 +66,8 @@ CREATE VIEW StoriesWithVC AS
   \label{l:vote-src}
 \end{listing}
 
-Noria runs on one or more multicore servers that communicate with clients and
-with one another using RPCs. A Noria deployment stores both \emph{base tables}
-and \emph{derived views}. Roughly, base tables contain the data typically stored
-persistently, and derived views hold data an application might choose to cache
-to improve performance. Compared to conventional database use, Noria base tables
-might be smaller, as Noria derives data that an application may otherwise
-pre-compute and store denormalized in base tables for performance. Views, by
-contrast, will likely be larger than a typical cache footprint, because Noria
-derives more data, including some intermediate results. Noria stores base tables
-persistently on disk, either on one server or sharded across multiple servers,
-but stores views in server memory.
-
-Noria's interface resembles parameterized SQL queries. The application supplies
-a \emph{Noria program}, which registers base tables and views with parameters
-supplied by the application when it retrieves data. Listing~\vref{l:vote-src}
-shows an example Noria program for a news aggregator application where users can
-vote for stories (\texttt{?} is a parameter). The Noria program includes base
-table definitions, \emph{internal} views used as shorthands in other
-expressions, and \emph{external} views that the application later queries. It
-can be thought of as an extended schema for the application that includes its
-queries. Noria supports much, but not all, SQL syntax.
+Listing~\vref{l:vote-src} shows an example Noria program for a news aggregator
+application where users can vote for stories (\texttt{?} is a parameter).
 
 To retrieve data, the application supplies Noria with an external view
 identifier (e.g., \texttt{StoriesWithVC}) and one or more sets of parameter
@@ -59,25 +76,14 @@ values. To modify records in base tables, the application performs insertions,
 updates, and deletions, similar to a SQL database. Data is represented as
 structured records in tabular form~\cite{spanner, bigtable}.
 
-Noria differs substantially from traditional databases in how queries are
-executed. Rather than compute a query's results on demand when the
-application executes it, Noria does so when the query view is defined.
-Noria then caches, or \emph{materializes}, the contents of that view, and serves
-queries to that view directly from that cache. To keep the materialized current,
-Noria internally instantiates a dataflow program to continuously process the
-application's writes and update the views as appropriate.
-
-This kind of view materialization makes Noria particularly well-suited for
-read-heavy applications that tolerate eventual consistency, since it shifts
-query execution cost from reads, which are frequent, to writes, which are
-infrequent. Noria focuses entirely on relational operators, rather than the
-iterative or graph computations that are the focus of other dataflow
-systems~\cite{naiad, differential-dataflow}.
-
 The application may change its Noria program to add new views, to modify or
 remove existing views, and to adapt base table schemas. Noria expects such
 changes to be common and aims to complete them quickly, without restarting the
 dataflow engine.
+
+Unlike the iterative or graph computations that are the focus of other dataflow
+systems~\cite{naiad, differential-dataflow}, Noria focuses entirely on
+relational operators. Noria supports much, but not all, SQL.
 
 \section{Dataflow Execution}
 
@@ -101,7 +107,7 @@ rows in downstream state; and a deletion from a base table generates a
 ``negative'' update that revokes derived records. Negative updates remove
 entries when Noria applies them to state, and retain their negative ``sign''
 when combined with other records (e.g., through joins). Negative updates hold
-exactly the same values as the positives they revoke and thus follow the same
+exactly the same values as the positives they revoke and follow the same
 dataflow paths.
 
 The combined deltas emitted by an operator from the beginning of time
@@ -146,34 +152,40 @@ in turn connects to the external \texttt{StoryWithVC} view.
 
 To understand how Noria uses this program to maintain the external view,
 consider what happens when a new vote is inserted into \texttt{votes}. The
-insertion is introduced into the dataflow as a single-row update with a positive
-sign at the \texttt{votes} operator. It stores the update to durable storage,
-and then forwards the update as-is to its children; in this case, the count
-operator.
+application performs the insertion by introducing the write into the dataflow as
+a single-row update with a positive sign at the \texttt{votes} operator. Noria
+stores the update to durable storage, and then forwards the update as-is to its
+children; in this case, the count operator.
 
 The count operator performs a lookup into its own output state for the current
 count of the new row's group by column value. The semantics of a count is that
 an insertion increments that number by one, so the operator emits a replacement
 update for the old state. In particular, the update it produces contains a
-negatively-signed record for the old count, and a positively-signed record for
-the update count. The replacement also includes the group by column value.
+negatively-signed delta with the old count, and a positively-signed delta with
+the updated count. Both deltas include the group by column value.
+
+The replacement is represented as a separate negative and positive delta since
+the two may take different paths through the dataflow. For example, a downstream
+filter might filter out stories with a vote count below a given threshold. If
+the latest vote makes the count exceed the threshold, the negative delta should
+not flow down the dataflow past the filter, since there is nothing there for it
+to revoke. The positive delta should, since the story (with its updated count)
+now passes the filter.
 
 When the join operator receives this replacement update from the count, it
 performs a lookup into its other ancestor, \texttt{stories}, for records that
-match the join column value of each record of the incoming update. In this case,
-both records (the negative and the positive) have the same story identifier as
-the join value, so only a single record is returned\,---\,the matching story.
-The operator then joins each record in the update with each matching result.
+match the join column value of each delta of the incoming update. In this case,
+both deltas (the negative one and the positive one) have the same story
+identifier as the join value, so it finds only a single record\,---\,the
+matching story. The operator then joins each delta with each matching result.
 This produces an update that (still) contains one negative and one positive
-record, but where each record now includes additional columns from the
+delta, but where each delta now includes additional columns from the
 \texttt{stories} table.
 
-Ultimately, this two-record update arrives at the operator that represents the
+Ultimately, this two-delta update arrives at the operator that represents the
 external \texttt{StoryWithVC} view. The changes from the update are applied one
-by one, with the negative record removing the entry in the view with the old
-vote count, and the positive record adding the replacement entry. Once the
-update has been applied, the changes are made visible to readers who will then
-start seeing the updated vote count for the story in question.
+by one, with the negative delta removing the entry in the view with the old vote
+count, and the positive delta adding the replacement entry.
 
 \section{Consistency Semantics}
 \label{s:noria:consistency}
@@ -347,24 +359,25 @@ segment. These three mechanisms are described further below.
 
 \subsection{Read Independence}
 
-Since Noria is primarily oriented towards read-heavy workloads, its architecture
-is optimized for allowing reads to go ahead at full speed whenever possible. In
-particular, Noria does not synchronize reads with reads \emph{or} writes. Unless
-a read encounters missing partial state, it never blocks waiting for another
-thread.
+Since Noria is designed for read-heavy workloads, its architecture is optimized
+for allowing reads to go ahead at full speed whenever possible. In particular,
+Noria does not synchronize reads with reads \emph{or} writes. Unless a read
+encounters missing partial state, it never blocks waiting for another thread.
 
 This is achieved through a concurrency primitive that maintains two instances of
 each materialized view, with deduplication between them. Reads go to one view,
-and writes to the other. Readers only see updates to the view when a writer
+and writes to the other. Readers see updates to the view only when a writer
 exposes those changes explicitly\,---\,the writer flips an atomic pointer to the
 other view, and then waits for all readers to exit the old view before modifying
-it again. This can be done on every update, as Noria currently does, or only
-occasionally to amortize the cross-core communication penalty. Crucially,
-readers do not take locks, and generally operate only on core-local cache lines.
+it again. This flip can be done on every update, as Noria currently does, or
+only occasionally to amortize the cross-core communication penalty and the wait
+period for the writer. Crucially, readers do not take locks, and generally
+operate only on core-local cache lines.
 
 This design allows Noria to use any number of threads to serve reads from any
-view. As long as there are cores available, new threads can be added to perform
-view lookups and request serialization and deserialization.
+view. As long as there are cores available, Noria can use additional threads to
+perform view lookups, as well as low-level networking work like request
+serialization and read/write system calls.
 
 \begin{inprogress}
   This design is further discussed in Appendix B?
@@ -378,15 +391,16 @@ updates in a given thread domain at a time (except with sharding; see below),
 and any update that enters a thread domain is processed to completion within
 the domain before another update is processed.
 
-State is never shared between thread domains, which means no locks are needed.
-Thread domains only ever communicate with one another through messages sent
-across the edges of the dataflow, or in the case of upqueries, by sending
-messages through dedicated upquery paths set up by the partial subsystem. All
-such communication can happen either over the network if the other thread domain
-is on a different host, or over an in-memory channel if it is local.
+Noria never shares state between thread domains, which means that state access
+is not guarded by locks. Thread domains communicate with one another only
+through messages across the edges of the dataflow, or in the case of upqueries,
+by sending messages through dedicated upquery paths set up by the partial
+subsystem. All such communication can happen either over the network if the
+other thread domain is on a different host, or over an in-memory channel if it
+is local.
 
-Since thread domains share nothing, some state may be duplicated across
-boundaries. For example, a join operator at an incoming edge of a thread domain
+Since thread domains share nothing, Noria duplicates state across boundaries
+when needed. For example, a join operator at an incoming edge of a thread domain
 must be able to perform lookups into the state of its ancestor, which sits in a
 different thread domain. In such a case, Noria will create a thread-local copy
 of the join's ancestor's state that it can use locally. Noria's thread domain
@@ -440,7 +454,7 @@ over the runtime of the application. Sharding by value ranges and adjusting the
 sharding dynamically is left for future work.
 
 Noria shards operators primarily based on how they access state. For example, an
-aggregation performs lookups into its own state, and is sharded by the key
+aggregation that performs lookups into its own state is sharded by the key
 column of those lookups. Any other sharding would mean that processing one
 update would require coordination among all shards. A join is sharded by the
 join key for the same reason. Base tables are sharded by the table's primary
@@ -455,7 +469,7 @@ combines the output of all the shards to a single downstream output stream.
 Noria then eliminates unnecessary sharders and shard mergers, such as if an
 operator and its ancestor are sharded the same way.
 
-Sharding boundaries are naturally also thread boundaries, though two connected
+Sharding boundaries are also natural thread boundaries, though two connected
 thread domains may also be sharded differently. Or, phrased differently, Noria
 may partition a chain of operators that are all sharded by the same column into
 multiple thread domains to increase parallelism.
