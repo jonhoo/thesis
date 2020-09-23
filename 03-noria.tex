@@ -264,9 +264,9 @@ systems~\cite{materialize-eventual}. As an example, consider the query in
 Listing~\vref{l:always-wrong}. If the maximum value changes frequently enough,
 then the outer and inner query may be perpetually ``out-of-sync''. The current
 maximum may not yet be present in the outer query, or a new maximum value may
-not yet be present in the inner query. The net result of this would be that the
-result set of the query would be empty, even though a traditional database would
-yield a non-empty query result.
+not yet be present in the inner query. The net result is that the result set of
+the query would be empty, even though a traditional database would yield a
+non-empty query result.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -284,13 +284,14 @@ changes again, Noria will produce the expected non-empty query result. But
 nonetheless, the application author probably did not expect that this query
 could return an empty result set, however briefly.
 
-Exactly how strange these phenomena get, and how frequently they manifest,
+Exactly how strange these phenomena become, and how frequently they manifest,
 depends on the nature of the queries and the updates. For example, queries that
-only access each base table once will only ever produce results that are stale,
-but never results that ``look weird''. Queries with self-joins on the other hand
-are particularly prone to these temporary inconsistencies. For example, a join
-that computes a parent-child relationship between records may briefly reflect a
-new record as a child, but not as a parent, or vice-versa.
+access each base table only once will produce results that are stale, but never
+results that do not match the results a traditional database would have given
+given the same base table data. Queries with self-joins on the other hand are
+particularly prone to these temporary inconsistencies. For example, a join that
+computes a parent-child relationship between records may briefly reflect a new
+record as a child, but not as a parent, or vice-versa.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -298,16 +299,16 @@ new record as a child, but not as a parent, or vice-versa.
     UNION
     SELECT id, state FROM data WHERE state = 2
   \end{minted}
-  \caption{Query that may briefly produce duplicates in Noria.}
+  \caption{Query that may produce duplicates briefly in Noria.}
   \label{l:duplicates}
 \end{listing}
 
-These inconsistencies ultimately arise due to race conditions in the dataflow
-graph. In particular, if two deltas resulting from a single upstream change race
-against each another down different dataflow paths that later converge, one
-delta will be applied to the final view before the other. This leaves the view
-in an intermediate state where a partial effect of the original update can be
-observed until the other delta arrives.
+These inconsistencies arise due to race conditions in the dataflow graph. In
+particular, if two deltas resulting from a single upstream change race against
+each another down different dataflow paths that later converge, one delta will
+be applied to the final view before the other. This leaves the view in an
+intermediate state where a partial effect of the original update can be observed
+until the other delta arrives.
 
 Listing~\vref{l:duplicates} gives an example of a query with this kind of race
 condition. Imagine that the application changes the \texttt{state} where
@@ -325,14 +326,13 @@ To mitigate these kinds of inconsistencies, Noria would either need to enforce
 that no reads can happen between the application of one ``half'' and the other,
 or somehow hide the partial effects of applying only the first part. The former
 requires reads to flow through the dataflow, or at least synchronize closely
-with it, which would likely come at a significant penalty to read latency. The
-latter would be provided through something akin to multi-version concurrency
-control, which allows low-latency reads, but requires timestamps for reads and
-writes. Experience from multiple failed designs for logical timestamps in Noria
-suggest that producing useful logical timestamps without costly global
-coordination is difficult, but not impossible. Implementing this kind of
-inconsistency mitigation while retaining Noria's low read latency is left for
-future work.
+with it, which would likely come at a penalty to read latency. The latter would
+be provided through something akin to multi-version concurrency control, which
+allows low-latency reads, but requires timestamps for reads and writes.
+Experience from multiple failed designs for logical timestamps in Noria suggest
+that producing useful logical timestamps without costly global coordination is
+difficult, but not impossible. Implementing this kind of inconsistency
+mitigation while retaining Noria's low read latency is left for future work.
 
 \section{Parallelism}
 
@@ -434,10 +434,10 @@ processing at a single operator is a bottleneck, Noria supports sharding an
 operator. Multiple threads split the work of handling updates to a sharded
 operator, and operate like independent, disjoint parts of the dataflow.
 
-Noria implements static hash partitioning: how an operator is sharded is
-determined when it is added to the dataflow, and does not change over the
-runtime of the application. Sharding by value ranges and adjusting the sharding
-dynamically is left for future work.
+Noria implements static hash partitioning: it decides how to shard an operator
+when the operator is added to the dataflow, and this sharding does not change
+over the runtime of the application. Sharding by value ranges and adjusting the
+sharding dynamically is left for future work.
 
 Noria shards operators primarily based on how they access state. For example, an
 aggregation performs lookups into its own state, and is sharded by the key

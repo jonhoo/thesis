@@ -50,13 +50,13 @@ out on application-specific optimizations implemented by a tailor-built system.
 \section{Efficient Migrations}
 
 Section~\ref{s:eval:mig} demonstrated that partial state can make certain
-migrations very efficient. This requires that the view \emph{can} be partial, as
+migrations efficient. This requires that the view \emph{can} be partial, as
 per the discussion above. But even for views that can be partial, work may be
 required in order to make upqueries for that view efficient. This work generally
-comes down to adding an index to some existing state, which requires scanning
-the data stored in that view. Constructing an index tends to be significantly
-faster than computing the full cached results of the new view, but it is a
-non-trivial cost nonetheless.
+means adding an index to some existing state, which requires scanning the data
+stored in that view. Constructing an index tends to be significantly faster than
+computing the full cached results of the new view, but it is a non-trivial cost
+nonetheless.
 
 For example, consider the query in Listing~\vref{l:karma} when added to the vote
 benchmark from Listing~\vref{l:votes}. To simplify the argument, assume that the
@@ -65,7 +65,7 @@ it holds all the rows). For upqueries of the new view to be efficient, it must
 be possible to query all the articles (along with their vote counts) for a given
 author in the \texttt{ViewCount} view that existed previously. This means we
 must add an index on the \texttt{author} column of that view's state, which is
-not free.
+costly.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -94,7 +94,7 @@ denormalize the schema by adding a new computed ``karma'' column to the
 to execute, and the latter requires computing the karma for every article.
 The index Noria must construct for efficient upqueries is cheaper to construct
 than such a computed \texttt{karma} column, which makes Noria's scan seems
-reasonable. The considerations from \S\ref{s:eval:alts} also apply.
+reasonable.
 
 % SELECT COUNT(*) FROM table;
 
@@ -111,7 +111,7 @@ underlying state as the data changes. If the maximum value in a max aggregation
 or a row in a top-k view is removed, the new view content can only be determined
 by re-evaluating the query.
 
-The necessary upquery be performed efficiently if the underlying state is
+The necessary upquery can be performed efficiently if the underlying state is
 maintained in the appropriate order, but Noria does not currently support the
 necessary ordered indexes. Instead, Noria provides approximate versions of such
 operators. In particular, Noria's top-k operator maintains the top $2k$ items,
@@ -121,7 +121,7 @@ highest rows it has seen so far.
 
 This scheme avoids the need for upqueries, and works well as long as removals
 from the top list are uncommon and the top list rotates over time. Otherwise,
-the approach is brittle; if many top rows are removed, or the top is changing
+the approach is brittle; if many top rows are removed, or if the top is changing
 very infrequently, the top list may eventually hold none of the actual top
 items. Support for ordered indexes, and limited upqueries against those indexes,
 would fix this problem.
@@ -174,7 +174,7 @@ results are sent to all the shards. This is left for future work.
 
 A natural question to ask is whether the benefits of partial state can be
 achieved without the complexity that upqueries introduce. In particular, can a
-dataflow system that only supports full materialization emulate partial state
+dataflow system that supports only full materialization emulate partial state
 effectively? Thoroughly exploring the answers to this question may be worth a
 thesis in its own right, but some of the more obvious approaches are discussed
 below.
@@ -193,9 +193,8 @@ In particular, lateral joins let the application author write a query that has
 access to the contents of some unrelated table. For example,
 Listing~\vref{l:emulate-partial-vote} shows how a lateral join can be used to
 emulate a partially materialize vote count view like the one from
-Listing~\vref{l:votes}. The fundamental idea here is to have a table of
-``filled'' keys, and have only the results for those keys be included in the
-final materialized view.
+Listing~\vref{l:votes}. The idea here is to have a table of ``filled'' keys, and
+have the results only for those keys be included in the final materialized view.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -217,7 +216,7 @@ requires significant manual effort for a large application. In Lobsters, for
 example, the application author must re-write their applications to use such
 lateral joins, and must include application logic to maintain the auxiliary
 tables used to indicate what keys are materialized. It may be possible to
-automate this process, though doing so likely requires significant research.
+automate this process, though doing so requires research.
 
 Effort notwithstanding, emulating partial state in this way also presents an
 ``all or nothing'' choice for applications for a given key. Either, all state
@@ -225,7 +224,7 @@ for that key is computed, or none of it is. With partial state, the state for a
 key in the ultimate materialized view can be evicted without also evicting the
 current vote count. The former may be significantly larger than the latter,
 since it includes other columns, but is cheap to recompute. The latter on the
-other hand is small, but potentially very expensive to re-compute.
+other hand is small, but potentially expensive to re-compute.
 
 \subsection{State Sharing}
 
@@ -241,10 +240,10 @@ state for each one.
 
 Recent work introduced arrangements~\cite{arrangements} as a way to mitigate
 this problem. Arrangements allow sharing indexes and state across related
-operators to avoid duplication. However, even with arrangements, the same
-computation may be executed over a given input record more than once if it is
+operators to avoid duplication. However, even with arrangements, the system may
+execute the same computation over a given input record more than once if it is
 needed by more than one instance of a query. Furthermore, eviction is made more
-difficult with arrangements, as the entire arrangement must be updated to
+difficult with arrangements, as the system must update the entire arrangement to
 accommodate any new or evicted parameter value. Noria supports joint query
 optimization~\cite{noria}, which combined with arrangements could reduce much of
 the duplicated effort by instantiating each query multiple times, though this
@@ -262,32 +261,17 @@ A mechanism for taking snapshots of materialized state that can be recovered
 later would help mitigate this. However, such a design also requires care to
 ensure that any state populated \emph{since} the snapshot is correctly
 incorporated. In particular, if downstream state now includes entries that
-reflect data missing from the snapshot, that downstream state must be evicted.
-Otherwise, updates for that data will be discarded at the recovered operator
-when it discovers that the related state is missing in its state.
+reflect data missing from the snapshot, the system must evict that downstream
+state. Otherwise, updates for that data will be discarded at the recovered
+operator when it discovers that the related state is missing in its state.
 
-\section{Transactions}
+\section{Consistency}
 
-Web applications sometimes rely on database transactions, e.g., to atomically
-update pre-computed values. Noria does not implement transactions, though its
-support for derived views often obviates the need for them. For example, web
-applications often use transactions to keep denormalized schemas synchronized: a
-``like count'' column in the table that stores posts or an ``average rating''
-column in the table that stores products. Noria obviates the need for such
-denormalizations, and the transactions needed to maintain them, by automatically
-ensuring that computed derived values are kept up to date with respect to the
-base data.
+Noria provides weaker consistency guarantees than many existing dataflow and
+view materialization systems. This has implications for how applications use
+Noria, and what behavior the application may observe.
 
-\section{Stronger Consistency}
-
-Noria is eventually consistent, and so is the partial state implementation
-outlined in this thesis. That said, adding partial state to a system with
-stronger consistency guarantees should not require extensive changes. In fact,
-parts of the design could likely be simplified; union buffering, for example,
-would likely no longer be necessary, and could be replaced with some kind of
-multi-versioned concurrency control.
-
-\section{Write Latency == Staleness}
+\subsection{Write Latency == Staleness}
 
 By design, Noria's read and write paths are disconnected from one another: reads
 can usually proceed even if the write path is busy. This is both the reason why
@@ -310,6 +294,27 @@ that have not yet been processed by the dataflow. Therefore, if the dataflow is
 busy, the time between when an update is issued and when it is reflected in
 later queries will increase.
 
+\subsection{Transactions}
+
+Web applications sometimes rely on database transactions, e.g., to atomically
+update pre-computed values. Noria does not implement transactions, though its
+support for derived views often obviates the need for them. For example, web
+applications often use transactions to keep denormalized schemas synchronized: a
+``like count'' column in the table that stores posts or an ``average rating''
+column in the table that stores products. Noria obviates the need for such
+denormalizations, and the transactions needed to maintain them, by automatically
+ensuring that computed derived values are kept up to date with respect to the
+base data.
+
+\subsection{Stronger Consistency}
+
+Noria is eventually consistent, and so is the partial state implementation
+outlined in this thesis. That said, adding partial state to a system with
+stronger consistency guarantees should not require extensive changes. In fact,
+parts of the design could likely be simplified; union buffering, for example,
+would likely no longer be necessary, and could be replaced with some kind of
+multi-versioned concurrency control.
+
 \section{Upstream Database Integration}
 
 Existing applications that wish to adopt Noria may not want to adopt it
@@ -318,7 +323,7 @@ they rely on its transactional properties for parts of their workload, because
 they have existing backup solutions in place, or simply to make the transition
 incrementally.
 
-The most straightforward way to add Noria to an existing system architecture is
+The most straightforward way to add Noria to an existing application backend is
 to feed all changes to the primary database tables into Noria. Noria will then
 maintain its copies of the base tables, with indexes it manages itself. However,
 this has the downside of duplication all of the application's data between the
@@ -336,7 +341,7 @@ yet entered the dataflow. This is a problem, because if an upquery response
 reflects that new data, and then an update arrives and adds that same data, the
 data will be reflected twice!
 
-A possible solution here is to take a page out of the multiversion concurrency
+A possible solution is to take a page out of the multi-version concurrency
 control playbook, and ensure that lookups into base table state do not see the
 effects of any updates that have not yet passed through its Noria operator
 equivalent. Ideally, this would be based on the existing transactional
@@ -352,20 +357,20 @@ currently showing is modified, and include in that notification what exactly
 changed. In response, the application could reflect that change, all without
 sending another query to the database.
 
-Extending Noria in this way should not present too many problems, though it does
-raise an interesting question around partial state. In particular, what happens
-if an application ``subscribes'' to a query, and then that query's result set is
-evicted? Since it is evicted, Noria will not maintain it any longer, and the
-application's view will grow stale. Similarly, what happens if the application
-attempts to subscribe to a query whose results are not currently known? Or, what
-if the application goes offline briefly, and now wishes to gather only the
-changes to the result set since it was last online?
+Extending Noria in this way raises an interesting question around partial state.
+In particular, what happens if an application ``subscribes'' to a query, and
+then that query's result set is evicted? Since it is evicted, Noria will not
+maintain it any longer, and the application's view will grow stale. Similarly,
+what happens if the application attempts to subscribe to a query whose results
+are not currently known? Or, what if the application goes offline briefly, and
+now wishes to gather only the changes to the result set since it was last
+online?
 
 It may be that the solution here is simple\,---\,provide a query-and-subscribe
 operator that populates missing state if needed, and then ensure that results
 for outstanding subscriptions are never evicted. The view could also retain a
 log of recent changes to the view to replay if a slightly stale client wants to
-catch up. Ultimately, many designs are possible here.
+catch up.
 
 \section{Eviction Strategy}
 
@@ -392,18 +397,18 @@ would be bottlenecked by the performance of the write path.
 
 \section{Column-Based Storage}
 
-Noria's in-memory storage is highly unoptimized. Specifically, every row in
-every state is allocated in its own vector. This causes significant memory
-allocator churn, and introduces non-trivial memory overhead. Since Noria knows
-the schema of each view in advance, and all rows in the view have the same
-schema, a column-based storage format would likely be a much better fit for
-many views. Noria could even use heuristics to choose between row- and
-column-based storage depending on the semantics of each operator.
+Noria's in-memory storage is unoptimized. Specifically, every row in every state
+is allocated in its own vector. This stresses the memory allocator, and
+introduces non-trivial memory overhead. Since Noria knows the schema of each
+view in advance, and all rows in the view have the same schema, a column-based
+storage format would likely be a much better fit for many views. Noria could
+even use heuristics to choose between row- and column-based storage depending on
+the semantics of each operator.
 
 \section{Cursors}
 
 Websites frequently have paginated listings, or pages that are filled in with
-more content as you scroll. Behind the scenes, these techniques are both
+more content as the user scrolls. Behind the scenes, these techniques are both
 implemented using the same abstract mechanism: the cursor. There are many ways to
 implement a cursor, but the most common is using the SQL \texttt{LIMIT}
 operator.
@@ -439,7 +444,9 @@ only an appropriate subset of the materialized results are returned. This
 solution requires no changes to the partial state logic, but also makes it
 necessary to materialize all pages of each query result, even if only the first
 few pages are ever accessed. Realistically, a solution that takes this approach
-would also include a hard upper limit on how many results are materialized.
+would therefore also include a hard upper limit on how many results are
+materialized. Twitter takes an approach like this, where there is a fixed end to
+each timeline that the user cannot scroll past.
 
 In a pre-limited design, materialized state includes only results for pages that
 have been accessed. This is attractive since it uses less memory, and fewer
