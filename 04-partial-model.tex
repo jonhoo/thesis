@@ -1,12 +1,12 @@
-Noria, as described in \S\ref{s:noria}, uses significant amounts of memory. All
-results for all queries must be materialized, and unlike traditional caching
-approaches, unimportant cached results cannot be evicted to free up memory. To
-address the high memory use of traditional materialized views, this thesis
-proposes \textit{partially materialized state}. Partial state enables Noria to
-store and maintain only a subset of a materialized view's contents, and to
-compute missing state on demand. Partial state also enables Noria to implement
-eviction, so that the materialization cost is kept low even as the underlying
-workload changes.
+Noria without partial state, as described in \S\ref{s:noria}, uses significant
+amounts of memory. All results for all queries must be materialized, and unlike
+traditional caching approaches, unimportant cached results are not evicted to
+free up memory. To address the high memory use of traditional materialized
+views, this thesis proposes \textit{partially materialized state}. Partial state
+enables Noria to store and maintain only a subset of a materialized view's
+contents, and to compute missing state on demand. Partial state also enables
+Noria to implement eviction, so that the materialization cost is kept low even
+as the underlying workload changes.
 
 This chapter discusses the partially stateful model and its components. The next
 chapter examines the practical challenges that arise when partial state is
@@ -20,18 +20,36 @@ computed on demand if the application queries for it. State can be marked as
 missing both in state that is internal to the dataflow, like the state of an
 aggregation, and in externally visible state like Noria's query result caches.
 
-In Noria, most state starts out as missing, and is populated driven by what data
-the application queries for. This also allows Noria to quickly adopt new views,
-since in the common case no computation need happen when additional operators
-are added.
+With partial state, most Noria state starts out as missing, and is populated
+driven by what data the application queries for. This also allows Noria to
+quickly adopt new views, since in the common case no computation need happen
+when additional operators are added.
 
-Missing state manifests as missing entries in indices in the system. For
-example, an aggregation that groups by the author of a given article would have
-an index over the author column. An entry can be missing in that index to
-signify that the aggregated value for a given author is unknown. If state
-carries multiple indices, a particular base table row may be present in one
-index, but missing in another. Indexes over a given state are either all partial
-or none of them are.
+\begin{figure}
+  \centering
+  \includegraphics{diagrams/Indexing.pdf}
+  \caption{Multiple indexes over the state in a single view in Noria. Even
+  though \emph{some} rows for author B are present, some are missing and so the
+  entry for B is considered missing in the \texttt{author} index. Even though no
+  rows for author C are present, the index entry is not marked as missing, which
+  would happen if the system has checked that there are indeed no rows for
+  author C.}
+  \label{f:indexing}
+\end{figure}
+
+Missing state manifests as missing entries in particular indices in the system.
+Indexes over a given state are either all partial or none of them are. This may
+seem strange based on how indices work in traditional relation databases.
+Figure~\vref{f:indexing} gives an example with two different partial indices
+over a view that holds a unique story identifier and the story's author. One
+index is over the primary key column \texttt{id}, and one is over the story
+author. Here, even though some rows with author B are present, the index entry
+for author B is still considered missing, since not \emph{all} rows with author
+B are present. This is necessary, as otherwise an application query for stories
+authored by B would return an incomplete, and hence incorrect, result.
+Similarly, while there are no rows for authors C or D, C is considered complete
+because the system has checked upstream that there are indeed no stories written
+by C.
 
 If, while processing an update, the system encounters missing state, this
 indicates that the update does not affect query results that the application has
@@ -78,7 +96,9 @@ that view's \textit{upquery plan}. The system determines upquery plans by
 analyzing each view's query when that view is created, and deciding how best
 to recompute its results. It does so by finding all \emph{possible} upquery
 plans, choosing among them, and then informing all involved domains of the
-chosen plan.
+chosen plan. There may be multiple possible candidates if there are multiple
+equivalent ways to compute the missing state, such as by changing the direction
+in which joins are executed as explained below.
 
 \subsection{Key Provenance Tracing}
 
@@ -232,12 +252,12 @@ missing state.
 
 When the system evicts an entry from state in the middle of the dataflow, the
 missing entry may cause an update to be discarded even though downstream entries
-must see that update to avoid. For example, consider what happens if an operator
-counts the number of votes per author, and contains a count of 7 for the author
-``Jane''. Then, the state for ``Jane'' is evicted from some operator upstream of
-the count. If an update now arrives at the operator where ``Jane'' is missing;
-it would discard the update, and the downstream count would remain perpetually
-stale.
+hold data that would grow stale without that update. For example, consider what
+happens if an operator counts the number of votes per author, and contains a
+count of 7 for the author ``Jane''. Then, the state for ``Jane'' is evicted from
+some operator upstream of the count. If an update now arrives at the operator
+where ``Jane'' is missing; it would discard the update, and the downstream count
+would remain perpetually stale.
 
 To avoid such permanently stale entries, the system must ensure that when an
 entry is evicted, any dependent state downstream is also evicted. More formally,
