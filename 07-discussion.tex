@@ -271,7 +271,7 @@ Noria provides weaker consistency guarantees than many existing dataflow and
 view materialization systems. This has implications for how applications use
 Noria, and what behavior the application may observe.
 
-\subsection{Write Latency == Staleness}
+\subsection{Write Latency as Staleness}
 
 By design, Noria's read and write paths are disconnected from one another: reads
 can usually proceed even if the write path is busy. This is both the reason why
