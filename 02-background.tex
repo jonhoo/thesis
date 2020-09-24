@@ -42,51 +42,52 @@ has created.
 
 \subsection{Related Work}
 
-\resume
+Database materialized views~\cite{gupta-view-selection,lee} were originally
+devised to cache expensive analytical query results. Unfortunately, commercial
+databases' materialized view support is
+limited~\cite{materialized-view-selection-sql-server,mssql-materialized-view-restrictions-blog,
+mssql-materialized-view-restrictions} and views must usually be rebuilt from
+scratch when the underlying data changes.
 
-%
-Database materialized views~\cite{gupta-view-selection,lee} were devised to
-cache expensive analytical query results.
-%
-Commercial databases' materialized view
-support~\cite{materialized-view-selection-sql-server} is
-limited~\cite{mssql-materialized-view-restrictions-blog,
-mssql-materialized-view-restrictions} and views must usually be rebuilt on
-change.
-%
-However, there is considerable research on incremental view maintenance in
-databases~\cite{tompa, zhou2, zhuge, gupta, larson, lee}.
-%
-Noria builds upon ideas from this work, but applies them in the context of a
-concurrent, stateful data-flow system for web applications.
-%
-This requires efficient fine-grained access to views, solutions to new
-coordination problems and concurrency races, as well as inexpensive long-term
-adaptation as view definitions change.
-%
-DBToaster~\cite{dbtoaster, hotdog} supports incremental view maintenance
-under high write loads with generated recursive delta query implementations.
-%
-Noria sees lower single-threaded performance, but supports parallel processing
-and changing queries; adding native-code generation to Noria might further
-improve its performance, but would complicate operator reuse.
-%
-Pequod~\cite{pequod} and DBProxy~\cite{dbproxy} support \textbf{partial
-materialization} in response to client demand, although Pequod is limited to
-static queries, and unlike Noria, neither shares state nor processing across
-queries.
-%
+The key to usable materialized views is how they are maintained incrementally as
+the underlying data changes, which has been the subject of considerable research
+in the past few decades. \citeauthor{materialized-survey} gives a good survey of
+the current landscape in \cite{materialized-survey}.
 
-delta queries
+Modern incremental view maintenance (IVM) techniques are usually based on
+\textit{delta queries}, which are algebraically derived queries that give
+efficient relational expressions for computing the change to a (materialized)
+view given a set of changes to the underlying data. The current state-of-the-art
+in IVM is \textit{Higher-Order IVM}, in which the system derives multiple,
+recursive such delta queries for each view, and strategically materializes and
+maintains the intermediate delta query results as well~\cite{dbtoaster, hotdog}.
+Recent work also proposes techniques for mitigating the memory overhead of such
+intermediate materializations by instead materializing smaller auxiliary state
+from which the necessary values can then be efficiently produced when
+needed~\cite{memory-efficient}. Sadly, few of these solutions have been adopted
+in commercially available databases.
 
-%PNUTS~\cite{pnuts} incrementally and lazily maintains materialized
-%views~\cite{agrawal}, but only supports a limited set of operators, and cannot
-%partially materialize results.
-%
-%In contrast, {Noria} supports chains of materialized views, nested queries in
-%views, and can often preserve materializations across schema changes.
-%
+Noria's dataflow for each view effectively represents delta queries for that
+view over the stream of updates to base tables. Noria's current algorithms for
+what dataflow to use to compute the changes to each view are fairly naive, and
+could likely benefit from the techniques in the aforementioned work. However,
+Noria does apply some of the lessons from higher-order delta queries, and
+also materializes intermediate results to speed up the delta processing.
+Meanwhile, Noria's dataflow-backed processing, while comparatively naive,
+provides a significant benefit by virtue of using the dataflow model. In
+particular, it allows Noria to easily distribute the view maintenance across
+cores and machines to improve performance. Furthermore, Noria is designed to
+take advantage of a relaxed consistency model, which allows much higher read
+performance than strongly consistent systems can provide.
 
+Through the work of this thesis, Noria also supports \emph{partial} view
+materialization, which allows it to materialize and maintain only a subset of
+each of the application's views. This is not possible in most existing IVM
+systems. Pequod~\cite{pequod} and DBProxy~\cite{dbproxy} support partial
+materialization in response to client demand, although Pequod is limited to
+static queries specified in a datalog-like language, and DBProxy does not
+support incremental view maintenance. And neither system shares state nor
+processing across views.
 
 \section{Caching}
 
