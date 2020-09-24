@@ -12,6 +12,7 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    05-partial.tex \
 	    06-evaluation.tex \
 	    07-discussion.tex \
+	    08-future-work.tex \
 	    A1-discussion.tex \
 	    graphs/lobsters-throughput.pdf \
 	    graphs/lobsters-memory.pdf \
