@@ -304,6 +304,7 @@ produced. As far as the downstream dataflow is concerned, nothing abnormal has
 happened\,---\,the upquery response just took longer to arrive.
 
 \subsubsection{Incongruent Joins}
+\label{join-evictions}
 
 The system must guarantee that all data relevant to a given state entry
 eventually reaches the operator that holds that entry. A corollary of this is
