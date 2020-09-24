@@ -284,6 +284,16 @@ storage format would likely be a much better fit for many views. Noria could
 even use heuristics to choose between row- and column-based storage depending on
 the semantics of each operator.
 
+\section{Time-Windowed Operators}
+
+Noria currently has no support for time-windowed queries\,---\,those that
+include \texttt{NOW}, \texttt{CURRENT TIME}, or some other similar dynamic value
+in the query. These queries are difficult as they are no longer pure functions
+of the data in the base tables. Instead, the query results change continuously,
+even if the application does not instigate any changes. How to support such
+operators in Noria, and with partial state which also relies on the purity of
+operators, remains an open problem.
+
 \section{Partial Key Subsumption}
 
 Noria's implementation of partial state does not currently take advantage of
