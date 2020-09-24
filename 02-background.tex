@@ -130,27 +130,45 @@ materialized views.
 
 \subsection{Related Work}
 
-\resume
+Application-level caching is often implemented in an ad-hoc fashion, and tends
+to be the source of many application errors~\cite{ad-hoc-caching}. Researchers
+and industry teams alike have therefore attempted to build systems to automate
+cache maintenance.
 
-Some applications deploy a dedicated caching system to manage their cache, some
-rely on automatic caching implemented by the application framework they use, and
-many add caching in an ad-hoc fashion to mitigate the most pressing performance
-concerns over time. Developers typically take the latter as comprehensive
-caching systems tend to be custom-built and application framework caching tends
-to be too simplistic. This requires caching logic to be placed strategically
-throughout the application code base, but allows the caching logic to be
-flexible.
+Large-scale applications often end up building their own custom caching
+infrastructure~\cite{facebook-memcache, flannel}, which solves their needs in
+isolation, but does not provide a ready-to-use solution for other application
+developers that face similar issues. These custom-built solutions also tend to
+implement only the minimum functionality the authors need at the time, and
+forego more complicated, but nonetheless useful features such as incremental
+cache updates.
 
-\begin{comment}
-https://www.inf.ufrgs.br/prosoft/publications/2016/mertz-tse-2016-pre-print.pdf
-https://people.csail.mit.edu/nickolai/papers/gupta-cachegenie.pdf
-https://slack.engineering/flannel-an-application-level-edge-cache-to-make-slack-scale/
-https://core.ac.uk/download/pdf/208550345.pdf
-https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.465.343&rep=rep1&type=pdf
-https://ieeexplore.ieee.org/document/1319994
-\end{comment}
+The research community has also produced several systems that aim to provide
+more general-purpose transparent caching. TAO~\cite{tao} and
+TxCache~\cite{txcache} implement automated query result caching, but do not
+support incremental in-place cache updates. CacheGenie~\cite{cachegenie}
+implements a trigger-based middleware cache for object-relational mapping
+frameworks, and supports in-place cache updates, but is limited to only specific
+operations supported by the framework.
 
-consistency is a big thing here
+In the world of database literature, database caching frontends are sometimes
+referred to as \textit{Cache-Augmented SQL} systems. And there, like with all
+caching systems, the primary concern is one of consistency\,---\,\emph{some}
+mechanism must be in place to ensure that the cache remains up to date as the
+underlying data changes. Research in this space tends to focus on cache
+management as being external to the database, and instead augments the key-value
+store used to store the cache entries so that this external system can correctly
+manage the race conditions that arise when the database and cache are distinct
+systems~\cite{facebook-memcache, casql-consistency, casql-consistency-thesis}.
+Noria instead integrates the cache management into the database, which allows
+the cache entries to be incrementally updated, automatically, in-place.
+
+A related approach is \textit{mid-tier database caching}, in which subsets of
+the database are replicated onto the hosts that run the application's code to
+allow certain queries to be run locally without interacting with the remote
+database backend~\cite{mtcache}. This approach is appealing in that some
+database queries can avoid traversing the network, but it does not provide the
+same speedups that query result caching provides.
 
 \section{Dataflow}
 
