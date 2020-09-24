@@ -200,66 +200,35 @@ results over time.
 
 \subsection{Related Work}
 
-\resume
+A wide range of dataflow and stream-processing systems exist that excel at
+data-parallel computing~\cite{dryad, naiad, storm, heron, flink, millwheel,
+spark-streaming, stanford-stream, s-store, cloud-dataflow}. However, these
+systems cannot easily serve web applications directly. They only achieve
+low-latency incremental updates at the expense of windowed state (and incomplete
+results) or by keeping full state in memory. Partial state allows Noria to lift
+this restriction. Furthermore, these systems generally provide no mechanism for
+accessing computed state except through the dataflow or by integrating with
+additional external systems, which adds latency.
 
-A number of dataflow systems exist that excel at data-parallel
-computing~\cite{dryad, naiad}. However, these systems cannot easily serve web
-applications directly. They only achieve low-latency incremental updates at the
-expense of windowed state (and incomplete results) or by keeping full state in
-memory. Partial state allows Noria to lift this restriction.
+Many existing system are also limited to a fixed set of queries defined when the
+system is started, and cannot easily adopt query changes as the application
+evolves. Some dataflow systems do support Noria-like dynamic changes to the
+running dataflow~\cite{ciel, ray}, but without support for demand-driven partial
+state these systems must either fully compute results when the dataflow is
+extended, or dataflow changes only take into account subsequent updates.
 
-A few data-flow systems can reuse operators automatically: for example,
-Nectar~\cite{nectar} detects similar subexpressions in DryadLINQ programs,
-similar to Noria's automated operator reuse, using DryadLINQ-specific
-merge and rewrite rules.
+Some developers use, or consider using, a streaming fabric like Apache
+Kafka~\cite{kafka} to build their own view maintenance pipeline~\cite{nyt-kafka,
+samza-blogpost}. However, at the time of writing, no general-purpose system
+exists based on such a pipeline that achieves the performance and flexibility of
+Noria.
 
-Support for dynamic changes to a running data-flow is more common:
-\textsc{Ciel}~\cite{ciel} dynamically extends batch-processing data-flows,
-as does Ray~\cite{ray} for stateful ``actor'' operators' state transitions
-in reinforcement learning applications.
-
-Noria dynamically changes long-running, low-latency streaming computations by
-modifying the data-flow; unlike existing streaming data-flow systems like
-Naiad~\cite{naiad} or Spark Streaming~\cite{spark-streaming}, it has no
-need for a restart or recovery from a checkpoint.
-
-\textbf{Stream processing systems}~\cite{storm, heron, flink, millwheel,
-spark-streaming} often use data-flow, but usually have windowed state and
-static queries that process only new records. STREAM~\cite{stanford-stream}
-identifies opportunities for operator reuse among static queries; Noria achieves
-similar reuse for dynamic queries. S-Store~\cite{s-store} lacks Noria's partial
-materialization and state reuse, but combines a classic database with a stream
-processing system using trigger-based view maintenance. S-Store enables
-transactional processing, a future goal for Noria.
-
-Finally, some open-source systems have experimented with flexible query and
-schema changes.
-%
-Apache Kafka~\cite{kafka} achieves some flexibility in query and schema
-changes as used by the New York Times~\cite{nyt-kafka}, and
-%
-similar ideas were proposed as an extension proposal for
-Samza~\cite{samza-blogpost}.
-%
-To our knowledge, however, no prior system achieves the performance and
-flexibility of Noria.
-%
-
-\section{Other Related Work}
-
-%%%%%%%%%%%%%%%%%%%
-% - MillWheel, Cloud Dataflow
-% - Apache Calcite (\url{http://calcite.apache.org})
-% \todo{Cloud Dataflow~\cite{cloud-dataflow}}
-%
-
-%
-\begin{comment}
-Shared Arrangements:
-http://www.vldb.org/pvldb/vol13/p1793-mcsherry.pdf
-\end{comment}
-
-Differential dataflow~\cite{naiad,differential-dataflow}, and its instantiation
-in the commercial product Materialize~\cite{materialize}, bears a striking
-resemblance to Noria at first glance. In particular... Also, see discussion
-section on emulating partial state.
+Differential dataflow~\cite{differential-dataflow}, and its instantiation in the
+commercial product Materialize~\cite{materialize}, bears a striking resemblance
+to Noria at first glance. In particular, it uses dataflow to produce
+automatically-maintained materialized views over SQL queries. However,
+Materialize does not implement partial state, and must therefore maintain
+similar queries independently (which misses out on opportunities for shared
+compute and state) or fully materialize query results (which uses more memory).
+The authors behind Materialize have proposed partial solutions to some of these
+challenges, which are discussed in \S\vref{s:disc:emulating}.
