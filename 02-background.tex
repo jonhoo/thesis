@@ -40,7 +40,7 @@ These intermediate materializations are still views\,---\,they have a schema and
 consist of rows\,---\,but do not reflect any named views that the application
 has created.
 
-\subsection{Related Work}
+\subsection*{Related Work}
 
 Database materialized views~\cite{gupta-view-selection,lee} were originally
 devised to cache expensive analytical query results. Unfortunately, commercial
@@ -128,7 +128,7 @@ likely better to keep hot a cache entry that is accessed once a second than a
 topic of this thesis, is what allows Noria to implement eviction for
 materialized views.
 
-\subsection{Related Work}
+\subsection*{Related Work}
 
 Application-level caching is often implemented in an ad-hoc fashion, and tends
 to be the source of many application errors~\cite{ad-hoc-caching}. Researchers
@@ -198,7 +198,7 @@ then observe how the leaves change in response. Those changes can in turn be
 forwarded to the application to provide a change stream over the computation's
 results over time.
 
-\subsection{Related Work}
+\subsection*{Related Work}
 
 A wide range of dataflow and stream-processing systems exist that excel at
 data-parallel computing~\cite{dryad, naiad, storm, heron, flink, millwheel,
