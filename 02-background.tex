@@ -1,18 +1,243 @@
+This chapter provides introductory background information on many topics that
+are relevant to the work in this thesis, as well as an overview of existing
+systems and their relation to Noria and partial state.
 
 \section{Materialized Views}
 
-\section{Caching Systems}
+Noria's primary function is to provide materialized views. In database parlance,
+a \textit{view} is a name for the result set of a particular query. When an
+application reads from a view, it is reading from the result set that results
+from executing that query. Most databases also allow views to be used in place
+of other database collections, like tables.
+
+Some databases can \textit{materialize} a view by storing the result set
+somewhere for later recollection. When a view is materialized, queries over that
+view do not need to re-execute the view's backing query, but instead access the
+rows of the view as if they were stored in a durable database relation.
+Materialized views thus effectively provide query memoization; they are faster
+to access than non-materialized views, at the cost of having to store the view's
+rows.
+
+Once a database materializes a view, it must \textit{maintain} that
+materialization over time as the underlying data changes. Otherwise, reads from
+the view would no longer match the results of the view's backing query. View
+maintenance can be \emph{reactive} by updating the view as the data changes,
+\emph{demand-driven} by updating the view only when queried, or \emph{triggered}
+by updating the view only when an outside trigger is invoked.
+
+Noria implements reactive view maintenance\,---\,it assumes that writes are less
+frequent than reads, and therefore that it is better to make writes slower by
+updating the cache proactively than to make reads slower by having each read
+check that the materialization is up to date.
+
+\paragraph{Materialization.}
+Throughout this thesis, the word materialization is often used as a noun. In the
+context of Noria, a materialization refers to any derived computation result
+that Noria explicitly stores, not just materialized views. Or, more precisely,
+Noria may choose to materialize intermediate results, such as the current value
+of an aggregation, which do not represent any of the application's queries.
+These intermediate materializations are still views\,---\,they have a schema and
+consist of rows\,---\,but do not reflect any named views that the application
+has created.
+
+\subsection{Related Work}
+
+\resume
+
+%
+Database materialized views~\cite{gupta-view-selection,lee} were devised to
+cache expensive analytical query results.
+%
+Commercial databases' materialized view
+support~\cite{materialized-view-selection-sql-server} is
+limited~\cite{mssql-materialized-view-restrictions-blog,
+mssql-materialized-view-restrictions} and views must usually be rebuilt on
+change.
+%
+However, there is considerable research on incremental view maintenance in
+databases~\cite{tompa, zhou2, zhuge, gupta, larson, lee}.
+%
+Noria builds upon ideas from this work, but applies them in the context of a
+concurrent, stateful data-flow system for web applications.
+%
+This requires efficient fine-grained access to views, solutions to new
+coordination problems and concurrency races, as well as inexpensive long-term
+adaptation as view definitions change.
+%
+DBToaster~\cite{dbtoaster, hotdog} supports incremental view maintenance
+under high write loads with generated recursive delta query implementations.
+%
+Noria sees lower single-threaded performance, but supports parallel processing
+and changing queries; adding native-code generation to Noria might further
+improve its performance, but would complicate operator reuse.
+%
+Pequod~\cite{pequod} and DBProxy~\cite{dbproxy} support \textbf{partial
+materialization} in response to client demand, although Pequod is limited to
+static queries, and unlike Noria, neither shares state nor processing across
+queries.
+%
+
+delta queries
+
+%PNUTS~\cite{pnuts} incrementally and lazily maintains materialized
+%views~\cite{agrawal}, but only supports a limited set of operators, and cannot
+%partially materialize results.
+%
+%In contrast, {Noria} supports chains of materialized views, nested queries in
+%views, and can often preserve materializations across schema changes.
+%
+
+
+\section{Caching}
+
+As applications grow, their performance needs often exceed that which a
+traditional relational database can provide. Such applications cannot afford to
+wait for the database to compute joins and aggregations, and need lower-latency
+data access than a relational database like MySQL or Postgres typically
+provides. In these cases, application authors tend to add \textit{caching} to
+their application backend logic.
+
+Caching is a broad topic in and of itself, especially because caching tends to
+occur at multiple levels within the application. Developers may cache results of
+individual database queries, collections of data that the application frequently
+uses together, computed and otherwise derived values that are expensive to
+re-compute, segments of rendered application output (like HTML snippets), all
+the way to full web pages. Each of these caches may also exist in multiple
+places to improve data locality, add redundancy, or simply because two caches
+partially overlap.
+
+Noria implements \textit{query result caching} (using materialized views), which
+ensures that the application's database queries are fast, even if they are
+complex or include significant computation. While Noria could likely be extended
+to maintain the compound caches higher up in the application stack, that is left
+for future work.
+
+Much like with view materialization, the introduction of caches also requires
+that the application maintains those caches such that new data eventually
+becomes visible. The exact mechanism that is used to implement the cache
+maintenance varies by cache type, developer preference, and application size.
+
+Once a cache is in place, the application authors must also implement cache
+\textit{eviction} to ensure that the cache does not grow without bound. Many
+eviction strategies exist, but they all revolve around the notion that certain
+cache entries are more worthwhile to keep than others. These entries are usually
+referred to as ``hot'' entries. Essentially, if storage space is limited, it is
+likely better to keep hot a cache entry that is accessed once a second than a
+``cold'' entry that was last accessed two weeks ago. \textit{Partial state}, the
+topic of this thesis, is what allows Noria to implement eviction for
+materialized views.
+
+\subsection{Related Work}
+
+\resume
+
+Some applications deploy a dedicated caching system to manage their cache, some
+rely on automatic caching implemented by the application framework they use, and
+many add caching in an ad-hoc fashion to mitigate the most pressing performance
+concerns over time. Developers typically take the latter as comprehensive
+caching systems tend to be custom-built and application framework caching tends
+to be too simplistic. This requires caching logic to be placed strategically
+throughout the application code base, but allows the caching logic to be
+flexible.
+
+\begin{comment}
+https://www.inf.ufrgs.br/prosoft/publications/2016/mertz-tse-2016-pre-print.pdf
+https://people.csail.mit.edu/nickolai/papers/gupta-cachegenie.pdf
+https://slack.engineering/flannel-an-application-level-edge-cache-to-make-slack-scale/
+https://core.ac.uk/download/pdf/208550345.pdf
+https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.465.343&rep=rep1&type=pdf
+https://ieeexplore.ieee.org/document/1319994
+\end{comment}
+
+consistency is a big thing here
 
 \section{Dataflow}
 
+Noria maintains its materialized views using \textit{dataflow}. Dataflow means a
+thousand things to a thousand people, especially if they are from different
+areas of computer science, but this thesis will focus on dataflow as understood
+in software computing specifically. Even there, many definitions exist, but they
+all agree that in dataflow, compute is stationary while data moves.
+
+A dataflow system expresses complex computations as a directed \emph{graph} that
+consists of interconnected nodes that implement primitive operations, such as
+joins, filters, and aggregations. These nodes then \emph{stream} data among each
+other to produce the desired overall results. Dataflow systems are thus also
+often referred to as stream processing systems. The roots of the graph produce
+the data that the dataflow computes over, whereas the leaves represent the
+dataflow program's outputs.
+
+Since the dataflow model is inherently streaming, it is particularly well-suited
+for distributed deployments. Nodes are independent, and communicate only through
+their streams, and so the system can easily place them on different cores, or
+hosts, and use existing messaging fabrics to connect them. If needed, nodes can
+also be sharded to allow data-parallel computing.
+
+The streaming design also makes dataflow a good fit for reactive applications.
+When the data changes, the system can introduce the changes at the roots, and
+then observe how the leaves change in response. Those changes can in turn be
+forwarded to the application to provide a change stream over the computation's
+results over time.
+
+\subsection{Related Work}
+
+\resume
+
+A number of dataflow systems exist that excel at data-parallel
+computing~\cite{dryad, naiad}. However, these systems cannot easily serve web
+applications directly. They only achieve low-latency incremental updates at the
+expense of windowed state (and incomplete results) or by keeping full state in
+memory. Partial state allows Noria to lift this restriction.
+
+A few data-flow systems can reuse operators automatically: for example,
+Nectar~\cite{nectar} detects similar subexpressions in DryadLINQ programs,
+similar to Noria's automated operator reuse, using DryadLINQ-specific
+merge and rewrite rules.
+
+Support for dynamic changes to a running data-flow is more common:
+\textsc{Ciel}~\cite{ciel} dynamically extends batch-processing data-flows,
+as does Ray~\cite{ray} for stateful ``actor'' operators' state transitions
+in reinforcement learning applications.
+
+Noria dynamically changes long-running, low-latency streaming computations by
+modifying the data-flow; unlike existing streaming data-flow systems like
+Naiad~\cite{naiad} or Spark Streaming~\cite{spark-streaming}, it has no
+need for a restart or recovery from a checkpoint.
+
+\textbf{Stream processing systems}~\cite{storm, heron, flink, millwheel,
+spark-streaming} often use data-flow, but usually have windowed state and
+static queries that process only new records. STREAM~\cite{stanford-stream}
+identifies opportunities for operator reuse among static queries; Noria achieves
+similar reuse for dynamic queries. S-Store~\cite{s-store} lacks Noria's partial
+materialization and state reuse, but combines a classic database with a stream
+processing system using trigger-based view maintenance. S-Store enables
+transactional processing, a future goal for Noria.
+
+Finally, some open-source systems have experimented with flexible query and
+schema changes.
+%
+Apache Kafka~\cite{kafka} achieves some flexibility in query and schema
+changes as used by the New York Times~\cite{nyt-kafka}, and
+%
+similar ideas were proposed as an extension proposal for
+Samza~\cite{samza-blogpost}.
+%
+To our knowledge, however, no prior system achieves the performance and
+flexibility of Noria.
+%
+
 \section{Other Related Work}
 
+%%%%%%%%%%%%%%%%%%%
+% - MillWheel, Cloud Dataflow
+% - Apache Calcite (\url{http://calcite.apache.org})
+% \todo{Cloud Dataflow~\cite{cloud-dataflow}}
+%
+
+%
 \begin{comment}
+Shared Arrangements:
 http://www.vldb.org/pvldb/vol13/p1793-mcsherry.pdf
-https://www.inf.ufrgs.br/prosoft/publications/2016/mertz-tse-2016-pre-print.pdf
-https://people.csail.mit.edu/nickolai/papers/gupta-cachegenie.pdf
-https://arxiv.org/abs/2004.14471
-https://arxiv.org/abs/2001.00888
 \end{comment}
 
 Differential dataflow~\cite{naiad,differential-dataflow}, and its instantiation
