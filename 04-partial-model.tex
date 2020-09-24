@@ -215,11 +215,15 @@ recurse all the way up to the base tables this way, but avoid doing so if any
 intermediate state can be re-used.
 
 This process leaves Noria with a set of paths to upquery when it encounters a
-missing entry in a given state.
-
-\begin{inprogress}
-  Relation to Query Planning paragraph.
-\end{inprogress}
+missing entry in a given state. In many ways, the procedure is similar to that
+of traditional query planning, and some techniques from there could likely be
+applied. At the same time, upquery planning introduces some unique challenges.
+First, planning cannot change the order of existing operators, since they are
+part of the running dataflow that is already maintaining other views. To modify
+them, Noria would have to stop the dataflow to rewire the edges. Second, upquery
+plans must still rely on forward incremental dataflow to compute the final
+results\,---\,a join strategy that cannot be executed incrementally is no good,
+no matter how well it might perform.
 
 \subsection{Implementing a Plan}
 

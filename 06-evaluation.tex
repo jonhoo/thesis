@@ -401,11 +401,6 @@ RocksDB backend is used, backed by a ramdisk. Latencies increase by anywhere
 from 20-50\%, depending on the number of misses a given page request
 experiences.
 
-% \begin{inprogress}
-% Full materialization is slightly faster than partial materialization because
-% SOMETHING SOMETHING either join eviction or faster lookups due to no tombstones?
-% \end{inprogress}
-
 \subsection{Memory Use and Throughput}
 
 Memory use can only be reduced so far before the system no longer keeps up with

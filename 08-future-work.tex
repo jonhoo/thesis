@@ -30,13 +30,6 @@ costly.
   \label{l:karma}
 \end{listing}
 
-\begin{inprogress}
-  If \texttt{VoteCount} is partial, it \emph{is} free, because indexes for
-  partially stateful views always start out empty. Each index of a partially
-  stateful view is completely independent! There are no "shared" rows across
-  indexes. But we probably want there to be.
-\end{inprogress}
-
 A comparison with what would happen when using a traditional relational database
 is useful here. When the application developer decides that they want to run
 this new query, they have two choices: either compute it on-demand, or
@@ -47,7 +40,10 @@ The index Noria must construct for efficient upqueries is cheaper to construct
 than such a computed \texttt{karma} column, which makes Noria's scan seems
 reasonable.
 
-% SELECT COUNT(*) FROM table;
+Note that if \texttt{VoteCount} \emph{is} partial, the karma view is free to
+construct for Noria since indices for partially stateful materializations always
+start out empty. Noria constructs an empty index by author, and then fills it on
+demand as the application executes the karma query for particular authors.
 
 Whether Noria \emph{always} does no more work than what a developer would
 make a traditional relational database do if they wanted to make a view
