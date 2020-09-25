@@ -126,7 +126,7 @@ More generally, in order to recompute the results where $C = x$ in some view
 $V$, Noria must determine the \textit{key provenance} of $C$; where $C$ ``came
 from''. Noria computes key provenance by tracing columns ``up'' the dataflow to
 where they originate, which results in a provenance graph like the one shown in
-Figure~\vref{f:key-prov} for the \texttt{StoriesWithVC} view from
+Figure~\ref{f:key-prov} for the \texttt{StoriesWithVC} view from
 Listing~\vref{l:vote-src}. The figure illustrates two important properties of
 key tracing:
 
@@ -240,7 +240,7 @@ Noria needs an index on the materialization whose key matches the lookup key of
 the upquery. In this way, upquery plans adds additional indexing obligations
 that Noria must take into account.
 
-The key provenance information from Figure~\vref{f:key-prov} gives Noria all the
+The key provenance information from Figure~\ref{f:key-prov} gives Noria all the
 information it needs to set up these indexes: an index is needed on the upquery
 key column on each state on the chosen upquery paths. In the case of the view
 from Listing~\ref{l:vote-src}, an index is needed on
