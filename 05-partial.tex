@@ -12,9 +12,9 @@ of upstream state, and the system must ensure that these snapshots do not cause
 reads to violate Invariant~\ref{i:no-spurious} or \ref{i:prefix-consistency}.
 
 Partial state also causes deltas that encounter missing state to be discarded
-early in the dataflow, and the system must ensure that it maintains
-Invariant~\ref{i:missing-suffix} (page \pageref{i:missing-suffix}) whenever this
-happens.
+early in the dataflow (\S\ref{s:missing}), and the system must ensure that it
+maintains Invariant~\ref{i:missing-suffix} (page \pageref{i:missing-suffix})
+whenever this happens.
 
 \section{Linear Dataflow}
 
@@ -24,16 +24,18 @@ case that computing missing results with an upquery that combines all past
 deltas into a single update produces the same results as processing the deltas
 one-at-a-time.
 
-\begin{inprogress}
-  Mention discarded updates in the paragraph below.
-\end{inprogress}
-
 The deltas that flow through the dataflow system represent changes to the
 logical output state of the operator that produced the delta. If a base table
 produces a negative delta for a row $r$, it means that row $r$ is no longer part
 of that base table's current state. An upquery fetches current state, which is
-the sum of all past deltas emitted by the queried operator, and then feeds it
-through the same chain of dataflow operators that individual deltas go through.
+the sum of all past deltas emitted by the queried operator\footnote{As mentioned
+in \S\ref{s:missing}, if the dataflow encounters missing state while processing
+an update, it will discard that update. This means that there may be holes in an
+operator's logical current state. If an upquery encounters such a hole, the
+dataflow fills that hole with another upquery before proceeding.}, and then
+feeds it through the same chain of dataflow operators that individual deltas go
+through.
+
 For upquery processing to be equivalent to one-at-a-time delta processing, it
 must be the case that with operators $f_1$ through $f_N$, and past deltas $d_1$
 through $d_M$:

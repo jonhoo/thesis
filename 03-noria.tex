@@ -230,7 +230,7 @@ consistency also require that that same value reflects the writes issued to the
 system, but not all. In practice, eventual consistency is often ``good enough''
 despite giving few \emph{guarantees}, and many eventually consistent systems
 appear strongly consistent most of the time~\cite{eventual}. Noria in particular
-aims to uphold two additional safety properties:
+aims to uphold three additional safety properties:
 
 \begin{invariant}
   \label{i:no-spurious}
@@ -244,6 +244,12 @@ aims to uphold two additional safety properties:
   all earlier changes to that same base table.
 \end{invariant}
 
+\begin{invariant}
+  \label{i:no-backsies}
+  If a read is issued at time $t$ and again at time $t' > t$, the read at time
+  $t'$ observes all effects of at least the updates observed at time $t$.
+\end{invariant}
+
 Invariant~\ref{i:no-spurious} ensures that views include no duplicated results
 and no spurious results. Essentially, it guarantees that view results represent
 data that is in the base tables, and no other data.
@@ -253,7 +259,13 @@ system makes progress, it does so in a sane manner. If the application issues
 two writes $w_1$ and $w_2$ to a base table in that order, then it will not see
 $w_2$ reflected but not $w_1$.
 
-Informally, these two invariants taken together establish a sort of per-table
+Invariant~\ref{i:no-backsies} ensures that \emph{if} the system makes progress,
+that progress persists\,---\,Noria cannot expose the effects of an update, and
+then roll back those effects at a later time. Of course, if a later update
+happens to mask the effects of the earlier update, that is fine\,---\,the
+invariant is still preserved.
+
+Informally, these three invariants taken together establish a sort of per-table
 \emph{prefix consistency}. For each base table $b$ that connects to a given view
 $v$, there exists some time $t$ such that all changes in $b$ that precede $t$
 manifest exactly once when reading from $v$. Effects from changes that succeed
@@ -264,9 +276,19 @@ Note that prefix consistency applies \emph{per base table}. If the application
 writes $w_1$ to \texttt{votes} and then $w_2$ to \texttt{stories}, the effects
 of $w_2$ may manifest downstream before $w_1$ does.
 
-\begin{inprogress}
-  What about sharded base tables?
-\end{inprogress}
+\subsubsection*{Sharding and Consistency}
+
+When Noria's sharding feature is enabled, base tables are also sharded, which
+complicates the meaning of \emph{earlier} from
+Invariant~\ref{i:prefix-consistency}. In particular, concurrent updates to
+different shards of the same base table do not happen before or after each
+other. Thus, a read that observes the effects of one base table update may not
+observe the effects of another update that happened before if that other update
+was issued to a different shard of the base table.
+
+Noria's views can also be sharded, in which case the shards are updated
+independently. If the effects of an update are present in one shard of a view,
+they may not yet manifest in another shard of that same view.
 
 \subsection{What Can Go Wrong?}
 
@@ -380,7 +402,7 @@ perform view lookups, as well as low-level networking work like request
 serialization and read/write system calls.
 
 \begin{inprogress}
-  This design is further discussed in Appendix B?
+  Should I include an Appendix that explains how evmap works in further detail?
 \end{inprogress}
 
 \subsection{Partitioning}
