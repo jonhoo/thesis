@@ -1,123 +1,116 @@
-\section{Motivation}
+Many of the most popular applications today are content-heavy web applications.
+Social networking platforms like Facebook and LinkedIn, content platforms like
+Twitter and Wikipedia, communication platforms like Slack and Discord, and
+discussion platforms like Reddit and Hacker News all process, display, and
+disseminate user-generated content. They share no code, yet they all share an
+underlying core feature: they have large amounts of data, and must query that
+data every time a user interacts with the site.
 
-\begin{enumerate}
- \item Why is materialization useful for real-world use-cases?
- \item In what ways are existing materialization techniques lacking?
- \item How does partial state improve the usefulness of materialization?
-\end{enumerate}
+These platforms also exhibit many similar traits:
+%
+\begin{enumerate*}
+  \item they are \textbf{interactive}; each page load has a user waiting on the
+    other end,
+  \item they are \textbf{read-heavy}; most user interactions consume content
+    rather than produce new content, and
+  \item they experience \textbf{significant skewed}; a small number of people,
+    posts, creators, teams, and discussions make up the bulk of interactions.
+\end{enumerate*}
+%
+Taken together, these properties suggest that these platforms would benefit
+from \emph{caching}\,---\,from a system that ``remembers'' results from queries
+issued in the past, and recalls those results efficiently if another user
+requests the same data. Since a user is waiting at the other end of every
+request, caching is \emph{necessary} to avoid making the user wait for too long.
+Since the platforms are read-heavy, the cost of maintaining the cache as the
+data changes is likely to be low relative to how much it speeds up reads by.
+And since access is skewed, caching even a small fraction of the overall dataset
+is likely to bring significant benefits.
 
-Caching.
-OSDI paper.
-Caching is labor intensive + error prone (Facebook memcached paper).
-DB view materialization (like DBToaster) ``all or nothing''.
-Commercial DB view materialization limited and slow (ref OSDI paper).
-By folding the cache into the database, database knows how to keep it up
-to date\,---\,avoids having that logic threaded through the application.
-Partial state (and caching in general) enables \textbf{selective} materialization.
-Materialization is generally useful when reads are more common than
-writes, since it shifts the computation from reads to writes.
-But, without partial state, materialization is an ``off/on'' option —
-either you materialize all the results for a query, or none [TODO: not
-quite true — more subtlety here — depends what you mean by ``query''
-(e.g., parameterized or not)].
+Most applications implement caching in an ad-hoc way\,---\,developers introduce
+complex and error-prone logic~\cite{ad-hoc-caching} to ensure that changes to
+the underlying data are also reflected in results served from the cache. Some
+systems, both from industry~\cite{facebook-memcache, tao, flannel} and
+academia~\cite{txcache, cachegenie, casql-consistency-thesis, pequod} have
+attempted to chip away at this problem, but are often lacking in important ways.
+Some require significant developer effort, while others support only a
+restricted set of application queries.
 
-The dataflow architecture has seen a resurgence in recent years, with systems
-like Kafka\cite{kafka}, Spark\cite{spark,spark-streaming}, Flink\cite{flink}, and
-Naiad\cite{naiad} all seeing interest from academia and industry alike. The term
-``dataflow'' covers a wide range of systems: streaming systems (like Kafka),
-stream processing systems (like Spark and Flink), and dataflow computation
-systems (like Naiad). These systems vary in their design goals, their intended
-uses, and their system architecture. Yet they all share the property that they
-take data as \emph{input}, and feed processed data forward through a graph of
-\emph{operators}.
+A promising avenue for automating at least part of the application caching
+problem is \emph{query result caching} through a technique known as
+\emph{materialized views}. Materialized views allow an application backend, like
+a database, to pre-compute, store, and maintain results for an application's
+queries such that subsequent executions of those same queries can be served much
+more quickly. Unfortunately, materialized views are typically an all-or-nothing
+affair; each query is computed independently, and its full result set is cached.
+While this is acceptable for a small number of analytics-type queries, it
+becomes a problem when the application issues a large number of similar, but not
+identical queries that must all be answered quickly. Either the common subset of
+those queries must be computed in full, which uses significant memory, or each
+query's materialized view must be maintained individually, which causes
+unnecessary duplicate processing.
 
-This dataflow design is attractive for ready-heavy applications where the
-computation is relatively fixed over time, and it is the data that changes.
-We can store the results of the computation to serve reads quickly, and use the
-known data dependencies to keep those results efficiently up to date as the data
-changes. Explicitly modeling the compute and data flow this way also allows
-dataflow systems to easily scale to multiple cores or physical hosts; any
-dataflow edge can be realized as a function call, a thread synchronization
-point, or a network channel, and the model still ``works''.
+This thesis proposes a technique to introduce \textit{partial state} into Noria,
+a materialized view system implemented using dataflow~\cite{noria}. Partial
+state allows Noria to represent similar queries in a single, shared materialized
+view, without simultaneously requiring that the results for \emph{all} such
+queries be cached as a result. This let Noria avoid expending memory to cache
+query results the application is not interested in, while also allowing similar
+queries to share cache maintenance processing.
 
-These systems all face a decision when it comes to \emph{stateful} operators\,
----\,operators that must maintain some state in order to process their inputs.
-To compute the result of a join for example, the values in the ``other side'' of
-the join must be available to the operator that performs the join.
-Traditionally, dataflow systems have made one of two decisions: ignore such
-operators, make all the state the operator needs available, or keep only a
-subset of the state. Each of these caters to a particular type of application.
-Non-stateful dataflow is primarily useful as a messaging fabric. Fully stateful
-dataflow works well for applications that operate over small data sets, or where
-the application's working set spans nearly the entire data set.
+The work in this thesis proposes to allow individual query results to be marked
+as \textit{missing}, and introduces \textit{upqueries} as a mechanism to compute
+such missing state on-demand. Upqueries re-use the existing dataflow operators
+that maintain the materialized views as the underlying data changes in Noria,
+and can thus theoretically be retrofitted onto any existing dataflow system.
+Partial state also enables Noria to evict cached results over time as the
+application workload changes, which is critical to keep memory use low.
 
-A third intermediate solution called \emph{windowing} is an option for some
-applications. Windowed state only keeps \emph{recent} data, which ensures that
-the state remains small over time. However, this also means that old state is
-not reflected in computational outputs. If an application needs to compute over
-the full application state, such as all users or all articles, windowing does
-not work. Windowing is primarily used for analytics applications, where
-historical data is less relevant.
+Experiments with partial state in Noria suggest that materialized views
+implemented using partial state can increase the supported application load by
+up to $20\times$ over MySQL, and can reduce memory use by $\sfrac{2}{3}$
+compared to materialized views implemented without partial state.
 
-But unfortunately, not all applications fit into one of these categories. In
-particular, user-facing applications whose working set is significantly smaller
-than their total dataset size are not well served by these options. Stateless
-operation is not feasible, since evaluating the dataflow from scratch each time
-would incur significant extra latency. Fully stateful operation is similarly
-unattractive\,---\,computational resources would need to be provisioned for
-computing over all the application's data, even though only a small subset of
-the computation output is observed. And windowing is frequently not applicable
-to these applications; since users may request data that lives outside the
-window, that data must still be available.
+% Existing materialized view systems also tend to focus on view-update
+% performance.
 
-This thesis presents the Noria dataflow system; a dataflow system that supports
-\emph{partially-stateful dataflow}. In Noria, operators act as though they have
-access to the full state of their inputs, while in reality that state is lazily
-constructed behind the scenes; a given piece of the input state for an operator
-is only produced and stored when the operator asks for that piece. From that
-point forward, the state is continuously updated to reflect new data added to
-the system. If an operator only accesses part of its input state, the remaining
-parts are not computed or stored.
+% Commercial materialized views?
 
-This approach provides a number of benefits. First, its memory use is
-\textbf{proportional to the working set} of the application, rather than to the
-size of the data. Second, it works for applications that \textbf{cannot use
-windowing}. Third, it allows the system to \textbf{eagerly discard}, and avoid
-computation for, data that later operators have never needed, as long as that
-data can later be re-produced. And finally, it allows the application to
-\textbf{selectively evict} from stateful operators as the working set changes.
+% Windowing?
 
-Another key advantage of partial state is that it makes it possible to extend a
-running dataflow program \textbf{lazily}. Noria can cheaply accommodate new
-segments of dataflow by instantiating the new dataflow as initially empty. That
-new dataflow is then populated through application activity, rather than by
-incurring a large upfront cost.
+% Replace caching \emph{logic}, not caching \emph{systems}.
 
-My thesis will cover the design and implementation of partially stateful
-dataflow in Noria in detail, including several key components that were only
-briefly sketched or not present at all in the earlier OSDI paper on
-Noria\cite{noria} that I co-authored. I will discuss the specific problems that
-arise in depth, and provide solutions to those problems.
+\paragraph{Contributions.}
 
-\section{Challenges}
-\section{Approach}
-\section{Noria}
-\section{Contributions}
-
-The contributions of my thesis, subject to this proposal, will be:
+The main contributions of this thesis are:
 
 \begin{itemize}
- \item An algorithm for implementing upqueries.
- \item Support for partial in sharded, complex applications.
- \item Key correctness invariants for partially stateful dataflow.
- \item Case analysis of the issues that arise when introducing partial state to
-	 a distributed, high-performance stateful dataflow processing system.
+ \item A model for, and implementation of, partial state in dataflow-based
+   materialized view maintenance.
+ \item An algorithm for implementing upqueries to populate missing state on
+   demand.
+ \item An analysis of the issues that arise when introducing partial state to a
+   distributed, high-performance stateful dataflow processing system.
  \item Techniques for overcoming those issues while preserving system
 	 correctness, performance, and scalability.
  \item Micro and macro evaluations of the performance and memory impact of
 	 introducing partial state to an application's dataflow.
 \end{itemize}
 
-\section{Dissertation Outline}
+\paragraph{Dissertation Outline.}
 
-Replace caching \emph{logic}, not caching \emph{systems}.
+The rest of the dissertation is organized as follows: Section~\ref{s:bg}
+introduces concepts and terminology used throughout the thesis, and explores
+related work. Section~\ref{s:noria} describes the Noria dataflow system.
+Section~\ref{s:partial} introduces the partially stateful dataflow model.
+Section~\ref{s:correct} describes additional mechanisms that are needed to
+ensure that partially stateful dataflow produces correct query results.
+Section~\ref{s:eval} evaluates Noria's implementation of partial state on a
+realistic application query workload. Section~\ref{s:disc} discusses
+shortcomings of, and alternatives to, partial state. Finally,
+Section~\ref{s:future} outlines future work on partial state.
+
+For readers that are unfamiliar with database queries, materialized views,
+dataflow, and application caching, but would still like to understand roughly
+what this thesis is about, Appendix~\ref{s:simple} starting on
+page~\pageref{s:simple} is for you.
