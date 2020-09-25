@@ -13,7 +13,7 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    06-evaluation.tex \
 	    07-discussion.tex \
 	    08-future-work.tex \
-	    A1-discussion.tex \
+	    A1-simpler-terms.tex \
 	    graphs/lobsters-throughput.pdf \
 	    graphs/lobsters-memory.pdf \
 	    graphs/lobsters-opmem.pdf \
