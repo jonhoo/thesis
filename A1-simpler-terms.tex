@@ -81,19 +81,19 @@ decided to \textit{materialize}, or \textit{cache}, query results.
 
 \paragraph{Erasing Things.}
 %
-Unfortunately for the librarian, their plan has a flaw. Over time, their lists
-grows so large that they're spending most of their time just reading through
-their list to look for whether they've heard a particular question before! The
-list is filled with questions no-one has asked in ages, which makes it hard to
-find the questions that are asked a lot. Unfortunately, this librarian has a
-very poor memory, so they don't actually remember which questions are asked
-frequently, and which are not. So, the librarian decides to simply erase a bunch
-of entries from their list at random. They figure that questions that are asked
-a lot will be asked again soon anyway, and then end up on the list again,
-whereas questions that aren't being asked much, well, are just going to stay off
-the list. This is \textit{eviction}, and specifically \textit{randomized}
-eviction. Other eviction strategies exist (like ``least recently used''), but
-the work in this thesis uses randomized eviction.
+Sadly, the librarian's plan has a flaw. Over time, their lists grows so large
+that they're spending most of their time just reading through their list to look
+for whether they've heard a particular question before! The list is filled with
+questions no-one has asked in ages, which makes it hard to find the questions
+that are asked a lot. Worse yet, because of their inconvenient forgetfulness,
+the librarian doesn't actually remember which questions are asked frequently,
+and which are not. So, the librarian decides to simply erase a bunch of entries
+from their list at random. They figure that questions that are asked a lot will
+be asked again soon anyway, and then end up on the list again, whereas questions
+that aren't being asked much, well, are just going to stay off the list. This is
+\textit{eviction}, and specifically \textit{randomized} eviction. Other eviction
+strategies exist (like ``least recently used''), but the work in this thesis
+uses randomized eviction.
 
 \paragraph{Productive Humans.}
 %
