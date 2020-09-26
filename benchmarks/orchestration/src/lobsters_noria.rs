@@ -11,11 +11,11 @@ pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
         [
             (0, false, 0, false),
-            (0, true, 0, false),
+            // (0, true, 0, false),
             (0, true, 128 * 1024 * 1024, false),
             (0, true, 256 * 1024 * 1024, false),
             (0, true, 384 * 1024 * 1024, false),
-            (0, true, 0, true),
+            // (0, true, 0, true),
             (0, true, 128 * 1024 * 1024, true),
             (0, true, 256 * 1024 * 1024, true),
             (0, false, 0, true),

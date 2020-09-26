@@ -101,7 +101,7 @@ pub(crate) mod server;
 async fn main() {
     let mut benchmarks = vec![
         "vote-redis",
-        "vote-hybrid",
+        // "vote-hybrid",
         "vote-migration",
         "vote-memory",
         "lobsters-mysql",
