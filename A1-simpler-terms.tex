@@ -19,7 +19,7 @@ name it. It holds information about every user, every post, every like, every
 upvote, every comment, every picture, and every video. Every time you open said
 website or app, some representative has to go to the library to collect all the
 information relevant to whatever you are trying to view. If you are looking at
-your Facebook timeline, the representative has to figured out who your friends
+your Facebook timeline, the representative has to figure out who your friends
 are, what they have posted recently, what comments there are on those posts,
 etc. Similarly, if you are looking at a Reddit post, the representative must
 gather the original post, but must also run around to find all the comments on
@@ -43,18 +43,19 @@ a \textit{database engine}, a word which is often used interchangeably with
 As you might imagine, some questions are easy to answer, whereas others may take
 a very long time for the librarian to figure out the answer to. If someone asks
 ``what is Jon's email address?'', the librarian only has to look in the user
-directory for the entry for Jon, and all the information is right there. That is, of
-course, assuming that there is such a thing as a user directory which has
-information ordered by the user's name (an \textit{index} whose \textit{key} is
-the user's name). On the other hand, if someone asks ``how many people have
-liked this post of Jon's?'', the librarian has a bigger task in front of them.
-Even if there is a directory that lists likes by which post the like was for,
-the librarian still has to count how many there are, which could (hopefully) be
-a lot. Questions can even get so complicated that the librarian has to look
-through every single like in the library to get the answer! For example, imagine
-a representative asks ``what is the post with the most likes?''. To answer that
-question, the librarian must know how many likes \textbf{every} post has, which
-means they have to count the number of likes on every post. Ouch.
+directory (a \textit{table}) for the entry for Jon, and all the information is
+right there. That is, of course, assuming that there is such a thing as a user
+directory which has information ordered by the user's name (an \textit{index}
+whose \textit{key} is the user's name). On the other hand, if someone asks ``how
+many people have liked this post of Jon's?'', the librarian has a bigger task in
+front of them. Even if there is a directory that lists likes by which post the
+like was for, the librarian still has to count how many there are, which could
+(hopefully) be a lot. Questions can even get so complicated that the librarian
+has to look through every single like in the library to get the answer! For
+example, imagine a representative asks ``what is the post with the most
+likes?''. To answer that question, the librarian must know how many likes
+\textbf{every} post has, which means they have to count the number of likes on
+every post. Ouch.
 
 \paragraph{Writing Things Down.}
 %
@@ -166,16 +167,17 @@ librarian takes a break and ponders if there's a good way to solve this problem.
 The next day, the librarian comes in with a plan, and pulls out a large sheet of
 drawing paper. Each time a question comes in, the librarian maps out a
 flow-chart for how they figured out the answer to that question. What
-directories they looked things up in, in what order, and how the files from
+directories they had to browse through, in what order, and how the files from
 those directories were combined. Then, the librarian keeps a separate notebook
-for each step in that flow chart. Count the number of things in this directory
-under this entry? Great, write that number down in one notebook. Look for all
-the things in directory A that are also in directory B? Great, write down which
-things were in both. All the way down to the final answer. If two questions
-require similar steps, the librarian re-uses the overlapping parts of the flow
-chart, and uses the same notebooks for the same steps. The librarian is mapping
-out the \textit{dataflow} of the questions\,---\,how the entries in the notebook
-relate to the data that's stored in the library.
+for each step in that flow chart. Count the number of cats in this directory
+under the ``cute'' entry? Great, write that number down in one notebook. Look
+for all the microphones in directory A that are also in directory B? Great,
+write down which microphones were in both. Then, do this all the way down to the
+final answer for each question. If two questions require similar steps, the
+librarian re-uses the overlapping parts of the flow chart, and uses the same
+notebooks for the same steps. The librarian is mapping out the \textit{dataflow}
+of the questions\,---\,how the entries in the notebook relate to the data that's
+stored in the library.
 
 \paragraph{Using the Flow-Chart.}
 %
