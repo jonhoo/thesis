@@ -1,7 +1,12 @@
-.PHONY: all
+.PHONY: all clean
 all:
 	$(MAKE) sources
 	$(MAKE) thesis.pdf
+
+clean:
+	rm -f graphs/*.pdf
+	rm -f benchmarks/results/*/parsed.pickle
+	rm -f thesis.pdf proposal.pdf
 
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
