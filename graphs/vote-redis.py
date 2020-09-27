@@ -7,10 +7,10 @@ import pandas as pd
 import sys
 
 fig, ax = plt.subplots()
-data = common.load('vote-nojoin', only_good = False).query('op == "all" & join == False & write_every == 10000 & memlimit == 0 & until == 256 & metric == "sojourn" & partial == True').sort_index().reset_index()
+data = common.load('vote-nojoin', only_good = False).query('op == "all" & join == False & write_every == 10000 & memlimit == 0 & until > 256 & metric == "sojourn" & partial == True').sort_index().reset_index()
 ax.plot(data["achieved"], data["p95"], '.-', color=common.colors['noria'], label="Noria")
 nmx = data.query("achieved >= 0.99 * target & p95 < 20")["achieved"].max()
-data = common.load('vote-redis', only_good = False).query('op == "all" & write_every == 10000 & until == 256 & metric == "sojourn"').sort_index().reset_index()
+data = common.load('vote-redis', only_good = False).query('op == "all" & write_every == 10000 & until > 256 & metric == "sojourn"').sort_index().reset_index()
 ax.plot(data["achieved"], data["p95"], '.-.', color=common.colors['redis'], label="Redis")
 ax.xaxis.set_major_formatter(common.kfmt)
 rmx = data.query("achieved >= 0.99 * target & p95 < 20")["achieved"].max()

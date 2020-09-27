@@ -200,7 +200,7 @@ pub(crate) async fn run(
     results
         .write_all(format!("# server load: {} {}\n", sload1, sload5).as_bytes())
         .await?;
-    if sload5 > 15.5 {
+    if sload1 > 15.5 {
         tracing::warn!(%sload5, "high server load -- assuming overloaded");
         on_overloaded();
     }

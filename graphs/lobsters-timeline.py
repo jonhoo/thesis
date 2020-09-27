@@ -8,7 +8,7 @@ import sys
 
 d = common.load('lobsters', only_good = False)
 d = d.query('op == "all" & scale == 2000 & memlimit == 0.125 & partial == True')
-d = d.query('until <= 128 & metric == "sojourn"')
+d = d.query('until <= 128 & metric == "sojourn" & durable == False')
 d = d.reset_index().set_index("partial")
 colors = {
     'sojourn': ['#e34a33', '#fdbb84', '#fee8c8'],
@@ -41,12 +41,12 @@ ax.step(
 ax.set_ylabel('Page latency')
 ax.set_xlabel('Time after start [s]')
 ax.set_xlim(0.5, 128)
-ax.set_ylim(1, 500000)
+ax.set_ylim(1, 50000)
 ax.set_xscale('log', base=2)
 ax.set_xticks([1, 2, 4, 8, 16, 32, 64, 128])
 ax.set_yscale('log')
-ax.set_yticks([1, 10, 100, 1000, 10000])
-ax.set_yticklabels(["1ms", "10ms", "100ms", "1s", "10s"])
+ax.set_yticks([1, 10, 100, 1000])
+ax.set_yticklabels(["1ms", "10ms", "100ms", "1s"])
 # use normal numbers on x axis
 ax.xaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
 ax.xaxis.get_major_formatter().set_scientific(False)

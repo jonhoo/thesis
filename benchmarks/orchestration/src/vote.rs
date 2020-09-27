@@ -10,7 +10,7 @@ use tsunami::Tsunami;
 pub(crate) async fn main(ctx: Context) -> Result<(), Report> {
     crate::explore!(
         [
-            // (100, "skewed", 4, false, 0, true, false),
+            (100, "skewed", 4, false, 0, true, false),
             // (100, "skewed", 4, true, 0, true, false),
             (10_000, "skewed", 4, true, 0, false, false),
             (100, "skewed", 4, true, 256 * 1024 * 1024, true, false),

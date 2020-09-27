@@ -82,12 +82,8 @@ data stored in the base tables except where indicated.
 
 Since the benchmarks introduce more data as they run, memory use increases with
 time. Experiments are run for 5 minutes unless otherwise specified, and memory
-measurements are taken at the end of the run.
-
-\begin{inprogress}
-  Note about stability of experimental results once all experiments are nailed
-  down.
-\end{inprogress}
+measurements are taken at the end of the run. All results are stable and
+consistent across multiple runs.
 
 \section{Benefits and Costs of View Materialization}
 \label{s:eval:why}
@@ -122,14 +118,14 @@ lowest isolation level. The figure shows the highest Lobsters throughput each
 system achieves before its mean latency exceeds 50ms.
 
 View materialization alone (as provided by Noria) improves performance by almost
-$12\times$ compared to MySQL, as query results are now frequently cached.
+$11\times$ compared to MySQL, as query results are now frequently cached.
 However, without partial state, this performance increase comes at a significant
 memory cost. Beyond 4.6k pages/second, Noria without partial state runs out of
 memory, and cannot support the workload. With partial state, Noria uses much
 less memory at a given load factor, which allows it to support 67\% higher
-throughput, almost 20$\times$ that of MySQL%
+throughput, over 18$\times$ that of MySQL%
 \footnote{The Noria benchmarks are memory constrained, not CPU constrained.
-MySQL fully loads all 16 cores at 391 pages per second.}.
+MySQL fully loads all 16 cores at 417 pages per second.}.
 
 \begin{figure}[h]
   \centering
@@ -340,13 +336,14 @@ y-axis. Lighter colors include more of the tail.
 \end{figure}
 
 The figure shows that latency is initially high, but after a few seconds, the
-mean and 95th percentile latency drop below 10 milliseconds. By the time a
-minute has passed, the 99th percentile has followed suit. Since only a small
-portion of the total computed state is cached (as shown in
-Figure~\vref{f:lobsters-memory}), this experiment supports the hypothesis that
-partial state achieves low latency once the most commonly accessed results are
-cached. The remaining latency is primarily determined by the number of queries
-each page issues, as each one requires a round-trip to Noria.
+mean and 95th percentile latency drop below 10 milliseconds\footnote{Since each
+bin holds twice as many samples as the previous bin, later bins capture more
+variance.}. By the time a minute has passed, the 99th percentile has followed
+suit. Since only a small portion of the total computed state is cached (as shown
+in Figure~\vref{f:lobsters-memory}), this experiment supports the hypothesis
+that partial state achieves low latency once the most commonly accessed results
+are cached. The remaining latency is primarily determined by the number of
+queries each page issues, as each one requires a round-trip to Noria.
 
 \subsection{Paying with Tail Latency}
 
@@ -397,9 +394,8 @@ If base tables are not kept in memory, the cost of recomputing missing state
 from the data in those base tables increases. Exactly how much depends on the
 performance characteristics of the durability backend in use.
 Figure~\vref{f:lobsters-dur-latency} shows a CDF of page latencies when Noria's
-RocksDB backend is used, backed by a ramdisk. Latencies increase by anywhere
-from 20-50\%, depending on the number of misses a given page request
-experiences.
+RocksDB backend is used, backed by a ramdisk. Latencies increase by around 20\%,
+and varies depending on the number of misses a given page request experiences.
 
 \subsection{Memory Use and Throughput}
 
@@ -545,9 +541,9 @@ application's already-perfect caching scheme would need to also shard perfectly.
 Noria implements the necessary synchronization internally to take advantage of
 all the cores without sharding.
 
-The results show that Noria achieves $\approx$42\% of the theoretical 16-core
-performance of Redis. Given the idealized nature of this experiment, the exact
-absolute numbers should be taken with several grains of salt, but they do
+The results show that Noria achieves about $\sfrac{2}{3}$ of the theoretical
+16-core performance of Redis. Given the idealized nature of this experiment, the
+exact absolute numbers should be taken with several grains of salt, but they do
 provide an upper bound of sorts for Redis' performance. That Noria approaches
 this performance is a good indicator that Noria's cache hit performance is
 comparable to that of an ad-hoc caching implementation. And again, Noria does so

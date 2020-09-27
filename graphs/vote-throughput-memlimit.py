@@ -14,10 +14,11 @@ data = base.query('durable == False').sort_index().reset_index()
 limits = data.groupby('memlimit').tail(1)
 limits = [l for l in limits["memlimit"]]
 limits = [448 / 1024.0, 384 / 1024.0, 320 / 1024.0, 256 / 1024.0]
+dur_limit = 448 / 1024.0
 colors = common.memlimit_colors(len(limits))
 i = 0
-dur = base.query('durable == True & target == 1000000 & memlimit == 0.5')['vmrss'].item()
-no_dur = base.query('durable == False & target == 1000000 & memlimit == 0.5')['vmrss'].item()
+dur = base.query('durable == True & target == 1000000 & memlimit == %f' % dur_limit)['vmrss'].item()
+no_dur = base.query('durable == False & target == 1000000 & memlimit == %f' % dur_limit)['vmrss'].item()
 delta = no_dur - dur
 fopmem = data.query('memlimit == 0 & target == 1000000 & partial == False')['opmem'].item()
 for limit in limits:

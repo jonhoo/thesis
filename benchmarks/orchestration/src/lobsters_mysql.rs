@@ -165,7 +165,7 @@ pub(crate) async fn one(
         } else if !optimized {
             Box::new(cliff::ExponentialCliffSearcher::until(1, 2))
         } else {
-            Box::new(cliff::ExponentialCliffSearcher::until(128, 32))
+            Box::new(cliff::ExponentialCliffSearcher::until(32, 32))
         };
         let result: Result<(), Report> = try {
             let mut successful_scale = None;
