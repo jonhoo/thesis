@@ -11,11 +11,11 @@ clean:
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
 	    01-introduction.tex \
-	    02-background.tex \
-	    03-noria.tex \
-	    04-partial-model.tex \
-	    05-partial.tex \
-	    06-evaluation.tex \
+	    02-noria.tex \
+	    03-partial-model.tex \
+	    04-partial.tex \
+	    05-evaluation.tex \
+	    06-related-work.tex \
 	    07-discussion.tex \
 	    08-future-work.tex \
 	    A1-simpler-terms.tex \

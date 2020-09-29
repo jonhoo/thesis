@@ -1,0 +1,128 @@
+This chapter provides an overview of existing systems and their relation to
+Noria and partial state.
+
+\section{Materialized Views}
+
+Database materialized views~\cite{gupta-view-selection,lee} were originally
+devised to store expensive analytical query results for quick recollection.
+Unfortunately, commercial databases' materialized view support is limited, and
+views must usually be rebuilt from scratch when the underlying data
+changes~\cite{materialized-view-selection-sql-server,mssql-materialized-view-restrictions-blog,
+mssql-materialized-view-restrictions}.
+
+The key to usable materialized views is how they are maintained as the
+underlying data changes. Rather than throw away the current materialized query
+results, a good materialized view system should only perform the work needed to
+\textit{incrementally} update the materialized results. This has been the
+subject of considerable research in the past few decades.
+\citeauthor{materialized-survey} gives a good survey of the current
+landscape~\cite{materialized-survey}.
+
+Modern incremental view maintenance (IVM) techniques tend to be based on
+\textit{delta queries}, which are algebraically derived queries that give
+efficient relational expressions for computing the change to a (materialized)
+view given a set of changes to the underlying data. The current state-of-the-art
+in IVM is \textit{Higher-Order IVM}, in which the system derives multiple,
+recursive such delta queries for each view, and strategically materializes and
+maintains the intermediate delta query results as well~\cite{dbtoaster, hotdog}.
+Recent work also proposes techniques for mitigating the memory overhead of such
+intermediate materializations by instead materializing smaller auxiliary state
+from which the necessary values can then be efficiently produced when
+needed~\cite{memory-efficient}. Sadly, few of these solutions have been adopted
+in commercially available databases. Unlike Noria, these systems tend to focus
+on long-term maintenance of analytics queries\,---\,they do not provide
+mechanisms for fast reads and do not support eviction.
+
+Noria's dataflow implements logic similar to Higher-Order IVM for each view,
+including materialization of intermediate results. The algorithm Noria uses for
+what dataflow to use to compute the changes to each view is comparatively naive,
+and could likely benefit from the techniques in the aforementioned work.
+
+Pequod~\cite{pequod} and DBProxy~\cite{dbproxy} provide materialized views that
+also support partial materialization in response to client demand. However,
+Pequod is limited to static queries specified in a datalog-like language, and
+DBProxy does not support incremental view maintenance. And neither system shares
+state nor processing across views.
+
+\section{Caching}
+
+Application-level caching is often implemented in an ad-hoc fashion, and tends
+to be the source of many application errors~\cite{ad-hoc-caching}. In
+particular, such ad-hoc system often fail to invalidate or update the cache as
+the underlying data changes, leading to permanently stale entries. Researchers
+and industry teams alike have therefore attempted to build systems to automate
+cache maintenance.
+
+Large-scale applications often end up building their own custom caching
+infrastructure~\cite{facebook-memcache, flannel}, which solves their needs in
+isolation, but does not provide a ready-to-use solution for other application
+developers that face similar issues. These custom-built solutions also tend to
+implement only the minimum functionality the authors need at the time, and
+forego more complicated, but nonetheless useful features such as incremental
+cache updates. Noria presents a ``plug and play'' solution specifically for
+query result caching for many applications.
+
+The research community has also produced several systems that aim to provide
+more general-purpose transparent caching. TAO~\cite{tao} and
+TxCache~\cite{txcache} implement automated query result caching, but do not
+support incremental in-place cache updates like Noria.
+CacheGenie~\cite{cachegenie} implements a trigger-based middleware cache for
+object-relational mapping frameworks, and supports in-place cache updates, but
+is limited to only specific operations supported by the framework. In contrast,
+Noria transparently speeds up regular SQL queries, and does not require the
+application to use a particular database abstraction framework.
+
+In the world of database literature, database caching frontends are sometimes
+referred to as \textit{Cache-Augmented SQL} systems. And there, like with all
+caching systems, the primary concern is one of consistency\,---\,\emph{some}
+mechanism must be in place to ensure that the cache remains up to date as the
+underlying data changes. Research in this space tends to focus on augmenting the
+key-value systems that stores cache entries so that the application can
+correctly manage races between database updates and cache
+invalidations~\cite{facebook-memcache, casql-consistency,
+casql-consistency-thesis}. Noria instead integrates the cache management into
+the database, which allows the cache entries to be incrementally updated,
+automatically, in-place.
+
+A related approach is \textit{mid-tier database caching}, in which subsets of
+the database are replicated onto the hosts that run the application's code. This
+allows certain queries to be run locally without interacting with the remote
+database backend~\cite{mtcache}. While the approach is appealing in that some
+database queries can avoid traversing the network, it does not provide the same
+speedups that query result caching provides.
+
+\section{Dataflow}
+
+A wide range of dataflow and stream-processing systems exist that excel at
+data-parallel computing~\cite{dryad, naiad, storm, heron, flink, millwheel,
+spark-streaming, stanford-stream, s-store, cloud-dataflow}. However, these
+systems cannot easily serve web applications directly. They only achieve
+low-latency incremental updates at the expense of limiting how much state they
+keep by \textit{windowing}, which results in incomplete results, or by keeping
+full state in memory. Partial state allows Noria to lift this restriction.
+Furthermore, these systems generally provide no mechanism for accessing computed
+state except through the dataflow or by integrating with additional external
+systems, which adds latency.
+
+Many existing system are also limited to a fixed set of queries defined when the
+system is started, and cannot easily adopt query changes as the application
+evolves. Some dataflow systems do support Noria-like dynamic changes to the
+running dataflow~\cite{ciel, ray}, but without support for demand-driven partial
+state these systems must either fully compute results when the dataflow is
+extended, or have new dataflow only take into account subsequent updates.
+
+Some developers use, or consider using, a streaming fabric like Apache
+Kafka~\cite{kafka} to build their own view maintenance pipeline~\cite{nyt-kafka,
+samza-blogpost}. However, at the time of writing, no general-purpose system
+exists based on such a pipeline that achieves the performance and flexibility of
+Noria.
+
+Differential dataflow~\cite{differential-dataflow}, and its instantiation in the
+commercial product Materialize~\cite{materialize}, bears a striking resemblance
+to Noria at first glance. In particular, it uses dataflow to produce
+automatically-maintained materialized views over SQL queries. However,
+Materialize does not implement partial state, and must therefore maintain
+similar queries independently (which misses out on opportunities for shared
+compute and state) or fully materialize query results (which uses more memory).
+The authors behind Materialize have proposed partial solutions to some of these
+challenges, which are discussed in \S\vref{s:disc:emulating}.
