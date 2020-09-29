@@ -195,15 +195,16 @@ takes time to propagate through the dataflow, and the update may appear in
 different views at different times. Noria operators and the contents of its
 external views are thus \emph{eventually-consistent}. Eventual consistency is
 attractive for performance and scalability, and is sufficient for many web
-applications~\cite{eventually-consistent, facebook-memcache, pnuts}.
+applications~\cite{eventually-consistent, facebook-memcache, pnuts}. In
+particular, Noria ensures that if writes quiesce, all external views eventually
+hold results that are the same as if the queries had been executed directly
+against the base table data.
 
-Noria ensures that if writes quiesce, all external views eventually hold results
-that are the same as if the queries had been executed directly against the base
-table data. Making this work correctly requires some care. Like most dataflow
-systems, Noria requires that operators are deterministic functions over their
-own state and the inputs from their ancestors. Furthermore, operators must be
-distributive over delta addition\footnote{$d_1 + d_2$ produces the union of all
-rows in $d_1$ or $d_2$ with the signed multiplicity of each row equal to the
+Ensuring even this relatively weak property requires some care. Like most
+dataflow systems, Noria requires that operators are deterministic functions over
+their own state and the inputs from their ancestors. Furthermore, operators must
+be distributive over delta addition\footnote{$d_1 + d_2$ produces the union of
+all rows in $d_1$ or $d_2$ with the signed multiplicity of each row equal to the
 algebraic sum of that row's signed multiplicity in $d_1$ and $d_2$.} so that
 evaluating the query using tuple-at-a-time processing is equivalent to
 evaluating the whole query at once. Finally, Noria operators must be commutative
@@ -234,8 +235,7 @@ Noria upholds three additional safety properties:
 
 \begin{invariant}
   \label{i:no-spurious}
-  All reads reflect each upstream base table change at most once, and no other
-  data.
+  All reads reflect each upstream base table change at most once.
 \end{invariant}
 
 \begin{invariant}
@@ -362,12 +362,12 @@ or somehow hide the partial effects of applying only the first part. The former
 requires reads to flow through the dataflow, or at least synchronize closely
 with it, which would likely come at a penalty to read latency. The latter would
 be provided through something akin to multi-version concurrency control, which
-allows low-latency reads, but requires timestamps for reads and writes.
-Experience from multiple incomplete designs for logical timestamps in Noria
-suggest that producing useful logical timestamps without costly global
-coordination is difficult, but not impossible. Implementing this kind of
-inconsistency mitigation while retaining Noria's low read latency is left for
-future work.
+allows low-latency reads, but adds significant system complexity.
+
+Instead, Noria works under the assumption that queries that produce these
+inconsistencies are rare for Noria's target applications, or that application
+developers direct those queries where strong consistency is necessary to other,
+better suited systems.
 
 \section{Parallelism}
 
@@ -384,8 +384,9 @@ segment. These three mechanisms are described further below.
 
 Since Noria is designed for read-heavy workloads, its architecture is optimized
 to allow reads to go ahead at full speed whenever possible. In particular, Noria
-does not synchronize reads with reads \emph{or} writes. Unless a read encounters
-missing partial state, it never blocks waiting for another thread.
+does not synchronize reads with reads \emph{or} writes\footnote{If a read
+encounters missing partial state, as described in the next chapter, some
+lightweight synchronization is needed to communicate the missed key}.
 
 This is achieved through a concurrency primitive that maintains two instances of
 each materialized view, with deduplication between them. Reads go to one view,
