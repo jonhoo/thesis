@@ -13,19 +13,19 @@ These platforms also exhibit many similar traits:
     other end,
   \item they are \textbf{read-heavy}; most user interactions consume content
     rather than produce new content, and
-  \item they experience \textbf{significant skewed}; a small number of people,
+  \item they experience \textbf{significant skew}; a small number of people,
     posts, creators, teams, and discussions make up the bulk of interactions.
 \end{enumerate*}
 %
 Taken together, these properties suggest that these platforms would benefit
-from \emph{caching}\,---\,from a system that ``remembers'' results from queries
-issued in the past, and recalls those results efficiently if another user
+from \emph{caching}\,---\,from a system that ``remembers'' results from past
+user requests, and recalls those results efficiently if another user later
 requests the same data. Since a user is waiting at the other end of every
 request, caching is \emph{necessary} to avoid making the user wait for too long.
-Since the platforms are read-heavy, the cost of maintaining the cache as the
-data changes is likely to be low relative to how much it speeds up reads by.
-And since access is skewed, caching even a small fraction of the overall dataset
-is likely to bring significant benefits.
+Since the platforms are read-heavy, the advantages for reads from caching are
+likely to outweight the cost of maintaining the cache. And since access is
+skewed, caching even a small fraction of the overall dataset is likely to bring
+significant benefits.
 
 Most applications implement caching in an ad-hoc way\,---\,developers introduce
 complex and error-prone logic~\cite{ad-hoc-caching} to ensure that changes to
@@ -43,12 +43,12 @@ a database, to pre-compute, store, and maintain results for an application's
 queries such that subsequent executions of those same queries can be served much
 more quickly. Unfortunately, materialized views are typically an all-or-nothing
 affair; each query is computed independently, and its full result set is cached.
-While this is acceptable for a small number of analytics-type queries, it
-becomes a problem when the application issues a large number of similar, but not
-identical queries that must all be answered quickly. Either the common subset of
-those queries must be computed in full, which uses significant memory, or each
-query's materialized view must be maintained individually, which causes
-unnecessary duplicate processing.
+While this is acceptable for a small number of analytics-type queries, it is a
+problem when the application issues a large number of similar, but not identical
+queries that must all be answered quickly. Either the common superset of those
+queries must be computed in full, which uses significant memory, or each query's
+materialized view must be maintained individually, which causes unnecessary
+duplicate processing.
 
 This thesis proposes a technique to introduce \textit{partial state} into Noria,
 a materialized view system implemented using dataflow~\cite{noria}. Partial
@@ -62,7 +62,7 @@ The work in this thesis proposes to allow individual query results to be marked
 as \textit{missing}, and introduces \textit{upqueries} as a mechanism to compute
 such missing state on-demand. Upqueries re-use the existing dataflow operators
 that maintain the materialized views as the underlying data changes in Noria,
-and can thus theoretically be retrofitted onto any existing dataflow system.
+and can thus theoretically be retrofitted onto an existing dataflow system.
 Partial state also enables Noria to evict cached results over time as the
 application workload changes, which is critical to keep memory use low.
 
@@ -85,8 +85,8 @@ compared to materialized views implemented without partial state.
 The main contributions of this thesis are:
 
 \begin{itemize}
- \item A model for, and implementation of, partial state in dataflow-based
-   materialized view maintenance.
+ \item A model for, and implementation of, partial state in a dataflow-based
+   materialized view system.
  \item An algorithm for implementing upqueries to populate missing state on
    demand.
  \item An analysis of the issues that arise when introducing partial state to a
@@ -94,7 +94,7 @@ The main contributions of this thesis are:
  \item Techniques for overcoming those issues while preserving system
 	 correctness, performance, and scalability.
  \item Micro and macro evaluations of the performance and memory impact of
-	 introducing partial state to an application's dataflow.
+	 introducing partial state to dataflow.
 \end{itemize}
 
 \paragraph{Dissertation Outline.}

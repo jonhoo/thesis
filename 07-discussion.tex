@@ -63,8 +63,8 @@ In particular, lateral joins let the application author write a query that has
 access to the contents of some unrelated table. For example,
 Listing~\vref{l:emulate-partial-vote} shows how a lateral join can be used to
 emulate a partially materialize vote count view like the one from
-Listing~\vref{l:votes}. The idea here is to have a table of ``filled'' keys, and
-have the results only for those keys be included in the final materialized view.
+Listing~\vref{l:votes}. The idea is to have a table of ``filled'' keys, and have
+the results only for those keys be included in the final materialized view.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -77,7 +77,7 @@ SELECT article_id, votes FROM
       WHERE article_id = filled.article_id
   );
   \end{minted}
-  \caption{Using a lateral join to emulate partial state in vote.}
+  \caption{Using a Materialize lateral join to emulate partial state in vote.}
   \label{l:emulate-partial-vote}
 \end{listing}
 
