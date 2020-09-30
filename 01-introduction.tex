@@ -71,24 +71,38 @@ query set without restarting.
 
 \section{Approach: Partial State}
 
-This thesis proposes \textit{partial state} in Noria, a state-of-the-art
-materialized view system that is already optimized for read-heavy, dynamic web
-applications~\cite{noria}. Partial state enables Noria to materialize results
-for queries on-demand and evict results when they are no longer useful.
+Materialized views represent an ``almost there'' solution to automatic query
+caching. They provide a great foundational mechanism for storing and maintaining
+query results efficiently in a way that meshes well with how applications
+already work: by issuing SQL queries. What is missing to make materialized views
+a viable replacement for the ad-hoc caching strategies today's applications
+employ is a way to make the materialized views more dynamic. Specifically, to
+serve as a good cache-substitute, materialized views must support efficiently
+adding new queries and evicting old results at runtime.
 
-Noria uses \textit{dataflow} to maintain its materialized views, a system
-architecture that allows fast and distributed computation over a stream of data
-changes. It represents computational dependencies as a directed acyclic graph
-where edges represent data dependencies, and vertices represent computations
-(like aggregations or joins) over the data that arrives over the incoming edges.
-The work in this thesis adds support for partial state to Noria's dataflow so
-that most of Noria's existing systems can be re-used.
+To bridge the gap, this thesis proposes \textit{partially materialized state},
+or partial state for short. Partial state lets state in materialized views be
+marked as \textit{missing}, and introduces \textit{upqueries} as a mechanism to
+compute such missing state on-demand. This allows new queries to be added
+efficiently by leaving the initial materialized view empty, and populating the
+view only in response to application queries. Furthermore, as the application
+loses interest in old query results, those results can be evicted to reclaim
+memory, which can in turn be used to cache more important query results.
+In essence, partial state enables materialized views to function like caches.
 
-Partial state allows state in Noria's materialized views to be marked as
-\textit{missing}, and introduces \textit{upqueries} as a mechanism to compute
-such missing state on-demand. Upqueries re-use the existing dataflow operators
-that maintain the materialized views, and can theoretically be retrofitted onto
-any existing dataflow system.
+The thesis includes an implementation of partially materialized state in Noria,
+a state-of-the-art materialized view system that is already optimized for
+read-heavy, dynamic web applications~\cite{noria}. Noria uses \textit{dataflow}
+internally to maintain its materialized views, a system architecture that allows
+fast and distributed computation over a stream of data changes. Dataflow
+represents computational dependencies as a directed acyclic graph where edges
+represent data dependencies, and vertices represent computations (like
+aggregations or joins) over the data that arrives over the incoming edges.
+Partial state upqueries flow ``up'' this dataflow, in the opposite direction of
+the data, to replay past state in the case of a cache miss. Those replays then
+use the existing Noria dataflow to process the responses and fill in missing
+state. This avoids the need for separate logic for serving cache misses and
+maintaining already cached state, and simplifies the implementation.
 
 \section{Contributions}
 
