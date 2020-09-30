@@ -71,27 +71,27 @@ query set without restarting.
 
 \section{Approach: Partial State}
 
-Materialized views represent an ``almost there'' solution to automatic query
-caching. They provide a great foundational mechanism for storing and maintaining
-query results efficiently in a way that meshes well with how applications
-already work: by issuing SQL queries. What is missing to make materialized views
-a viable replacement for the ad-hoc caching strategies today's applications
-employ is a way to make the materialized views more dynamic. Specifically, to
-serve as a good cache-substitute, materialized views must support efficiently
-adding new queries and evicting old results at runtime.
+Materialized views represent an ``almost there'' solution to automatic caching.
+They provide a great foundational mechanism for storing and maintaining query
+results efficiently in a way that meshes well with how applications already
+work: by issuing SQL queries. What is missing to make materialized views a
+viable replacement for the ad-hoc caching strategies today's applications employ
+is a way to make the materialized views more dynamic. Specifically, to serve as
+a good cache-substitute, materialized views must support efficiently adding new
+queries and evicting old results at runtime.
 
 To bridge the gap, this thesis proposes \textit{partially materialized state},
-or partial state for short. Partial state lets state in materialized views be
-marked as \textit{missing}, and introduces \textit{upqueries} as a mechanism to
-compute such missing state on-demand. This allows new queries to be added
-efficiently by leaving the initial materialized view empty, and populating the
-view only in response to application queries. Furthermore, as the application
-loses interest in old query results, those results can be evicted to reclaim
-memory, which can in turn be used to cache more important query results.
-In essence, partial state enables materialized views to function like caches.
+or partial state for short. Partial state lets entries in materialized views be
+marked as \textit{missing}, and introduces \textit{upqueries} to compute such
+missing state on-demand. This allows new queries to be added efficiently by
+leaving the initial materialized view empty, and populating the view only in
+response to application queries. Furthermore, as the application loses interest
+in old query results, those results can be evicted to reclaim memory, which can
+in turn be used to cache more important query results. In essence, partial state
+enables materialized views to function like caches.
 
-The thesis includes an implementation of partially materialized state in Noria,
-a state-of-the-art materialized view system that is already optimized for
+The thesis includes an implementation of partial state in Noria, a
+state-of-the-art materialized view system that is already optimized for
 read-heavy, dynamic web applications~\cite{noria}. Noria uses \textit{dataflow}
 internally to maintain its materialized views, a system architecture that allows
 fast and distributed computation over a stream of data changes. Dataflow
