@@ -170,12 +170,11 @@ using an audit table that records table changes.
 
 \section{Maintaining Downstream Systems}
 
-Since Noria internally propagates updates that reflect deltas to past state, a
-natural idea is to extend those deltas to downstream systems. For example, Noria
-could notify a reactive web application when the result set for the view it is
-currently showing is modified, and include in that notification what exactly
-changed. In response, the application could reflect that change, all without
-sending another query to the database.
+Noria propagates deltas internally, and these deltas may be of use to downstream
+systems. For example, Noria could notify a reactive web application when the
+result set for the view it is currently showing is modified, and include in that
+notification what exactly changed. In response, the application could reflect
+that change, all without sending another query to the database.
 
 Extending Noria in this way raises an interesting question around partial state.
 In particular, what happens if an application ``subscribes'' to a query, and

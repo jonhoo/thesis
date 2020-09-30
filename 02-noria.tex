@@ -33,14 +33,24 @@ Noria differs substantially from traditional databases in how it executes
 queries. Rather than compute a query's results on demand when the application
 executes it, Noria does so when the query view is defined. Noria then caches, or
 \emph{materializes}, the contents of that view, and serves queries to that view
-directly from that cache. To keep the materialized current, Noria internally
-instantiates a dataflow program to continuously process the application's writes
-and update the views as appropriate.
+directly from that cache. To keep the materialized view current, Noria
+internally instantiates a dataflow program to continuously process the
+application's writes and update the views as appropriate.
 
 This kind of view materialization makes Noria particularly well-suited for
 read-heavy applications that tolerate eventual consistency, since it shifts
 query execution cost from reads, which are frequent, to writes, which are
 infrequent.
+
+\paragraph{Materialization.}
+Throughout this thesis, the word materialization is often used as a noun. In the
+context of Noria, a materialization refers to any derived computation result
+that Noria explicitly stores, not just materialized views. Or, more precisely,
+Noria may choose to materialize intermediate results, such as the current value
+of an aggregation, which do not represent any of the application's queries.
+These intermediate materializations are still views\,---\,they have a schema and
+consist of rows\,---\,but do not reflect any named views that the application
+has created.
 
 \section{Application Interface}
 
@@ -409,7 +419,13 @@ serialization and read/write system calls.
 
 \subsection{Partitioning}
 
-As part of dataflow planning, Noria divides the dataflow graph into a number of
+The dataflow model is attractive because it is inherently streaming, and thus
+particularly well-suited for distributed deployments. Operators are independent
+and communicate only through their streams, so Noria can easily place them
+on different cores, or hosts, and use the appropriate messaging fabric to
+connect them.
+
+Tot take advantage of this, Noria divides the dataflow graph into a number of
 sub-graphs called \textit{thread domains}. Only a single thread can process
 updates in a given thread domain at a time (except with sharding; see below),
 and any update that enters a thread domain is processed to completion within

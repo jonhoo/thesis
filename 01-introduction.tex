@@ -1,86 +1,96 @@
-Many of the most popular applications today are content-heavy web applications.
-Social networking platforms like Facebook and LinkedIn, content platforms like
-Twitter and Wikipedia, communication platforms like Slack and Discord, and
-discussion platforms like Reddit and Hacker News all process, display, and
-disseminate user-generated content. They share no code, yet they all share an
-underlying core feature: they have large amounts of data, and must query that
-data every time a user interacts with the site.
+This dissertation proposes a practical system that lowers latency and increases
+sustainable throughput for read-heavy web applications by automatically
+maintaining a cache of the application's query results. Where traditional
+databases re-execute queries each time they are issued, the presented system
+stores and maintains a cache of past query results, and uses that to serve
+queries more efficiently. As opposed to existing state-of-the-art systems, the
+dissertation work supports building the cache on demand, and is able to evict
+cache entries in response to a shifting workload.
 
-These platforms also exhibit many similar traits:
-%
-\begin{enumerate*}
-  \item they are \textbf{interactive}; each page load has a user waiting on the
-    other end,
-  \item they are \textbf{read-heavy}; most user interactions consume content
-    rather than produce new content, and
-  \item they experience \textbf{significant skew}; a small number of people,
-    posts, creators, teams, and discussions make up the bulk of interactions.
-\end{enumerate*}
-%
-Taken together, these properties suggest that these platforms would benefit
-from \emph{caching}\,---\,from a system that ``remembers'' results from past
-user requests, and recalls those results efficiently if another user later
-requests the same data. Since a user is waiting at the other end of every
-request, caching is \emph{necessary} to avoid making the user wait for too long.
-Since the platforms are read-heavy, the advantages for reads from caching are
-likely to outweight the cost of maintaining the cache. And since access is
-skewed, caching even a small fraction of the overall dataset is likely to bring
-significant benefits.
+Experimental results suggest that the presented work increases supported
+application load by up to $20\times$ over MySQL, and reduces memory use by up to
+$\sfrac{2}{3}$ compared to existing approaches.
 
-Most applications implement caching in an ad-hoc way\,---\,developers introduce
-complex and error-prone logic~\cite{ad-hoc-caching} to ensure that changes to
-the underlying data are also reflected in results served from the cache. Some
-systems, both from industry~\cite{facebook-memcache, tao, flannel} and
+\section{Motivation}
+
+Most modern web applications share similar traits. They are
+\textbf{interactive}: each page load has a user waiting on the other end. They
+are \textbf{read-heavy}: most user interactions consume content rather than
+produce new content. And they experience \textbf{significant skew}: a small
+number of people, posts, creators, teams, and discussions make up the bulk of
+interactions.
+
+Such applications are usually poorly served by the traditional relational
+databases that most of them use to store and query their underlying data.
+These application tend to issue the same read-only queries again and again, with
+the underlying data changing only infrequently. Existing databases do
+not optimize for this kind of workload: they run each query in isolation, and
+thus re-do work that has already been done many times over.
+
+As a result, application authors often resort to ad-hoc, error-prone
+techniques~\cite{ad-hoc-caching} to exploit their applications' workload
+patterns and satisfy impatient users. They de-normalize their database schemas
+by placing and updating computed values in the database tables, or introduce
+key-value stores that \textit{cache} the result of expensive queries. All these
+techniques introduce significant application complexity: the application authors
+must include logic to ensure that the auxiliary derived state remains up to date
+as the underlying data changes, that clients do not all flood the database when
+results are not available in the cache, and that concurrent access to the
+database and the cache never leaves the system in an inconsistent state.
+
+\section{Existing Solutions}
+
+Existing systems from industry~\cite{facebook-memcache, tao, flannel} and
 academia~\cite{txcache, cachegenie, casql-consistency-thesis, pequod} have
 attempted to chip away at this problem, but are often lacking in important ways.
-Some require significant developer effort, while others support only a
-restricted set of application queries.
+Some require significant developer effort, and are infeasible to implement for
+any but the largest companies. Some support only a restricted set of application
+queries, or only provide infrastructure for developers to implement caching
+themselves. Many maintain cached results only by evicting old results, and
+cannot updating existing results in-place, which is wasteful.
 
-A promising avenue for automating at least part of the application caching
-problem is \emph{query result caching} through a technique known as
-\emph{materialized views}. Materialized views allow an application backend, like
-a database, to pre-compute, store, and maintain results for an application's
-queries such that subsequent executions of those same queries can be served much
-more quickly. Unfortunately, materialized views are typically an all-or-nothing
-affair; each query is computed independently, and its full result set is cached.
-While this is acceptable for a small number of analytics-type queries, it is a
-problem when the application issues a large number of similar, but not identical
-queries that must all be answered quickly. Either the common superset of those
-queries must be computed in full, which uses significant memory, or each query's
-materialized view must be maintained individually, which causes unnecessary
-duplicate processing.
+% Noria replaces caching \emph{logic}, not caching just caching \emph{systems}.
 
-This thesis proposes a technique to introduce \textit{partial state} into Noria,
-a materialized view system implemented using dataflow~\cite{noria}. Partial
-state allows Noria to represent similar queries in a single, shared materialized
-view, without simultaneously requiring that the results for \emph{all} such
-queries be cached as a result. This let Noria avoid expending memory to cache
-query results the application is not interested in, while also allowing similar
-queries to share cache maintenance processing.
+Eons ago, the database community produced \textit{materialized views} as a
+potential answer to the slow query problem. Materialized views store the results
+of \textit{views} (i.e., named queries) with the goal of making those queries
+faster to execute~\cite{materialized-views}. These materialized views can then
+be maintained incrementally rather than re-executing queries when the underlying
+data changes~\cite{materialized-survey}. However, few commercially available
+databases support materialized views, and the ones that do come with significant
+restrictions~\cite{mssql-materialized-view-restrictions}.
 
-The work in this thesis proposes to allow individual query results to be marked
-as \textit{missing}, and introduces \textit{upqueries} as a mechanism to compute
+State-of-the-art research systems support flexible materialized
+views~\cite{dbtoaster,materialize}, but do not support eviction or low-latency
+reads\footnote{In these systems, reads cannot access the materialized view
+directly, and must synchronize with the write-processing pipeline to extract
+query results.}, and thus function poorly as a replacement for a cache. Many
+recent state-of-the-art materialized view systems are also restricted to a
+pre-declared set of queries, and cannot incorporate changes to the application
+query set without restarting.
+
+\section{Approach: Partial State}
+
+This thesis proposes \textit{partial state} in Noria, a state-of-the-art
+materialized view system that is already optimized for read-heavy, dynamic web
+applications~\cite{noria}. Partial state enables Noria to materialize results
+for queries on-demand and evict results when they are no longer useful.
+
+Noria uses \textit{dataflow} to maintain its materialized views, a system
+architecture that allows fast and distributed computation over a stream of data
+changes. It represents computational dependencies as a directed acyclic graph
+where edges represent data dependencies, and vertices represent computations
+(like aggregations or joins) over the data that arrives over the incoming edges.
+The work in this thesis adds support for partial state to Noria's dataflow so
+that most of Noria's existing systems can be re-used.
+
+Partial state allows state in Noria's materialized views to be marked as
+\textit{missing}, and introduces \textit{upqueries} as a mechanism to compute
 such missing state on-demand. Upqueries re-use the existing dataflow operators
-that maintain the materialized views as the underlying data changes in Noria,
-and can thus theoretically be retrofitted onto an existing dataflow system.
-Partial state also enables Noria to evict cached results over time as the
-application workload changes, which is critical to keep memory use low.
+that maintain the materialized views, and can theoretically be retrofitted onto
+any existing dataflow system.
 
-Experiments with partial state in Noria suggest that materialized views
-implemented using partial state can increase the supported application load by
-up to $20\times$ over MySQL, and can reduce memory use by $\sfrac{2}{3}$
-compared to materialized views implemented without partial state.
-
-% Existing materialized view systems also tend to focus on view-update
-% performance.
-
-% Commercial materialized views?
-
-% Windowing?
-
-% Replace caching \emph{logic}, not caching \emph{systems}.
-
-\paragraph{Contributions.}
+\section{Contributions}
 
 The main contributions of this thesis are:
 
@@ -100,124 +110,16 @@ The main contributions of this thesis are:
 \paragraph{Dissertation Outline.}
 
 The rest of the dissertation is organized as follows: Section~\ref{s:noria}
-describes the Noria dataflow system that partial state is built on top of.
-Section~\ref{s:partial} introduces the partially stateful dataflow model.
-Section~\ref{s:correct} describes additional mechanisms that are needed to
-ensure that partially stateful dataflow produces correct query results.
-Section~\ref{s:eval} evaluates Noria's implementation of partial state on a
-realistic application query workload. Section~\ref{s:related} explores related
-work. Section~\ref{s:disc} discusses shortcomings of, and alternatives to,
-partial state. Finally, Section~\ref{s:future} outlines future work on partial
-state.
+describes the Noria dataflow system. Section~\ref{s:partial} introduces the
+partially stateful dataflow model. Section~\ref{s:correct} describes additional
+mechanisms that are needed to ensure that partially stateful dataflow produces
+correct query results. Section~\ref{s:eval} evaluates Noria's implementation of
+partial state on a realistic application query workload. Section~\ref{s:related}
+explores related work. Section~\ref{s:disc} discusses shortcomings of, and
+alternatives to, partial state. Finally, Section~\ref{s:future} outlines future
+work on partial state.
 
 For readers that are unfamiliar with database queries, materialized views,
 dataflow, and application caching, but would still like to understand roughly
 what this thesis is about, Appendix~\ref{s:simple} starting on
 page~\pageref{s:simple} is for you.
-
-\resume
-
-% Materialized Views
-
-Noria's primary function is to provide materialized views. In database parlance,
-a \textit{view} is a name for the result set of a particular query. When an
-application reads from a view, it is reading from the result set that results
-from executing that query. Most databases also allow views to be used in place
-of other database collections, like tables, in other queries.
-
-Some databases can \textit{materialize} a view by storing the result set
-somewhere for later recollection. When a view is materialized, queries over that
-view do not re-execute the view's backing query, but instead access the rows of
-the view as if they were stored in a durable database relation. Materialized
-views thus effectively provide query memoization; they are faster to access than
-non-materialized views, at the cost of having to store the view's rows.
-
-Once a database materializes a view, it must \textit{maintain} that
-materialization over time as the underlying data changes. Otherwise, reads from
-the view would no longer match the results of the view's backing query. View
-maintenance can be \emph{reactive} by updating the view as the data changes,
-\emph{demand-driven} by updating the view only when queried, or \emph{triggered}
-by updating the view only when an outside trigger is invoked.
-
-Noria implements reactive view maintenance\,---\,it assumes that writes are less
-frequent than reads, and therefore that it is better to make writes slower by
-updating the cache proactively than to make reads slower by having each read
-check that the materialization is up to date.
-
-\paragraph{Materialization.}
-Throughout this thesis, the word materialization is often used as a noun. In the
-context of Noria, a materialization refers to any derived computation result
-that Noria explicitly stores, not just materialized views. Or, more precisely,
-Noria may choose to materialize intermediate results, such as the current value
-of an aggregation, which do not represent any of the application's queries.
-These intermediate materializations are still views\,---\,they have a schema and
-consist of rows\,---\,but do not reflect any named views that the application
-has created.
-
-% Caching
-
-As applications grow, their performance needs often exceed that which a
-traditional relational database can provide. Such applications cannot afford to
-wait for the database to compute joins and aggregations, and need lower-latency
-data access than a relational database like MySQL or Postgres typically
-provides. In these cases, application authors tend to add \textit{caching} to
-their application backend logic.
-
-Caching is a broad topic, especially because caching tends to occur at multiple
-levels within the application. Developers may cache results of individual
-database queries, collections of data that the application frequently uses
-together, computed and otherwise derived values that are expensive to
-re-compute, segments of rendered application output (like HTML snippets), all
-the way to full web pages. Each of these caches may also exist in multiple
-places to improve data locality, add redundancy, or simply because two caches
-partially overlap.
-
-Noria implements \textit{query result caching} (using materialized views), which
-ensures that the application's database queries are fast, even if they are
-complex or include significant computation. While Noria could likely be extended
-to maintain the compound caches higher up in the application stack, that is left
-for future work.
-
-Much like with view materialization, the introduction of a cache requires that
-the application maintains those caches such that new data eventually becomes
-visible. The exact mechanism that is used to implement the cache maintenance
-varies by cache type, developer preference, and application size.
-
-Once a cache is in place, the application authors must also implement cache
-\textit{eviction} to ensure that the cache does not grow without bound. Many
-eviction strategies exist, and revolve around the notion that certain cache
-entries are more worthwhile to keep than others. These entries are usually
-referred to as ``hot'' entries. Essentially, if storage space is limited, it is
-likely better to keep hot a cache entry that is accessed once a second than a
-``cold'' entry that was last accessed two weeks ago. \textit{Partial state}, the
-topic of this thesis, is what allows Noria to implement eviction for
-materialized views.
-
-% Dataflow
-% Frans likes this?
-
-Noria maintains its materialized views using \textit{dataflow}. Dataflow means a
-thousand things to a thousand people, especially if they are from different
-areas of computer science, but this thesis will focus on dataflow as understood
-in software computing specifically. Even there, many definitions exist, but they
-all agree that in dataflow, compute is stationary while data moves.
-
-A dataflow system expresses complex computations as a directed \emph{graph} that
-consists of interconnected nodes that implement primitive operations, such as
-joins, filters, and aggregations. These nodes then \emph{stream} data among each
-other to produce the desired overall results. Dataflow systems are thus also
-often referred to as stream processing systems. The roots of the graph introduce
-the data that the dataflow computes over, while the leaves represent the
-dataflow program's outputs.
-
-Since the dataflow model is inherently streaming, it is particularly well-suited
-for distributed deployments. Nodes are independent and communicate only through
-their streams, so the system can easily place them on different cores, or hosts,
-and use existing messaging fabrics to connect them. If needed, nodes can also be
-sharded to allow data-parallel computing.
-
-The streaming design also makes dataflow a good fit for reactive applications.
-When the data changes, the system introduces the changes at the roots, and then
-observe how the leaves change in response. Those changes can in turn be
-forwarded to the application to provide a change stream over the computation's
-results over time.
