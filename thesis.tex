@@ -12,11 +12,13 @@
 % more colors (like RedOrange)
 \usepackage[dvipsnames]{xcolor}
 
-% brewer qualitative colors
-\definecolor{brewergreen}{HTML}{1b9e77}
-\definecolor{brewerorange}{HTML}{d95f02}
-\definecolor{brewerpurple}{HTML}{7570b3}
-\definecolor{diagblue}{HTML}{0b5394}
+% qualitative colors
+% subset of https://jfly.uni-koeln.de/color/
+% that is also distinctive in grayscale
+\definecolor{set1}{HTML}{0071b2} % blue
+\definecolor{set2}{HTML}{e59c00} % orange
+\definecolor{set3}{HTML}{009e73} % green
+\definecolor{set4}{HTML}{efe440} % yellow
 
 % so we can splice in PDFs
 \usepackage{pdfpages}
@@ -70,7 +72,7 @@
 
 % an environment for todos
 \newenvironment{inprogress}
-  {\vspace{.5em} \color{brewerorange} \noindent \textbf{TODO}}
+  {\vspace{.5em} \color{set2} \noindent \textbf{TODO}}
   {\vspace{.5em}}
 
 % a command to indicate current editing progress
@@ -95,7 +97,7 @@
 \newcounter{invn}
 \renewcommand{\theinvn}{\Roman{invn}}
 \newenvironment{invariant}
-  {\vspace{.5em} \color{brewerorange} \refstepcounter{invn} \noindent \textbf{\color{brewerorange} Invariant \Roman{invn}.}}
+  {\vspace{.5em} \color{set1} \refstepcounter{invn} \noindent \textbf{\color{set1} Invariant \Roman{invn}.}}
   {\vspace{.5em}}
 
 % for handy reference

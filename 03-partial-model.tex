@@ -30,11 +30,11 @@ when additional operators are added.
   \centering
   \includegraphics{diagrams/Indexing.pdf}
   \caption{Multiple indexes over the state in a single view in Noria. Even
-  though \emph{some} rows for author B are present, some are missing and so the
-  entry for B is considered missing in the \texttt{author} index. Even though no
-  rows for author C are present, the index entry is not marked as missing, which
-  would happen if Noria has checked that there are indeed no rows for
-  author C.}
+  though \emph{some} rows for author B are \textbf{\color{set3}present}, some
+  are \textbf{\color{set2}missing} and so the entry for B is considered missing
+  in the \texttt{author} index. Even though no rows for author C are present,
+  the index entry is not marked as missing, which would happen if Noria has
+  checked that there are indeed no rows for author C.}
   \label{f:indexing}
 \end{figure}
 
@@ -123,10 +123,11 @@ Noria must be able to somehow produce all books by author $a$.
   \centering
   \includegraphics{diagrams/Key Provenance.pdf}
   \caption{Key provenance for each column in the \texttt{StoriesWithVC} view
-  from Listing~\ref{l:vote-src}. Notice that \texttt{story\_id} has multiple
-  base table origins, and \texttt{vcount} does not trace back to any base table
-  columns. The query only uses \texttt{story\_id} as a parameter, so only its
-  provenance is used to choose the upquery path.}
+  from Listing~\ref{l:vote-src}. Notice that \texttt{\color{set3}story\_id} has
+  multiple base table origins, and \texttt{\color{set2}vcount} does not trace
+  back to any base table columns. The query only uses
+  \texttt{\color{set3}story\_id} as a parameter, so only its provenance is used
+  to choose the upquery path.}
   \label{f:key-prov}
 \end{figure}
 

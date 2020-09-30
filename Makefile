@@ -7,6 +7,7 @@ clean:
 	rm -f graphs/*.pdf
 	rm -f benchmarks/results/*/parsed.pickle
 	rm -f thesis.pdf proposal.pdf
+	rm -f thesis.gray.pdf
 
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
@@ -34,6 +35,17 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    diagrams/Chained\ Unions.pdf \
 	    diagrams/Indexing.pdf
 	latexmk -shell-escape -pdf thesis.tex
+
+thesis.gray.pdf: thesis.pdf
+	gs \
+	    -sOutputFile=$@ \
+	    -sDEVICE=pdfwrite \
+	    -sColorConversionStrategy=Gray \
+	    -dProcessColorModel=/DeviceGray \
+	    -dCompatibilityLevel=1.4 \
+	    -dNOPAUSE \
+	    -dBATCH \
+	    thesis.pdf
 
 proposal.pdf: 000-proposal.tex bibliography.bib \
               jfrg-thesis-proposal-agreement-robert.pdf \

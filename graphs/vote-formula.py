@@ -47,10 +47,10 @@ for skew in skews:
         i += 1
 
 ax.plot([250000], [perc], '*', ms=15, color='black')
-bbox_props = dict(boxstyle="larrow", fc=common.colors['full'], ec=common.colors['noria'], lw=2)
+bbox_props = dict(boxstyle="larrow", fc=common.colors['full'], ec='black', lw=2)
 t = ax.text(480000, 4.8, "Achieved in vote benchmark", ha="center", va="center", rotation=45,
             size=13,
-            color=common.colors['noria'],
+            color='black',
             bbox=bbox_props)
 
 ax.xaxis.set_major_formatter(common.kfmt)

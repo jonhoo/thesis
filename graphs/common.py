@@ -50,13 +50,15 @@ def bts(b):
         return '%1.0fkB' % (b / 1024)
     return '%1.0fb' % b
 
-# https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=6
+# qualitative colors
+# subset of https://jfly.uni-koeln.de/color/
+# that is also distinctive in grayscale
 colors = {
-    'full': '#b2abd2',
-    'durable': '#b2abd2',
-    'noria': '#5e3c99',
-    'mysql': '#e66101',
-    'redis': '#fdb863',
+    'full': '#0071b2',
+    'durable': '#0071b2',
+    'noria': '#009e73',
+    'mysql': '#e59c00',
+    'redis': '#e59c00',
 }
 
 # https://colorbrewer2.org/#type=sequential&scheme=RdPu&n=8
