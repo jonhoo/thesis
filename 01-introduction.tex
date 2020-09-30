@@ -1,23 +1,22 @@
-This dissertation proposes a practical system that lowers latency and increases
-sustainable throughput for read-heavy web applications by automatically
-maintaining a cache of the application's query results. Where traditional
+This dissertation proposes a practical database system that lowers latency and
+increases supported load for read-heavy web applications. Where traditional
 databases re-execute queries each time they are issued, the presented system
 stores and maintains a cache of past query results, and uses that to serve
-queries more efficiently. As opposed to existing state-of-the-art systems, the
-dissertation work supports building the cache on demand, and is able to evict
+queries efficiently. As opposed to existing state-of-the-art systems, the
+presented system supports building the cache on demand, and is able to evict
 cache entries in response to a shifting workload.
 
-Experimental results suggest that the presented work increases supported
+Experimental results suggest that the presented system increases supported
 application load by up to $20\times$ over MySQL, and reduces memory use by up to
 $\sfrac{2}{3}$ compared to existing approaches.
 
 \section{Motivation}
 
-Most modern web applications share similar traits. They are
-\textbf{interactive}: each page load has a user waiting on the other end. They
-are \textbf{read-heavy}: most user interactions consume content rather than
+Modern web applications typically have a number of traits in common. They are
+\textbf{interactive}: each incoming request has a user waiting on the other end.
+They are \textbf{read-heavy}: most interactions consume content rather than
 produce new content. And they experience \textbf{significant skew}: a small
-number of people, posts, creators, teams, and discussions make up the bulk of
+number of people, posts, teams, and discussions make up the bulk of
 interactions.
 
 Such applications are usually poorly served by the traditional relational
@@ -52,13 +51,13 @@ cannot updating existing results in-place, which is wasteful.
 % Noria replaces caching \emph{logic}, not caching just caching \emph{systems}.
 
 Eons ago, the database community produced \textit{materialized views} as a
-potential answer to the slow query problem. Materialized views store the results
-of \textit{views} (i.e., named queries) with the goal of making those queries
-faster to execute~\cite{materialized-views}. These materialized views can then
-be maintained incrementally rather than re-executing queries when the underlying
-data changes~\cite{materialized-survey}. However, few commercially available
-databases support materialized views, and the ones that do come with significant
-restrictions~\cite{mssql-materialized-view-restrictions}.
+potential answer to the problem of slow queries. Materialized views store the
+results of \textit{views} (i.e., named queries) with the goal of making those
+queries faster to execute~\cite{materialized-views}. These materialized views
+can then be maintained incrementally rather than re-executing queries when the
+underlying data changes~\cite{materialized-survey}. However, few commercially
+available databases support materialized views, and the ones that do come with
+significant restrictions~\cite{mssql-materialized-view-restrictions}.
 
 State-of-the-art research systems support flexible materialized
 views~\cite{dbtoaster,materialize}, but do not support eviction or low-latency
