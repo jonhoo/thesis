@@ -11,6 +11,7 @@ clean:
 
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
+	    00-acknowledgements.tex \
 	    01-introduction.tex \
 	    02-noria.tex \
 	    03-partial-model.tex \
