@@ -231,60 +231,74 @@ be short. A view is stale only while the write propagates through the dataflow,
 so the time before the write manifests depends only on the height and complexity
 of the dataflow for the view in question.
 
-\subsection{Prefix Consistency}
+\subsection{System Invariants}
 
-Eventual consistency is a woefully vague consistency model\,---\,an eventually
-consistent system is allowed to do anything, or nothing at all, as long as reads
-\emph{eventually} all return the same value. Most definitions of eventual
-consistency also require that that same value reflects the writes issued to the
-system, but not all. In practice, eventual consistency is often ``good enough''
-despite giving few \emph{guarantees}, and many eventually consistent systems
-appear strongly consistent most of the time~\cite{eventual}.
-
-Noria upholds three additional safety properties:
+Eventual consistency is an inherently vague consistency model\,---\,an
+eventually consistent system is allowed to do anything, or nothing at all, as
+long as reads \emph{eventually} all return the right result. In practice,
+eventual consistency is often ``good enough'' despite giving few
+\emph{guarantees}, and many eventually consistent systems appear strongly
+consistent most of the time~\cite{eventual}. To ensure that Noria is indeed
+eventually consistent, Noria upholds two safety invariants:
 
 \begin{invariant}
   \label{i:no-spurious}
   All reads reflect each upstream base table change at most once.
 \end{invariant}
 
+This invariant ensures that Noria does not accidentally duplicate base table
+changes, such as by double-counting an insert or deletion. Note, however, that
+is does not preclude a \emph{value} present in a given base table row from
+appearing multiple times in a downstream view. If a query explicitly duplicates
+rows with a \texttt{UNION} or a column value appears in multiple output rows
+through a \texttt{JOIN}, then each base table \emph{change} is still reflected
+at most once. For a concrete example of this, consider a query that selects all
+columns from all rows in a given table twice, and takes the union of them. The
+expected output is that each \emph{row} in that table appears twice. However,
+each \emph{change} to the base table\,---\,the inserts that added those
+rows\,---\,is reflected only once. If a given \emph{insert} was reflected more
+than once, then the inserted row would appear more than twice by virtue of there
+(incorrectly) being multiple copies of it in the table.
+
 \begin{invariant}
   \label{i:prefix-consistency}
   A read that observes all effects of a given base table change also observes
-  all earlier changes to that same base table.
+  all effects of earlier changes to that base table that follow the same
+  dataflow path.
 \end{invariant}
 
-\begin{invariant}
-  \label{i:no-backsies}
-  A read issued at time $t$ and again at time $t' > t$ observes the effects of
-  at least as many updates at $t'$ as at $t$.
-\end{invariant}
+This invariant ensures that Noria does not drop updates, so that each base table
+update is ultimately fully reflected in the downstream views. The invariant is
+scoped to updates along the same dataflow path so that Noria can process updates
+on parallel strands of dataflow concurrently (\S\ref{s:parallel}). As long as
+Noria upholds the invariant on each strand of the dataflow in isolation, no
+updates may be dropped anywhere, and views will eventually yield the correct
+output (subject also to Invariant~\ref{i:no-spurious}).
 
-Invariant~\ref{i:no-spurious} ensures that views include no duplicate or
-spurious results. Essentially, it guarantees that view results represent data
-that is in the base tables, and no other data.
-
-Invariant~\ref{i:prefix-consistency} ensures that when the system makes
-progress, it does so in a sane manner. If the application issues two writes
-$w_1$ and $w_2$ to a base table in that order, then it will not see $w_2$
-reflected but not $w_1$.
-
-Invariant~\ref{i:no-backsies} ensures that \emph{if} the system makes progress,
-that progress persists\,---\,Noria cannot expose the effects of an update, and
-then roll back those effects at a later time. Of course, if a later update
-happens to mask the effects of the earlier update, that is fine\,---\,the
-invariant is still preserved.
-
-Informally, these three invariants taken together establish a sort of per-table
-\emph{prefix consistency}. For each base table $b$ that connects to a given view
-$v$, there exists some time $t$ such that all changes in $b$ that precede $t$
-manifest exactly once when reading from $v$. Effects from changes that succeed
-$t$ may manifest fully, partially, or not at all. As Noria continues executing
-its dataflow, $t$ increases, and more changes manifest fully.
-
-Note that prefix consistency applies \emph{per base table}. If the application
-writes $w_1$ to \texttt{votes} and then $w_2$ to \texttt{stories}, the effects
-of $w_2$ may manifest downstream before $w_1$ does.
+% Note: this invariant is more an additional guarantee than a system invariant.
+% While it is useful, it is very subtle (see the text), and not required for
+% correctness. Therefore, it was scrapped.
+%
+% \begin{invariant}
+%   \label{i:no-backsies}
+%   A read issued at time $t$ and again at time $t' > t$ reflects the effects of
+%   at least as many updates at $t'$ as at $t$.
+% \end{invariant}
+%
+% This invariant ensures that \emph{if} the system makes progress, that progress
+% persists\,---\,informally, Noria shouldn't expose the effects of an update, and
+% then roll back those effects at a later time. Of course, if a later update
+% happens to mask the effects of the earlier update, that is fine\,---\,the
+% invariant is still preserved.
+%
+% This invariant is weaker than it first appears: since Noria is permitted to
+% expose even incomplete effects of \emph{later} updates, the effects of an
+% earlier update may be temporarily masked. For example, it \emph{is} possible to
+% observe an output row introduced by an earlier update disappear while a future
+% replacement is only partially processed. This violates the intuitive
+% understanding of the invariant, but not its literal definition. The invariant is
+% useful nonetheless: as the system makes progress, it ensures that more updates
+% are reflected over time.
 
 \subsubsection*{Sharding and Consistency}
 
@@ -302,15 +316,32 @@ they may not yet have manifested in another shard of that same view.
 
 \subsection{What Can Go Wrong?}
 
-Noria's eventual consistency can lead to reads producing strange results
-under certain circumstances in stream processing
-systems~\cite{materialize-eventual}. As an example, consider the query in
-Listing~\vref{l:always-wrong}. If the maximum value changes frequently enough,
-then the outer and inner query may be perpetually ``out-of-sync''. The current
-maximum may not yet be present in the outer query, or a new maximum value may
-not yet be present in the inner query. The net result is that the result set of
-the query would be empty, even though a traditional database would never yield
-an empty query result.
+Noria's eventual consistency can lead to reads giving strange results under
+certain circumstances in stream processing systems~\cite{materialize-eventual}.
+This subsection covers a number of such cases.
+
+\paragraph{View Discrepancy.}
+If a client reads from view $V1$ and then from view $V2$, the read from $V2$ may
+reflect base table changes that are not yet visible in $V1$. Similarly, if view
+$V$ is sharded, and a client reads from two different shards, either read may
+reflect base table changes that are not reflected in the other.
+
+\paragraph{Incomplete Effects.}
+A client that reads form view $V$ may observe \emph{some} of the effects of a
+base table change, like an insert, but not others. This occurs if the dataflow
+that maintains $V$ contains a diamond\,---\,a fork followed later by a merge
+operator like a union or join. The dataflow update that results from an insert
+into a base table is processed by one ``side'' of the diamond before the other,
+and in the intervening time the view reflects only the effects from that
+dataflow path. Indeed, if one path is much slower than the other, multiple base
+table changes may flow through the fast path, and be reflected in $V$, before
+\emph{any} effects from the other path manifest.
+
+\paragraph{Independent Writes.}
+If a client writes to a base table $A$, and then to a different base table $B$,
+and then reads from a view $V$ that is downstream of both $A$ and $B$, it may
+see the effects of the write to $B$ reflected in $V$, but not the effects of the
+write to $A$.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -322,11 +353,18 @@ an empty query result.
   \label{l:always-wrong}
 \end{listing}
 
-If the max value changes less frequently, and Noria has time to process a new
-update through both dataflow paths (the inner and the outer) before the maximum
-changes again, Noria will produce the expected non-empty query result. But
-nonetheless, the application author probably did not expect that this query
-could return an empty result set, however briefly.
+\paragraph{Unsynchronized Joins.}
+Consider the query in Listing~\vref{l:always-wrong}. If the maximum value
+changes frequently enough, then the outer and inner query may be perpetually
+``out-of-sync''. The current maximum may not yet be present in the outer query,
+or a new maximum value may not yet be present in the inner query. The net result
+is that the result set of the query would be empty, even though a traditional
+database would never yield an empty query result. If the max value changes less
+frequently, and Noria has time to process a new update through both dataflow
+paths (the inner and the outer) before the maximum changes again, Noria will
+produce the expected non-empty query result.
+
+\subsection{Why Does It Go Wrong?}
 
 Exactly how strange these phenomena become, and how frequently they manifest,
 depends on the nature of the queries and the updates. For example, queries that
@@ -380,6 +418,7 @@ developers direct those queries where strong consistency is necessary to other,
 better suited systems.
 
 \section{Parallelism}
+\label{s:parallel}
 
 Servers have many cores, and any high-performance system must be able to take
 advantage of these cores to take full advantage of the hardware. Noria does so
