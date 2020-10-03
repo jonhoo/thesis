@@ -30,6 +30,9 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    graphs/vote-migration.pdf \
 	    graphs/vote-throughput-memlimit.pdf \
 	    graphs/vote-redis.pdf \
+	    diagrams/Motivation\ Classic\ DB.pdf \
+	    diagrams/Motivation\ Ad-Hoc\ Cache.pdf \
+	    diagrams/Motivation\ Materialized\ Views.pdf \
 	    diagrams/Example\ Execution.pdf \
 	    diagrams/Key\ Provenance.pdf \
 	    diagrams/Chained\ Unions.pdf \

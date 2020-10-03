@@ -1,14 +1,11 @@
-This dissertation proposes a practical database system that lowers latency and
-increases supported load for read-heavy web applications. Where traditional
-databases re-execute queries each time they are issued, the presented system
-stores and maintains a cache of past query results, and uses that to serve
-queries efficiently. As opposed to existing state-of-the-art systems, the
-presented system supports building the cache on demand, and is able to evict
-cache entries in response to a shifting workload.
+This chapter explores the motivation behind this thesis, and gives a sketch of
+the proposed solution that is covered in the rest of the dissertation.
+Section~\ref{s:contrib} gives a succinct list of the thesis contributions, and
+Section~\ref{s:read} concludes with a roadmap for how to read the remainder of
+the document.
 
-Experimental results suggest that the presented system increases supported
-application load by up to $20\times$ over MySQL, and reduces memory use by up to
-$\sfrac{2}{3}$ compared to existing approaches.
+Non-technical readers should start with Appendix~\ref{s:simple} (on
+page~\pageref{s:simple}).
 
 \section{Motivation}
 
@@ -20,16 +17,39 @@ number of people, posts, teams, and discussions make up the bulk of
 interactions.
 
 Such applications are usually poorly served by the traditional relational
-databases that most of them use to store and query their underlying data.
-These application tend to issue the same read-only queries again and again, with
-the underlying data changing only infrequently. Existing databases do
-not optimize for this kind of workload: they run each query in isolation, and
-thus re-do work that has already been done many times over.
+databases that most of them use to store and query their underlying data. These
+application tend to issue the same read-only queries again and again, with the
+underlying data changing only infrequently. Existing databases do not optimize
+for this kind of workload: they run each query in isolation\footnote{
+Databases query caches~\cite{mysql-query-cache,pgpool-query-cache} cache results
+as long as no changes occur to the underlying tables if queries are
+byte-for-byte identical. While attractive on the surface, they often work poorly
+in practice when the workload is not
+read-only~\cite{mysql-query-cache-nope,pgpool-query-cache}.}, and thus re-do
+work that has already been done many times over. This causes reads, which is the
+most frequent operation in these applications, to be slow, while writes are
+simple and fast.
+
+\begin{figure}
+  \centering
+  \includegraphics{diagrams/Motivation Classic DB.pdf}
+  \caption{Application query execution against a traditional database. Each
+  application query runs in isolation, and may perform the same work
+  (\textbf{\color{set2}orange}) repeatedly. Writes do little work
+  (\textbf{\color{set1}blue}), even though they are less frequent in many
+  applications.}
+  \label{f:motivation-classic}
+\end{figure}
+
+Figure~\vref{f:motivation-classic} shows how application queries function at a
+high level in the traditional model: each query the application issues executes
+the query plan, represented by an aggregation and a join in the figure. Multiple
+concurrent queries execute independently, even if they run the same query.
 
 As a result, application authors often resort to ad-hoc, error-prone
 techniques~\cite{ad-hoc-caching} to exploit their applications' workload
-patterns and satisfy impatient users. They de-normalize their database schemas
-by placing and updating computed values in the database tables, or introduce
+patterns and satisfy impatient users. They change their database schemas by
+placing and updating computed values in the database tables, or introduce
 key-value stores that \textit{cache} the result of expensive queries. All these
 techniques introduce significant application complexity: the application authors
 must include logic to ensure that the auxiliary derived state remains up to date
@@ -37,36 +57,70 @@ as the underlying data changes, that clients do not all flood the database when
 results are not available in the cache, and that concurrent access to the
 database and the cache never leaves the system in an inconsistent state.
 
+\begin{figure}
+  \centering
+  \includegraphics{diagrams/Motivation Ad-Hoc Cache.pdf}
+  \caption{Application query execution against a cache in front of a database.
+  Application queries first check for cached results, and only execute database
+  queries if the results are not in cache. Thea application must invalidate
+  cached results to ensure that later reads see the effects of new writes. The
+  application logic for both reads (\textbf{\color{set2}orange}) and writes
+  (\textbf{\color{set1}blue}) is more complex.}
+  \label{f:motivation-adhoc}
+\end{figure}
+
+Figure~\vref{f:motivation-adhoc} shows an example of this application design:
+application writes must now also touch the cache, and reads must include logic
+to fall back to database queries if the cache does not hold the needed state.
+
 \section{Existing Solutions}
 
 Existing systems from industry~\cite{facebook-memcache, tao, flannel} and
 academia~\cite{txcache, cachegenie, casql-consistency-thesis, pequod} have
-attempted to chip away at this problem, but are often lacking in important ways.
-Some require significant developer effort, and are infeasible to implement for
-any but the largest companies. Some support only a restricted set of application
-queries, or only provide infrastructure for developers to implement caching
-themselves. Many maintain cached results only by evicting old results, and
-cannot updating existing results in-place, which is wasteful.
+chipped away at this problem, but are often lacking in important ways. Some
+require significant developer effort, and are infeasible to implement for any
+but the largest companies. Some support only a restricted set of queries, or
+only provide infrastructure for developers to implement caching themselves. Many
+keep the cache up to date only by evicting old results, and cannot update
+existing results in-place, which is wasteful.
 
 % Noria replaces caching \emph{logic}, not caching just caching \emph{systems}.
 
-Eons ago, the database community produced \textit{materialized views} as a
-potential answer to the problem of slow queries. Materialized views store the
-results of \textit{views} (i.e., named queries) with the goal of making those
-queries faster to execute~\cite{materialized-views}. These materialized views
-can then be maintained incrementally rather than re-executing queries when the
-underlying data changes~\cite{materialized-survey}. However, few commercially
-available databases support materialized views, and the ones that do come with
-significant restrictions~\cite{mssql-materialized-view-restrictions}.
+Eons ago~\cite{relational-materialized-views,stonebraker-views}, the database
+community introduced \textit{materialized views} as an answer to the problem of
+slow queries. Materialized views store the contents of \textit{views} (i.e.,
+named queries) which makes those queries faster to
+execute~\cite{materialized-views}. The materialized views can then be
+\textit{maintained} incrementally, meaning results are updated in-place, rather
+than invalidating stores results or re-executing queries from scratch when the
+underlying data changes~\cite{materialized-survey}.
+
+\begin{figure}
+  \centering
+  \includegraphics{diagrams/Motivation Materialized Views.pdf}
+  \caption{Application query execution against a database with materialized
+  views. All application views hit the materialized view, leading to simple
+  yet fast reads (\textbf{\color{set2}orange}). The database engine must
+  determine the effects of every write and update any materialized views to
+  reflect changes (\textbf{\color{set1}blue}).}
+  \label{f:motivation-materialized}
+\end{figure}
+
+Figure~\vref{f:motivation-materialized} shows an approximate system architecture
+for a materialized view system: the system updates the materialized results in
+response to application writes, and reads access only the stored results.
+However, few commercially available databases support materialized views, and
+the ones that do come with significant
+restrictions~\cite{mssql-materialized-view-restrictions}.
 
 State-of-the-art research systems support flexible materialized
 views~\cite{dbtoaster,materialize}, but do not support eviction or low-latency
-reads\footnote{In these systems, reads cannot access the materialized view
-directly, and must synchronize with the write-processing pipeline to extract
-query results.}, and thus function poorly as a replacement for a cache. Many
-recent state-of-the-art materialized view systems are also restricted to a
-pre-declared set of queries, and cannot incorporate changes to the application
-query set without restarting.
+reads. In these systems, reads cannot access the materialized view directly, and
+must synchronize with the write-processing pipeline to get query results. They
+thus function poorly as a replacement for a cache: infrequently accessed results
+cannot be evicted, and reads must wait on writes. Many recent state-of-the-art
+materialized view systems are also restricted to a pre-declared set of queries,
+and cannot incorporate changes to the application query set without restarting.
 
 \section{Approach: Partial State}
 
@@ -89,6 +143,17 @@ in old query results, those results can be evicted to reclaim memory, which can
 in turn be used to cache more important query results. In essence, partial state
 enables materialized views to function like caches.
 
+In the proposed work, the system model still looks like
+Figure~\vref{f:motivation-materialized}, but queries to the materialized view
+can \emph{miss}, just like in a cache. When they do, the database internally
+fills in the missing state before it responds to the application. If the
+application later executes the same query, the cache holds the result. Over
+time, the database evicts infrequently accessed results to save memory and to
+avoid the overhead of maintaining results the application is no longer
+interested in.
+
+\section{Partial State in Noria}
+
 The thesis includes an implementation of partial state in Noria, a
 state-of-the-art materialized view system that is already optimized for
 read-heavy, dynamic web applications~\cite{noria}. Noria uses \textit{dataflow}
@@ -104,6 +169,7 @@ state. This avoids the need for separate logic for serving cache misses and
 maintaining already cached state, and simplifies the implementation.
 
 \section{Contributions}
+\label{s:contrib}
 
 The main contributions of this thesis are:
 
@@ -112,15 +178,20 @@ The main contributions of this thesis are:
    materialized view system.
  \item An algorithm for implementing upqueries to populate missing state on
    demand.
- \item An analysis of the issues that arise when introducing partial state to a
-   distributed, high-performance stateful dataflow processing system.
- \item Techniques for overcoming those issues while preserving system
-	 correctness, performance, and scalability.
- \item Micro and macro evaluations of the performance and memory impact of
-	 introducing partial state to dataflow.
+ \item An analysis of the inconsistencies that arise when introducing partial
+   state to a distributed, high-performance stateful dataflow processing system
+    where updates can race with one another, and with upqueries.
+ \item Techniques for overcoming those inconsistencies while preserving system
+   correctness, performance, and scalability.
+ \item Micro and macro evaluations of the performance and memory benefits of
+   introducing partial state to dataflow. Experimental results suggest that the
+    presented system increases supported application load by up to $20\times$
+    over MySQL, and reduces memory use by up to $\sfrac{2}{3}$ compared to
+    existing approaches.
 \end{itemize}
 
 \section{Reading Guide}
+\label{s:read}
 
 The rest of the dissertation is organized as follows: Chapter~\ref{s:noria}
 describes the Noria dataflow system. Chapter~\ref{s:partial} introduces the
