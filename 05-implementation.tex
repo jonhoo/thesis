@@ -47,3 +47,10 @@ updates one table while read handlers read the other, and an atomic pointer
 swap exposes new writes. This design can significantly improve read throughput
 on multi-core servers over a single-buffered hash table with bucket-level locks
 in workloads with high skew.
+
+\paragraph{Latency Measurements.}
+Many of the Noria benchmarks used in the evaluation chapter produce a large
+amount of data. To capture the characteristics of the data without too much loss
+in fidelity, the benchmarks use HdrHistogram~\cite{hdrhistogram}, a data
+structure that efficiently captures and represents histograms with a high
+dynamic range over large numbers of samples.
