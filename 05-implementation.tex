@@ -1,1 +1,49 @@
-\resume
+The prototype implementation of Noria with partial state consists of 65k lines
+of Rust. It can operate on a single server or across a cluster of servers.
+
+The source code is available at \url{https://github.com/mit-pdos/noria}.
+
+\paragraph{Interface.}
+Applications interface with Noria either through native Rust bindings, using
+JSON over HTTP, or through a MySQL adapter~\cite{noria-mysql}.
+
+\paragraph{Storage.}
+The implementation maintains views in memory, and can maintain base tables
+either in memory (the default) or on disk using using RocksDB~\cite{rocksdb}, a
+key-value store based on log-structured merge (LSM) trees.
+
+\paragraph{Missing State.}
+Noria does not store tombstones for results that are missing in a
+materialization. Instead, it stores materialized results that are known to be
+empty in hash tables alongside other (non-empty) materialized results. This
+allows even empty results to be evicted to save space.
+
+\paragraph{Upquery Bypass.}
+When Noria encounters missing state and issues an upquery, it sends that
+upquery directly to the root of the upquery path. This saves sending the
+message along all the intervening edges, but does not affect correctness since
+the intermediate operators do nothing but forward the upquery upstream.
+
+\paragraph{Batching.}
+Noria uses several time-limited batching buffers to improve performance. Writes
+to a base table are buffered for a few microseconds, and are emitted into the
+dataflow as a single combined update to amortize lookup and processing costs at
+operators like aggregations and joins. Upqueries are also buffered and batched
+in case other misses for different keys along the same upquery path occur in
+quick succession.
+
+\paragraph{Runtime.}
+To multiplex I/O and compute, Noria uses Tokio~\cite{tokio}, a high-performance
+asynchronous Rust runtime. Tokio manages a pool of threads that cooperatively
+schedule thread domain processing (\S\ref{s:noria:partitioning}), query
+handling, and control operations like adding and removing queries.
+
+\paragraph{Fast Reads.}
+Query handlers process clients' RPCs to read from external views. They must
+access the view with low latency and high concurrency, even while a thread
+domain applies updates to the view. To minimize synchronization, Noria uses
+double-buffered hash tables for external views~\cite{evmap}: the thread domain
+updates one table while read handlers read the other, and an atomic pointer
+swap exposes new writes. This design can significantly improve read throughput
+on multi-core servers over a single-buffered hash table with bucket-level locks
+in workloads with high skew.
