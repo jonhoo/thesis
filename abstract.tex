@@ -29,18 +29,18 @@
 
   This thesis proposes a practical database system that lowers latency and
     increases supported load for read-heavy applications. Where traditional
-    databases re-execute queries each time, the presented system maintains a
-    cache of past query results, and uses it to serve queries efficiently. As
+    databases repeatedly re-execute queries, the presented system uses
+    incrementally-maintained materialized views to cache query results. As
     opposed to state-of-the-art systems, the presented system builds the cache
     on demand, and evicts cache entries in response to a shifting workload.
 
   \vspace{0.5\baselineskip}
 
-  The thesis proposes \textit{partially stateful materialization}, which adds
-    eviction and on-demand recomputation to materialized database views. The
-    thesis introduces \textit{upqueries} as a mechanism for implementing
-    partially stateful materialization in Noria, a materialized view system
-    built using dataflow.
+  The enabling technique that the thesis introduces is \textit{partially
+    stateful materialization}, which allows entries in materialized views to be
+    \textit{missing}. The thesis introduces \textit{upqueries} as a mechanism to
+    fill such missing state on demand in Noria, a materialized view system built
+    using dataflow.
 
   \vspace{0.5\baselineskip}
 
