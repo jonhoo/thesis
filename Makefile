@@ -16,8 +16,8 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    00-acknowledgements.tex \
 	    01-introduction.tex \
 	    02-noria.tex \
-	    03-partial-model.tex \
-	    04-partial.tex \
+	    03-partial.tex \
+	    04-correctness.tex \
 	    05-implementation.tex \
 	    06-evaluation.tex \
 	    07-related-work.tex \
