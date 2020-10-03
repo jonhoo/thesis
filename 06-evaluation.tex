@@ -742,7 +742,6 @@ cached in that one second. The eviction logic thus has more keys it needs to
 evict each time it runs. This in turn takes up more data flow cycles on the
 write path that could otherwise be dedicated to serving upqueries.
 
-\paragraph{In summary,} Noria benefits from skewed access patterns, which are
-common in real-world datasets. At moderate throughput levels, Noria
-falls over only when asked to evict more keys than the predicted size of the
-``hot'' key set.
+\paragraph{In summary,} Noria benefits from skewed access, which is common in
+real-world datasets. At moderate throughput levels, Noria falls over only when
+asked to evict more keys than the predicted size of the ``hot'' key set.

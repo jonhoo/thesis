@@ -14,7 +14,7 @@ persistently in relation tables, and derived views hold data an application
 might choose to cache to improve performance.
 
 Compared to conventional database use, Noria base tables might be smaller, as
-Noria derives data that an application may otherwise pre-compute and store
+Noria derives data that an application may otherwise precompute and store
 denormalized in base tables for performance. Noria stores base tables
 persistently on disk, either on one server or sharded across multiple servers.
 Views, by contrast, are likely larger than a typical cache footprint, because
@@ -452,10 +452,6 @@ view. As long as there are cores available, Noria can use additional threads to
 perform view lookups, as well as low-level networking work like request
 serialization and read/write system calls.
 
-\begin{inprogress}
-  Should I include an Appendix that explains how evmap works in further detail?
-\end{inprogress}
-
 \subsection{Partitioning}
 \label{s:noria:partitioning}
 
@@ -555,6 +551,4 @@ thread domains may also be sharded differently. Or, phrased differently, Noria
 may partition a chain of operators that are all sharded by the same column into
 multiple thread domains to increase parallelism.
 
-\begin{comment}
-  Sharding is tracked based on "ultimately source column". (column tracing)
-\end{comment}
+% Sharding is tracked based on "ultimately source column". (column tracing)
