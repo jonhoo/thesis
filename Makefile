@@ -54,15 +54,6 @@ thesis.gray.pdf: thesis.pdf
 	    -dBATCH \
 	    thesis.pdf
 
-proposal.pdf: 000-proposal.tex bibliography.bib \
-              jfrg-thesis-proposal-agreement-robert.pdf \
-              jfrg-thesis-proposal-agreement-frans.pdf \
-              jfrg-thesis-proposal-agreement-sam.pdf \
-              jfrg-thesis-proposal-agreement-malte.pdf \
-              signature.pdf
-	latexmk -pdf 000-proposal.tex
-	cp 000-proposal.pdf $@
-
 %.pdf: %.tex
 	latexmk -pdf $<
 
