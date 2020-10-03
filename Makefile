@@ -9,6 +9,8 @@ clean:
 	rm -f thesis.pdf proposal.pdf
 	rm -f thesis.gray.pdf
 
+abstract.pdf: abstract.tex
+
 thesis.pdf: titlepage.pdf abstract.pdf \
             thesis.tex bibliography.bib \
 	    00-acknowledgements.tex \

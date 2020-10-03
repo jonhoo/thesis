@@ -1,4 +1,8 @@
 \documentclass[fontsize=12pt,paper=letter]{scrartcl}
+
+% for \sfrac
+\usepackage{xfrac}
+
 \begin{document}
 \begin{titlepage}
   \begin{center}
@@ -8,7 +12,7 @@
     \vspace{0.5\baselineskip}
     {\large Jon Gjengset}\\
     \vspace{0.5\baselineskip}
-    \begin{addmargin}[0.5in]{0.5in}
+    \begin{addmargin}[0.15in]{0.15in}
       \centering
     Submitted to the Department of
     Electrical Engineering and Computer Science
@@ -17,32 +21,46 @@
     Doctor of Philosophy in Computer Science
     \end{addmargin}
   \end{center}
-  \vspace{\baselineskip}
 
+  \vspace{0.5\baselineskip}
   \begin{flushleft}
   ABSTRACT
-  \vspace{\baselineskip}
+  \vspace{0.5\baselineskip}
 
-  Existing dataflow systems must either materialize no state, or materialize
-  all state. The former precludes interesting applications, and the latter
-  incurs onerous memory overhead and prevents fast changes to the dataflow.
-  This thesis proposes partially stateful dataflow, where only the working set
-  of the application is materialized, and other data is fetch and computed
-  only on demand.
+  This thesis proposes a practical database system that lowers latency and
+    increases supported load for read-heavy applications. Where traditional
+    databases re-execute queries each time, the presented system maintains a
+    cache of past query results, and uses it to serve queries efficiently. As
+    opposed to state-of-the-art systems, the presented system builds the cache
+    on demand, and evicts cache entries in response to a shifting workload.
+
+  \vspace{0.5\baselineskip}
+
+  The thesis proposes \textit{partially stateful materialization}, which adds
+    eviction and on-demand recomputation to materialized database views. The
+    thesis introduces \textit{upqueries} as a mechanism for implementing
+    partially stateful materialization in Noria, a materialized view system
+    built using dataflow.
+
+  \vspace{0.5\baselineskip}
+
+  Experimental results suggest that the presented system increases supported
+    application load by up to $20\times$ over MySQL, and reduces memory use by
+    up to $\sfrac{2}{3}$ compared to existing approaches.
 
   \vspace{\baselineskip}
   Thesis Supervisor: Robert Tappan Morris\\
   Title: Professor of Computer Science
 
-  \vspace{\baselineskip}
+  \vspace{0.5\baselineskip}
   Thesis Reader: M. Frans Kaashoek\\
   Title: Professor of Computer Science
 
-  \vspace{\baselineskip}
+  \vspace{0.5\baselineskip}
   Thesis Reader: Sam Madden\\
   Title: Professor of Computer Science
 
-  \vspace{\baselineskip}
+  \vspace{0.5\baselineskip}
   Thesis Reader: Malte Schwarzkopf\\
   Title: Assistant Professor, Brown University
   \end{flushleft}
