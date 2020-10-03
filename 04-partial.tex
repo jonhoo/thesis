@@ -1,7 +1,7 @@
 The addition of partial state significantly changes how query results are
 computed by the underlying dataflow system, and the system must ensure that
 partial state produces the same results with partial state as it did without.
-This chapter demonstrates how partial state is implemented in Noria such that
+This chapter explains how partial state is implemented in Noria such that
 the overall system maintains the invariants from \S\ref{s:noria:consistency}
 (page \pageref{i:no-spurious}) and \S\ref{s:eviction} (page
 \pageref{i:missing-suffix}).
@@ -22,11 +22,11 @@ early in the dataflow (\S\ref{s:missing}), and the system must ensure that it
 maintains Invariant~\ref{i:missing-suffix} (page \pageref{i:missing-suffix})
 whenever this happens.
 
-This chapter gives a correctness argument for partial state on top of Noria by
-outlining how partial state maintains the system invariants for dataflow of
-increasing complexity. Section~\ref{s:partial:linear} makes the argument for a
-single stand of dataflow. Section~\ref{s:partial:diverging} expands that
-argument to include dataflow with multiple diverging branches. And
+This chapter gives an informal correctness argument for partial state on top of
+Noria by outlining how partial state maintains the system invariants for
+dataflow of increasing complexity. Section~\ref{s:partial:linear} makes the
+argument for a single stand of dataflow. Section~\ref{s:partial:diverging}
+expands that argument to include dataflow with multiple diverging branches. And
 Section~\ref{s:partial:merging} completes the argument by also considering
 dataflow where multiple strands join together. Finally,
 Section~\ref{s:challenge:sharding} discusses how partial state interacts with
@@ -102,8 +102,7 @@ ultimately produced the entry for $k$ in $m$. Since updates are discarded only
 when they encounter missing state, a miss on $k$ anywhere in the dataflow
 implies that $k$ is also absent downstream.
 
-The system invariants are thus all upheld for any linear sequence of dataflow
-operators.
+The system invariants are thus all upheld for any operator sequence.
 
 \section{Diverging Dataflow}
 \label{s:partial:diverging}
@@ -135,7 +134,7 @@ upquery source instead. Since it is safe to process the same record through a
 stateless operator multiple times, this ensures that the processing of the
 upquery response on the path to the target state never duplicates effects.
 
-Partial state on divergent dataflow thus also upholds the system invariants.
+Partial state on divergent dataflow thus upholds the system invariants.
 
 \section{Merging Dataflow}
 \label{s:partial:merging}
@@ -150,8 +149,8 @@ ensure that they are combined in such a way that the system invariants are
 maintained.
 
 How upqueries work across multi-ancestor operators depends on the semantics of
-that operator. The two relational multi-ancestor operators, unions and joins,
-are discussed below.
+that operator. The only two relational multi-ancestor operators, unions and
+joins, are discussed below.
 
 \subsection{Unions}
 \label{s:upqueries:union}
