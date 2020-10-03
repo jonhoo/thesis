@@ -18,10 +18,11 @@ thesis.pdf: titlepage.pdf abstract.pdf \
 	    02-noria.tex \
 	    03-partial-model.tex \
 	    04-partial.tex \
-	    05-evaluation.tex \
-	    06-related-work.tex \
-	    07-discussion.tex \
-	    08-future-work.tex \
+	    05-implementation.tex \
+	    06-evaluation.tex \
+	    07-related-work.tex \
+	    08-discussion.tex \
+	    09-future-work.tex \
 	    A1-simpler-terms.tex \
 	    graphs/lobsters-throughput.pdf \
 	    graphs/lobsters-memory.pdf \
