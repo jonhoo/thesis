@@ -218,8 +218,8 @@ would be bottlenecked by the performance of the write path.
 
 Websites frequently have paginated listings, or pages that are filled in with
 more content as the user scrolls. Behind the scenes, these techniques are both
-implemented using the same abstract mechanism: the cursor. There are many ways to
-implement a cursor, but the most common is using the SQL \texttt{LIMIT}
+implemented using the same abstract mechanism: the cursor. There are many ways
+to implement a cursor, but the most common is using the SQL \texttt{LIMIT}
 operator.
 
 On page one of a listing page with 10 results per page, the listing query is run
@@ -264,11 +264,11 @@ partial state. In particular, operators must now have a way to determine if a
 state change causes records to appear in, or disappear from, materialized pages
 downstream. If they do not, updates may be discarded early even though they
 would change downstream materialized state. Furthermore, since intermediate
-operators may remove (e.g., filters) or add (e.g., joins) rows to the result set,
-the limit requested by the application may not map directly to the number of
-results yielded by the corresponding upquery. Therefore, page-specific upqueries
-may need to run multiple ``iterations'' to fetch additional results if the first
-response did not return enough rows.
+operators may remove (e.g., filters) or add (e.g., joins) rows to the result
+set, the limit requested by the application may not map directly to the number
+of results yielded by the corresponding upquery. Therefore, page-specific
+upqueries may need to run multiple ``iterations'' to fetch additional results if
+the first response did not return enough rows.
 
 \section{Column-Based Storage}
 

@@ -606,10 +606,10 @@ both views every 10 milliseconds.
   \centering
   \includegraphics{graphs/vote-migration.pdf}
   \caption{Top: Setting up and access a new view.\\ Bottom: Write performance
-  across the migration.\\ Access pattern is skewed such that 90\% of accesses are for
-  10\% of 10M stories (Zipf; $\alpha$=1.15). Benchmark runs for 90s prior to
-  migration (solid vertical line). The dashed vertical line denotes the end of
-  the migration without partial state.}
+  across the migration.\\ Access pattern is skewed such that 90\% of accesses
+  are for 10\% of 10M stories (Zipf; $\alpha$=1.15). Benchmark runs for 90s
+  prior to migration (solid vertical line). The dashed vertical line denotes the
+  end of the migration without partial state.}
   \label{f:vote-migration}
 \end{figure}
 
@@ -654,9 +654,9 @@ run smoothly even when only a small fraction of results are cached. Significant
 skew shows up across a wide range of other real-world
 datasets~\cite{power1,power2,network-skew,large-skew-analysis}, including many
 social networks~\cite{network-skew2, community-skew}. In a large public Amazon
-data set~\cite{amazon-skew}, the 100,000 most popular book titles (less than 5\%)
-account for roughly 50\% of all book sales, and 75\% of the sales are for the
-top 500,000 titles~\cite{zhang2020permutation}.
+data set~\cite{amazon-skew}, the 100,000 most popular book titles (less than
+5\%) account for roughly 50\% of all book sales, and 75\% of the sales are for
+the top 500,000 titles~\cite{zhang2020permutation}.
 
 In the vote benchmark, the decision of which stories to fetch and vote for is
 artificially skewed using a Zipfian probability distribution~\cite{zipf}; a

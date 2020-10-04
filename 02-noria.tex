@@ -80,10 +80,10 @@ application where users can vote for stories.
 
 To retrieve data, the application supplies Noria with an external view
 identifier (e.g., \texttt{StoriesWithVC}) and one or more sets of parameter
-values (\texttt{?} is a parameter). Noria then responds with the records in the view that match those
-values. To modify records in base tables, the application performs insertions,
-updates, and deletions, similar to a SQL database. Data is represented as
-structured records in tabular form~\cite{spanner, bigtable}.
+values (\texttt{?} is a parameter). Noria then responds with the records in the
+view that match those values. To modify records in base tables, the application
+performs insertions, updates, and deletions, similar to a SQL database. Data is
+represented as structured records in tabular form~\cite{spanner, bigtable}.
 
 The application may change its Noria program to add new views, to modify or
 remove existing views, and to adapt base table schemas. When it does, Noria
