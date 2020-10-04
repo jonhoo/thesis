@@ -1,1 +1,118 @@
-Goes here.
+Will be included in the final submission.
+
+\begin{comment}
+  Where do I even start to write an acknowledgments section for the past six
+  years, much less the many many early years that got me to MIT and PDOS in the
+  first place? Do I go chronologically? By how much of a difference they've made
+  to this thesis in particular? Or to my life more generally? I'm genuinely more
+  intimidated by this section than by the rest of this thesis.
+
+  I think where it feels right to start is to thank my parents for putting up
+  with my never-ending exploration of everything computer related. They may have
+  rarely understood much of what I was doing, but they encouraged me to continue
+  ``geeking out'', and boy did I. And the appendix that explains Noria in
+  simpler terms would never have existed were it not for my mom's endless desire
+  to understand what I was working on combined with her lack of interest in
+  listening to long-winded technical descriptions.
+
+  As far as this thesis is concerned, I would never have gotten here without the
+  help of Malte Schwarzkopf, who worked tirelessly by my side on Noria for many
+  years. Without him, the Noria paper would have never seen the light of day,
+  and many of Noria's key features, like SQL support and joint query
+  optimization, would not exist. Indeed, the name Noria was his idea!
+
+  The same can be said for my advisors, Robert Morris and Frans Kaashoek. Since
+  I first joined MIT, they have been patient, helpful, understanding, and
+  insightful at every turn. No matter the topic or severity, their door has
+  always been open. And despite my frequent detours into side-projects, or my
+  never-ending desire to TA ``just one more class'', they never forced my hand,
+  and instead let me find my own way back to research productivity. I knew from
+  when I first met Robert during MIT visit days that I wanted to work with
+  him\,---\,he has this uncanny ability to digest large amounts of complex
+  technical information and come up with succinct, innocent-sounding questions
+  that cut right to the core of some previously unidentified technical
+  challenge, design flaw, or incorrect assumption. This, combined with his
+  quiet, dry-wit demeanor makes Robert the person with the highest
+  quality-per-word ratio I have ever met. Meanwhile, Frans excels at holistic
+  thinking\,---\,he has a deep understanding of which narratives work, and which
+  do not, without losing sight of the technical contributions, and this thesis
+  wouldn't convince anyone of anything without Frans' guidance. He's also a
+  social being who knows \emph{everyone}, and is a delight to be with in social
+  settings. I couldn't have wished for a better team to guide me than the two of
+  them together.
+
+  % Sam Madden for being on the committee!
+
+  The Noria project similarly would not be what it is today without Eddie Kohler
+  from Harvard. He was key to getting the many Noria papers up through the years
+  over the finish line, provided invaluable experience from his past database
+  work, and inspired a number of interesting research directions for Noria.
+  Eddie also instilled in me the importance of thinking in terms of system
+  invariants, and even initially suggested the term ``upquery''!
+
+  There have also been countless students involved with the Noria project
+  over its lifetime, including Jonathan Behrens, who prototyped transaction
+  support in Noria; Martin Ek, who wrote Noria's durable storage backend; Lara
+  Timb\'{o} Ara\'{u}jo, Alana Marzoev, Samyukta Yagati, and Jackie Bredenberg
+  who extended Noria to support privacy and security policies; Nikhil Benesch
+  who was part of early Noria design discussions; Gina Yuang, who designed a
+  fault tolerance scheme for Noria; and Jonathan Guillotte-Blouin, who
+  implemented preliminary support for range queries. Their efforts, and that of
+  others, not only made Noria better in a technical sense, but also added to the
+  enthusiasm around the project, and inspired my continued work on it. Without
+  their involvement, the project may have died long ago.
+
+  I'd also like to acknowledge the influence of Frank McSherry on this work. Not
+  only was his take on the dataflow model a big factor in how Noria was
+  designed, but being able to bounce ideas off of him has been invaluable in
+  getting a sobering outside perspective. True to his name, Frank's advice is
+  always direct and honest, and this work is better as a result.
+
+  The Rust programming language community in general, and the Tokio project
+  maintainers in particular, have also contributed enormous technical value to
+  Noria. Not only by the tools and ecosystem they have built, but also through
+  a number of technical discussions that have improve the implementation of
+  Noria far beyond what I could have done on my own.
+
+  Beyond Noria specifically, I cannot overstate the impact my research group,
+  PDOS, had on my experience at MIT. Akshay, Amy, Anish, Atalay, Cody, David,
+  Derek, Frank, Inho, Josh, Lily, Neha, Tej, Zain, I will forever be grateful
+  for the interesting discussions I've had with you all over the years. And
+  especially my roommate Tej Chajed, with whom I've spent countless hours
+  debating every topic on earth from system designs to the point of research to
+  the meaning of words. Outside of PDOS, I am also indebted to Leilani Battle
+  and Max Wolf for opening up my eyes to the joy of board games, which have
+  sustained me through many a gray winter night, and to my other roommate, Davis
+  Blalock, whose never-ending curiosity was always a source of delight and fun
+  conversation.
+
+  I got into research in the first place in large part due to Phil Stocks and
+  Warren Toomey from Bond University in Australia, and Kyle Jamieson, Mark
+  Handley, and Brad Karp from University College London, all of whom inspired me
+  with their wisdom, insight, curiosity, and technical skill. Each one nudged my
+  appetite for research, and encouraged me down the path I ultimately took. I
+  also want to give a nod to Martin Kirkengen, my middle school math teacher,
+  who showed me the joy of figuring out how things work behind the scenes, and
+  Dave Stanley, my middle school English teacher, who taught me the value of not
+  being a smart-ass all the time.
+
+  Part of what let me keep my sanity through my PhD was my continued work at
+  Oksnøen, an activity summer camp for kids in Norway. For several weeks each
+  year, I'd unplug my computer and go there to take my mind off
+  \emph{everything}. Being outside, active, and social there recharged my mental
+  batteries in a way I cannot stress the importance of enough. And I owe my
+  ability to complete this work to my friends among the counselors there, and
+  the children who come back year after year and put joy in my heart.
+
+  These last few years, I also owe a great deal to my girlfriend, Talia Rossi,
+  who has always been there to listen when things have gotten tough, and to
+  remind me to not get too absorbed when things got hectic. Not to mention her
+  understanding and compassion when I sequester myself by my desk in an attempt
+  to finish this thesis.
+
+  And finally, I'd like to thank you who's reading this. Over the years it's
+  taken me to write this PhD, one of my primary drivers has been to build
+  something that would be useful to other people. If you're reading this, it
+  means that I can hopefully contribute something interesting to your life, and
+  that makes it all worth it.
+\end{comment}
