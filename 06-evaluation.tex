@@ -2,15 +2,15 @@ This thesis is built on the belief that view materialization is useful, but
 current implementations are too costly. It presents partial state as an
 implementation that allows retaining the benefits of view materialization at a
 fraction of the cost. This chapter evaluates the usefulness of view
-materialiation, and the efficacy of partial state:
+materialization, and the efficacy of partial state:
 
 \begin{enumerate}
   \item Why is view materialization desirable? (\S\ref{s:eval:why})
   \item Why is view materialization infeasible currently? (\S\ref{s:eval:why})
   \item Does partial state make view materialization feasible? (\S\ref{s:eval:why})
-  \item Why use Noria over ad-hoc caching solutions? (\S\ref{s:eval:alts})
+  \item Why use Noria over ad hoc caching solutions? (\S\ref{s:eval:alts})
   \item What are the trade-offs with partial state? (\S\ref{s:eval:cost})
-  \item How does Noria compare to ad-hoc solutions? (\S\ref{s:eval:kvperf})
+  \item How does Noria compare to ad hoc solutions? (\S\ref{s:eval:kvperf})
   \item Does partial state speed up view creation? (\S\ref{s:eval:mig})
   \item How does skew affect the efficacy of partial state? (\S\ref{s:eval:patterns})
 \end{enumerate}
@@ -39,11 +39,11 @@ emulate a larger user base for benchmarking.
     \hline
     Story & 55.8 & 1 & 14 & Renders an individual story's page, including its
     popularity score, comments, and the scores of its comments.\\
-    Frontpage & 30.1 & 0 & 14 & Lists the 25 most highly scored stories, along
+    Front page & 30.1 & 0 & 14 & Lists the 25 most highly scored stories, along
     with their authors and scores.\\
     User & 6.7 & 0 & 7 & Renders a user summary page, including what story
     ``tags'' they contribute to.\\
-    Comments & 4.7 & 0 & 9 & Like the frontpage, but for comments.\\
+    Comments & 4.7 & 0 & 9 & Like the front page, but for comments.\\
     Recent & 1.0 & 0 & 14 & 25 most recently added stories, along with their
     authors and scores.\\
     Vote & 1.2 & 1 & 2 & Vote up/down a given comment or story.\\
@@ -69,7 +69,7 @@ depending on the desired load factor.
 The benchmarks are all ``partially open-loop''~\cite{frank-open-loop}:
 clients generate load according to a workload-dictated distribution of
 interarrival-times, and has a limited number of backend requests outstanding,
-queueing additional requests. This ensures that clients maintain the measurement
+queuing additional requests. This ensures that clients maintain the measurement
 frequency even during periods of high latency. The test harness measures offered
 request throughput and ``sojourn time''~\cite{open-loop-cautionary-tale}, which
 is the delay the client experiences from request generation until a response
@@ -358,7 +358,7 @@ each page issues, as each one requires a round-trip to Noria.
 \end{figure}
 
 Partial's trade-off is that of memory use versus tail latency; as you allocate
-less memory to Noria, less of your tail can be pre-computed, and thus more of
+less memory to Noria, less of your tail can be precomputed, and thus more of
 your requests must be computed on-demand. Figure~\vref{f:lobsters-mem-latency}
 shows this trade-off in the steady state of the application by plotting the CDF
 of the sojourn latency across all requests with increasingly aggressive
@@ -468,7 +468,7 @@ cache warms up quickly.
 \section{Cache Lookup Performance}
 \label{s:eval:kvperf}
 
-Despite how error-prone the approach is (\S\ref{s:eval:alts}), ad-hoc
+Despite how error-prone the approach is (\S\ref{s:eval:alts}), ad hoc
 application caching is still common in practice. To present a viable
 alternative, Noria must not only reduce the developer burden of getting caching
 right; it must also offer competitive performance with manually constructed
@@ -545,12 +545,12 @@ The results show that Noria achieves about $\sfrac{2}{3}$ of the theoretical
 exact absolute numbers should be taken with several grains of salt, but they do
 provide an upper bound of sorts for Redis' performance. That Noria approaches
 this performance is a good indicator that Noria's cache hit performance is
-comparable to that of an ad-hoc caching implementation. And again, Noria does so
+comparable to that of an ad hoc caching implementation. And again, Noria does so
 while providing rich SQL queries, and without requiring application-specific
 caching logic.
 
 \paragraph{In summary,} Noria's absolute lookup performance is comparable to
-that achievable by using Redis as an ad-hoc query cache.
+that achievable by using Redis as an ad hoc query cache.
 
 \section{Bringing Up New Views}
 \label{s:eval:mig}
@@ -636,8 +636,8 @@ is no state in memory that must be updated, which increases throughput.
 \paragraph{In summary,} partial state enables fast adoption of new views without
 compromising the performance of concurrent writes. Such partial views also
 quickly satisfy most requests. In addition, by maintaining only a subset of
-computed state, partial state increases write throughput, since uncached entries
-do not need to be updated.
+computed state, partial state increases write throughput, since entries that are
+not in the cache do not need to be updated.
 
 \section{Skew}
 \label{s:eval:patterns}
@@ -654,7 +654,7 @@ run smoothly even when only a small fraction of results are cached. Significant
 skew shows up across a wide range of other real-world
 datasets~\cite{power1,power2,network-skew,large-skew-analysis}, including many
 social networks~\cite{network-skew2, community-skew}. In a large public Amazon
-dataset~\cite{amazon-skew}, the 100,000 most popular book titles (less than 5\%)
+data set~\cite{amazon-skew}, the 100,000 most popular book titles (less than 5\%)
 account for roughly 50\% of all book sales, and 75\% of the sales are for the
 top 500,000 titles~\cite{zhang2020permutation}.
 

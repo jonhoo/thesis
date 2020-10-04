@@ -172,7 +172,7 @@ efficient option is to disable partial
 state for \texttt{VoteCount}. This ensures that any upquery to it never misses,
 and therefore a table scan is never needed. Instead, the table scan is performed
 only once: when the view is initially added. But this comes at the cost of
-maintaining the entire resultset of the query for all parameter values.
+maintaining the entire result set of the query for all parameter values.
 
 \paragraph{Asymmetric Provenance.}
 The join in Listing~\ref{l:vote-src} uses a inner join ($\bowtie$), and Noria is

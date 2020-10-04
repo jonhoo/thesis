@@ -1,7 +1,7 @@
 This chapter explores the motivation behind this thesis, and gives a sketch of
 the proposed solution that is covered in the rest of the dissertation.
 Section~\ref{s:contrib} gives a succinct list of the thesis contributions, and
-Section~\ref{s:read} concludes with a roadmap for how to read the remainder of
+Section~\ref{s:read} concludes with a road map for how to read the remainder of
 the document.
 
 Non-technical readers should start with Appendix~\ref{s:simple} (on
@@ -46,7 +46,7 @@ high level in the traditional model: each query the application issues executes
 the query plan, represented by an aggregation and a join in the figure. Multiple
 concurrent queries execute independently, even if they run the same query.
 
-As a result, application authors often resort to ad-hoc, error-prone
+As a result, application authors often resort to ad hoc, error-prone
 techniques~\cite{ad-hoc-caching} to exploit their applications' workload
 patterns and satisfy impatient users. They change their database schemas by
 placing and updating computed values in the database tables, or introduce
@@ -59,7 +59,7 @@ database and the cache never leaves the system in an inconsistent state.
 
 \begin{figure}
   \centering
-  \includegraphics{diagrams/Motivation Ad-Hoc Cache.pdf}
+  \includegraphics{diagrams/Motivation Ad Hoc Cache.pdf}
   \caption{Application query execution against a cache in front of a database.
   Application queries first check for cached results, and only execute database
   queries if the results are not in cache. Thea application must invalidate
@@ -119,7 +119,7 @@ reads. In these systems, reads cannot access the materialized view directly, and
 must synchronize with the write-processing pipeline to get query results. They
 thus function poorly as a replacement for a cache: infrequently accessed results
 cannot be evicted, and reads must wait on writes. Many recent state-of-the-art
-materialized view systems are also restricted to a pre-declared set of queries,
+materialized view systems are also restricted to a predeclared set of queries,
 and cannot incorporate changes to the application query set without restarting.
 
 \section{Approach: Partial State}
@@ -128,7 +128,7 @@ Materialized views represent an ``almost there'' solution to automatic caching.
 They provide a great foundational mechanism for storing and maintaining query
 results efficiently in a way that meshes well with how applications already
 work: by issuing SQL queries. What is missing to make materialized views a
-viable replacement for the ad-hoc caching strategies today's applications employ
+viable replacement for the ad hoc caching strategies today's applications employ
 is a way to make the materialized views more dynamic. Specifically, to serve as
 a good cache-substitute, materialized views must support efficiently adding new
 queries and evicting old results at runtime.

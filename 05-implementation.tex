@@ -10,7 +10,7 @@ JSON over HTTP, or through a MySQL adapter~\cite{noria-mysql}.
 \paragraph{Storage.}
 The implementation maintains views in memory, and can maintain base tables
 either in memory (the default) or on disk using using RocksDB~\cite{rocksdb}, a
-key-value store based on log-structured merge (LSM) trees.
+key-value store based on log-structured merge trees.
 
 \paragraph{Missing State.}
 Noria does not store tombstones for results that are missing in a

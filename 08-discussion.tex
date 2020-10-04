@@ -151,12 +151,12 @@ later queries will increase.
 \subsection{Transactions}
 
 Web applications sometimes rely on database transactions, e.g., to atomically
-update pre-computed values. Noria does not implement transactions, though its
+update precomputed values. Noria does not implement transactions, though its
 support for derived views often obviates the need for them. For example, web
 applications often use transactions to keep denormalized schemas synchronized: a
 ``like count'' column in the table that stores posts or an ``average rating''
 column in the table that stores products. Noria obviates the need for such
-denormalizations, and the transactions needed to maintain them, by automatically
+denormalization, and the transactions needed to maintain them, by automatically
 ensuring that computed derived values are kept up to date with respect to the
 base data.
 
