@@ -48,7 +48,7 @@ author. Here, even though some rows with author B are present, the index entry
 for author B is still considered missing, since not \emph{all} rows with author
 B are present. This is necessary, as otherwise an application query for stories
 authored by B would return a result with missing rows, which violates
-Invariant~\ref{i:prefix-consistency}.
+Invariant~\ref{i:no-holes}.
 
 While there are no rows for authors C or D, C is considered complete because
 Noria has checked upstream that there are indeed no stories written by C. For D,
@@ -68,7 +68,7 @@ $B$, $A$ uses partial state, and $B$ does not use partial state. To see why,
 consider what would happen if an update arrives at $A$ for a missing entry. $A$
 would discard that update, and $B$'s state would never reflect that update even
 though it may reflect later updates, which violates
-Invariant~\ref{i:prefix-consistency}.
+Invariant~\ref{i:no-holes}.
 
 \section{Upqueries}
 \label{s:upqueries}
@@ -183,8 +183,8 @@ used a left or right \emph{outer} join, Noria must upquery a particular side of
 the join. For a left join, it must upquery the left ancestor, or risk missing
 rows in the left ancestor that have no matching rows in the right ancestor. This
 would result in those rows never appearing in downstream views, which violates
-Invariant~\ref{i:prefix-consistency}. For a right join, the same logic applies,
-but mirrored to the right ancestor.
+Invariant~\ref{i:no-holes}. For a right join, the same logic applies, but
+mirrored to the right ancestor.
 
 \paragraph{Disjoint Provenance.}
 If the provenance of a column crosses a union, \emph{all} ancestors of that
@@ -274,7 +274,7 @@ happens if an operator counts the number of votes per author, and contains a
 count of 7 for the author ``Jane''. Then, the state for ``Jane'' is evicted from
 some operator upstream of the count. If an update now arrives at the operator
 where ``Jane'' is missing it would discard the update, and the downstream count
-would remain perpetually stale, violating Invariant~\ref{i:prefix-consistency}.
+would remain perpetually stale, violating Invariant~\ref{i:no-holes}.
 
 To avoid this situation, Noria must ensure that when an entry is evicted, any
 dependent state downstream is also evicted. More formally, it must ensure that:

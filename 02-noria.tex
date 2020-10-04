@@ -261,7 +261,7 @@ than once, then the inserted row would appear more than twice by virtue of there
 (incorrectly) being multiple copies of it in the table.
 
 \begin{invariant}
-  \label{i:prefix-consistency}
+  \label{i:no-holes}
   A read that observes all effects of a given base table change also observes
   all effects of earlier changes to that base table that follow the same
   dataflow path.
@@ -304,11 +304,11 @@ output (subject also to Invariant~\ref{i:no-spurious}).
 
 When Noria's sharding feature is enabled, base tables are also sharded, which
 complicates the meaning of \emph{earlier} from
-Invariant~\ref{i:prefix-consistency}. In particular, concurrent updates to
-different shards of the same base table do not happen before or after each other
-in any well-defined way. Thus, a read that observes the effects of one base
-table change may not observe the effects of another change that happened before
-if that other update was issued to a different shard of the base table.
+Invariant~\ref{i:no-holes}. In particular, concurrent updates to different
+shards of the same base table do not happen before or after each other in any
+well-defined way. Thus, a read that observes the effects of one base table
+change may not observe the effects of another change that happened before if
+that other update was issued to a different shard of the base table.
 
 Noria's views can also be sharded, in which case the shards are updated
 independently. If the effects of an update are present in one shard of a view,

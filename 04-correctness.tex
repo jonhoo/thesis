@@ -13,9 +13,9 @@ of upstream state, and Noria must ensure that these snapshots do not cause reads
 to violate any of the system invariants. In particular, Noria must ensure that
 the upquery responses indeed represent a particular point in time, and include
 all earlier updates, and no later updates. If an upquery response did not
-include an earlier update, Invariant~\ref{i:prefix-consistency} would be
-violated. If it includes a later update, the application of that later update
-would violate Invariant~\ref{i:no-spurious}.
+include an earlier update, Invariant~\ref{i:no-holes} would be violated. If it
+includes a later update, the application of that later update would violate
+Invariant~\ref{i:no-spurious}.
 
 Partial state also causes deltas that encounter missing state to be discarded
 early in the dataflow (\S\ref{s:missing}), and the system must ensure that it
@@ -171,17 +171,17 @@ that response.
 C needs to remember that the missing state is still missing, so that it does not
 expose incomplete state downstream. For example, if it received an application
 read for $k = 1$, it could not reply with \textbf{just} A's state, as this might
-violate Invariant~\ref{i:prefix-consistency}. However, this alone is not
-sufficient to uphold the system invariants.
+violate Invariant~\ref{i:no-holes}. However, this alone is not sufficient to
+uphold the system invariants.
 
 Imagine that both A and B send one normal dataflow message each, and that they
 both include data for $k = 1$. When these messages reach C, C faces a dilemma.
 It cannot drop the messages, since the message from A includes data that was not
 included in A's upquery response. If it dropped them, those updates would be
 lost, and results downstream would not be updated, violating
-Invariant~\ref{i:prefix-consistency}. But it also cannot apply the messages,
-since B's message includes data that will be included in B's eventual upquery
-response. If it did, that data would be duplicated, which violates
+Invariant~\ref{i:no-holes}. But it also cannot apply the messages, since B's
+message includes data that will be included in B's eventual upquery response. If
+it did, that data would be duplicated, which violates
 Invariant~\ref{i:no-spurious}.
 
 \begin{listing}
@@ -381,7 +381,7 @@ materialization. But this violates Invariant~\ref{i:missing-suffix}, since there
 exists downstream state that reflects the discarded update. And indeed, when
 this happens, the state for article number 7 becomes empty (though not missing),
 and any subsequent read for article number 7 receives an empty response, which
-violates Invariant~\ref{i:prefix-consistency}.
+violates Invariant~\ref{i:no-holes}.
 
 What happened here was that the entry for key $k$ in the leaf-most
 materialization depends not only on state entries indexed by the same $k$
