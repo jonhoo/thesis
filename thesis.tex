@@ -185,7 +185,20 @@ paper~\cite{noria}.
 
 \chapter{Conclusion}
 
-\resume
+Web applications that have read-heavy, skewed workloads are poorly served by
+the database systems that are available to them today. While the database
+interface is flexible and convenient, too much extra work is required on the
+part of application authors to achieve the latency and throughput they need.
+Materialized views provide an excellent foundation for bridging this gap, but
+existing solutions lack support for eviction, on-demand query execution, and
+low-latency reads. Without those features, they cannot replace the caching
+infrastructure that applications authors currently build themselves. This
+dissertation has presented a model for partially materialized state, and an
+implementation of it in the materialized view system Noria, which allows
+materialized views to replace complex and error-prone ad hoc application query
+caches. Hopefully, the work from this dissertation finally makes materialized
+views practical for interactive web applications, and save future developers
+from implementing caching yet another time.
 
 \appendix
 \chapter{Noria In Simpler Terms}
