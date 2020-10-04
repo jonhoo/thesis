@@ -103,20 +103,21 @@ aggregations, joins, and filters. Base tables are the roots of this graph, and
 external views form the leaves. Noria extends the graph with new base tables,
 operators, and views as the application adds new queries.
 
-When an application write arrives, Noria applies it to a durable base table and
+When an application write arrives, Noria stores it in a base table and then
 injects it into the dataflow as an \emph{update}. Operators process the update
-and emit derived updates to their children; eventually updates reach and modify
+and emit derived updates to their children. Eventually, updates reach and modify
 the external views. Updates are \emph{deltas}~\cite{roll, differential-dataflow}
-that can add to, modify, and remove from downstream state. Deltas are similar to
+that add to, and remove from downstream state. Deltas are similar to
 mathematical multisets, or ``bags'', except that the multiplicity of an element
-may be negative. For example, a count operator emits deltas that indicate how
-the count for a key has changed; a join may emit an update that installs new
-rows in downstream state; and a deletion from a base table generates a
-``negative'' update that revokes derived records. Negative updates remove
-entries when Noria applies them to state, and retain their negative ``sign''
-when combined with other records (e.g., through joins). Negative updates hold
-exactly the same values as the positives they revoke and follow the same
-dataflow paths.
+may be negative.
+
+As an example, a count operator emits deltas that indicate how the count for a
+key has changed; a join may emit an update that installs new rows in downstream
+state; and a deletion from a base table generates a ``negative'' update that
+revokes derived records. Negative updates remove entries when Noria applies them
+to state, and retain their negative ``sign'' when combined with other records
+(e.g., through joins). Negative updates hold exactly the same values as the
+positives they revoke and follow the same dataflow paths.
 
 The combined deltas an operator emits from the beginning of time constitutes the
 operator's current state. This state may be entirely virtual, or the delta
