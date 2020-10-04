@@ -55,11 +55,11 @@ Noria has checked upstream that there are indeed no stories written by C. For D,
 Noria has not yet done an upstream check, and therefore does not know what the
 true result set is.
 
-If, while processing an update, Noria encounters missing state, this indicates
-that the update does not affect query results that the application has indicated
-interest in. In such a case, Noria has two options: eagerly compute the missing
-state before proceeding, or discard the update. To avoid unnecessarily
-maintaining unimportant cached results, Noria drops updates in this case.
+If Noria encounters missing state while processing an update, the update must
+not affect query results that the application has indicated interest in. In such
+a case, Noria has two options: eagerly compute the missing state before
+proceeding, or discard the update. To avoid unnecessarily maintaining
+unimportant cached results, Noria drops updates in this case.
 
 An important corollary of the above is that partial state must be enabled
 on all stored state \emph{below} any partial state. It is illegal for the
@@ -84,24 +84,22 @@ flows down the dataflow. It combines all past deltas pertinent to the upquery
 into a single update, and holds only positive deltas that represent the current
 set of relevant records.
 
-Operators are generally not aware whether they are processing an update that
-resulted from a base table change or an upquery response. The upquery response
-flows in-line with other dataflow updates, and follows the edges of the
-dataflow.
-
-Upquery responses are special in two key ways. First, they only propagate along
-edges towards the operator that issued the upquery, so that one upquery does not
-populate the relevant data in the state of \emph{every} operator. And second,
-if an operator encounters missing state while processing an upquery response
-update, it does \emph{not} discard that update as it would a regular dataflow
-update. Instead, it does the work necessary to fill the missing state and then
-process that update.
+Operators are not generally aware if they are processing an update that resulted
+from an upquery response. The upquery response flows in-line with other dataflow
+updates, and follows the edges of the dataflow. However, upquery responses are
+special in two key ways. First, they only propagate along edges towards the
+operator that issued the upquery, so that one upquery does not populate the
+relevant data in the state of \emph{every} operator. And second, if an operator
+encounters missing state while processing an upquery response update, it does
+\emph{not} discard that update as it would a regular dataflow update. Instead,
+it does the work necessary to fill the missing state and then process that
+update.
 
 When an application query encounters missing state in a view, Noria needs to
-know what upqueries to issue to fill that state. The set of necessary upqueries
-for each view is that view's \textit{upquery plan}. Noria determines upquery
-plans by analyzing each view's query when the application first installs that
-view, and deciding how best to recompute its results. It does so by finding all
+know what upqueries to issue to fill that state. The set of upqueries for each
+view is that view's \textit{upquery plan}. Noria determines upquery plans by
+analyzing each view's query when the application first installs that view, and
+deciding how best to recompute its results. It does so by finding all
 \emph{possible} upquery plans, choosing among them, and then informing all
 involved domains of the chosen plan. There may be multiple possible candidates
 if there are multiple equivalent ways to compute the missing state, such as by
@@ -109,15 +107,15 @@ changing the direction in which joins are executed as explained below.
 
 \subsection{Key Provenance Tracing}
 
-To determine what upqueries can be issued to reconstitute missing entries in a
-given index, Noria must trace the view's parameter column (the \texttt{?} in the
-query) back to a column in upstream state. The intuition here is that in order
-to answer the application's query of ``give me the results where column $C$ has
-value $x$'', Noria must be able to replay rows where $C = x$ from somewhere. Or,
-phrased differently, when the output for $C = x$ is missing, Noria must have a
-way to get the inputs that \emph{generate} $C = x$. As an example, if a view
-counts books by a given author, and the current count for author $a$ is missing,
-Noria must be able to somehow produce all books by author $a$.
+To determine what upqueries can reconstitute missing entries in a given index,
+Noria must trace the view's parameter column (the \texttt{?} in the query) back
+to a column in upstream state. The intuition here is that in order to answer the
+application's query of ``give me the results where column $C$ has value $x$'',
+Noria must be able to replay rows where $C = x$ from somewhere. Or, phrased
+differently, when the output for $C = x$ is missing, Noria must have a way to
+get the inputs that \emph{generate} $C = x$. As an example, if a view counts
+books by a given author, and the current count for author $a$ is missing, Noria
+must be able to somehow produce all books by author $a$.
 
 \begin{figure}[t]
   \centering
@@ -175,23 +173,23 @@ only once: when the view is initially added. But this comes at the cost of
 maintaining the entire result set of the query for all parameter values.
 
 \paragraph{Asymmetric Provenance.}
-The join in Listing~\ref{l:vote-src} uses a inner join ($\bowtie$), and Noria is
-therefore free to upquery \emph{either} side. If it upqueries the ``left'' side
-of the join, the regular processing pipeline will perform the necessary lookups
-into the ``right'' side of the join, and vice-versa. However, if the view query
-used a left or right \emph{outer} join, Noria must upquery a particular side of
-the join. For a left join, it must upquery the left ancestor, or risk missing
-rows in the left ancestor that have no matching rows in the right ancestor. This
-would result in those rows never appearing in downstream views, which violates
+The join in Listing~\ref{l:vote-src} is an inner join ($\bowtie$), so Noria can
+upquery \emph{either} side. If it upqueries the ``left'' side of the join,
+normal forward processing performs the necessary lookups into the ``right'' side
+of the join, and vice-versa. However, if the query used a left or right
+\emph{outer} join, Noria must upquery a particular side of the join. For a left
+join, it must upquery the left ancestor, or risk missing rows in the left
+ancestor that have no matching rows in the right ancestor. This would result in
+those rows never appearing in downstream views, which violates
 Invariant~\ref{i:no-holes}. For a right join, the same logic applies, but
 mirrored to the right ancestor.
 
 \paragraph{Disjoint Provenance.}
 If the provenance of a column crosses a union, \emph{all} ancestors of that
-union must be upqueried, as opposed to just one as is the case with upqueries
-through a join. Unlike with a join, the regular dataflow processing of the
-upquery response through a union will not bring along results from the other
-ancestors, so the requesting operator must ask them all individually.
+union must be upqueried, not just one as is the case with upqueries through a
+join. Unlike with a join, the regular dataflow processing of the upquery
+response through a union does not bring along results from the other ancestors,
+so the requesting operator must ask them individually.
 
 \subsection{Path Selection}
 \label{s:upquery:selection}
@@ -232,10 +230,10 @@ rely on forward incremental dataflow to compute the final results\,---\,a join
 strategy that cannot be executed incrementally is no good, no matter how well it
 might perform.
 
-Once Noria has decided on a plan, that plan is communicated to all domains
-that appear along each path in the plan. This is necessary so that each domain
-knows where to route upquery responses that are part of a given plan, and does
-not disseminate the response to the entire downstream dataflow.
+Once Noria has a plan, that plan is communicated to all domains that appear
+along each path in the plan. This is necessary so that each domain knows where
+to route upquery responses that are part of a given plan, and does not
+disseminate the response to the entire downstream dataflow.
 
 \subsection{Index Planning}
 
@@ -277,26 +275,25 @@ where ``Jane'' is missing it would discard the update, and the downstream count
 would remain perpetually stale, violating Invariant~\ref{i:no-holes}.
 
 To avoid this situation, Noria must ensure that when an entry is evicted, any
-dependent state downstream is also evicted. More formally, it must ensure that:
+dependent state downstream is also evicted:
 
 \begin{invariant}
   \label{i:missing-suffix}
-  If an operator encounters a missing state entry while processing a record $r$
-  in an update, any downstream state that reflects $r$ must be evicted.
+  If an operator encounters missing state while processing a record $r$ in an
+  update, any downstream state that reflects $r$ must be evicted.
 \end{invariant}
 
-Upqueries as described thus far, without evictions, generally uphold this
+Upqueries as described so far, without evictions, generally uphold this
 invariant\footnote{Though not always; see \S\ref{join-evictions}}. As upqueries
-recurse up the dataflow, missing state is filled in ``from the top down'' until
-the operator that originally issued the upquery is presented with the requested
-state. Any misses that occur during the processing of an upquery causes
-recursive upqueries, which fill that missing state before proceeding.
+recurse up the dataflow, they fill in missing state ``from the top down'' until
+the operator that originally issued the upquery receives the requested state.
+Misses that occur while processing an upquery causes recursive upqueries, which
+fill that missing state before proceeding.
 
 To uphold the property in the face of evictions, Noria issues evictions
-downstream whenever it decides to evict entries from state in the middle of the
-graph. This ensures that any future update that touches the evicted state can
-safely be discarded, as any relevant downstream state has been discarded as
-well.
+downstream whenever it evicts entries from state in the middle of the graph.
+This ensures that any future update that touches the evicted state can safely be
+discarded, as any relevant downstream state has been discarded as well.
 
 Invariant~\ref{i:missing-suffix} implies the rule from earlier that partial
 state cannot exist upstream of non-partial state. Since state cannot be evicted

@@ -7,24 +7,22 @@ Those are discussed in this chapter.
 
 Noria aims to improve the efficiency of certain classes of database-backed
 applications, but is not a one-size-fits-all solution. Noria's materialized
-views generally, and partial state specifically, are built specifically for
-applications that:
+views, and partial state specifically, are tailored for applications that:
 
 \begin{enumerate}
-  \item Are \textbf{read-heavy}. Noria's design is centered around making reads
-    cheap, often at the cost of write performance. For workloads where writes
-    are as frequent, or more frequent, than reads, other systems will work
-    better.
+  \item Are \textbf{read-heavy}. Noria's design centers around making reads
+    cheap, often at the expense of writes. For workloads where writes are as
+    frequent, or more frequent, than reads, other systems will work better.
   \item Tolerate \textbf{eventual consistency}, at least for large parts of the
     application's workload. Much of Noria's performance advantages over other
     systems stems from the relaxed consistency model. If much of the
     application's workload requires stronger consistency guarantees, there is
     little for Noria to speed up.
-  \item Experience \textbf{good locality}. If the application's access patterns
-    are all completely uniform, caching is much less impactful unless \emph{all}
-    results are cached. In that case, partial state, and the complexity it
-    introduces, provides little value. Instead, Noria works best if data and
-    access distributions are skewed, and demonstrate good temporal and spatial
+  \item Experience \textbf{good locality}. If the application's access pattern
+    is completely uniform, caching is unhelpful unless \emph{all} results are
+    cached. In that case, partial state, and the complexity it introduces,
+    provides little value. Instead, Noria works best if data and access
+    distributions are skewed, and demonstrate good temporal and spatial
     locality.
   \item Have \textbf{non-trivial computed state}, both in size and complexity.
     If all computed state fits in a small amount of memory, a materialized view
@@ -34,20 +32,19 @@ applications that:
     may work better.
 \end{enumerate}
 
-It is also worth noting that Noria may not perform as well as a fully developed,
-manually tuned backend caching system. While Noria would allow the removal of
-caching logic from the application, its general-purpose architecture may miss
-out on application-specific optimizations implemented by a tailor-built system.
+Noria may also not perform as well as a fully developed, manually tuned caching
+system. While Noria would allow the removal of caching logic from the
+application, its general-purpose architecture may miss out on
+application-specific optimizations implemented by a tailor-built system.
 
 \section{Emulating Partial State}
 \label{s:disc:emulating}
 
-A natural question to ask is whether the benefits of partial state can be
-achieved without the complexity that upqueries introduce. In particular, can a
-dataflow system that supports only full materialization emulate partial state
-effectively? Thoroughly exploring the answers to this question may be worth a
-thesis in its own right, but some of the more obvious approaches are discussed
-below.
+A natural question is whether the benefits of partial state can be achieved
+without the complexity of upqueries. In particular, can a dataflow system that
+supports only full materialization emulate partial state effectively? Thoroughly
+exploring the answers to this question may be worth a thesis in its own right,
+but some of the more obvious approaches are discussed below.
 
 \subsection{Lateral Joins}
 
@@ -100,13 +97,12 @@ other hand is small, but potentially expensive to re-compute.
 
 Partial state allows a single query of the form \texttt{WHERE x = ?} to satisfy
 lookups for any value of \texttt{?}. Without partial state, the system has two
-options: to remove the filter on \texttt{x} from the query and filter after the
-fact, or to instantiate a separate query for each concrete value of \texttt{?}
-supplied by the application. The former uses a significant amount of memory, but
-is also complicated to get right; \texttt{x} may for example affect what values
-are aggregated together. The latter is simpler, and uses less memory, but
-requires duplicating the dataflow operators for each query, and keeping separate
-state for each one.
+options: remove the filter on \texttt{x} from the query and filter after the
+fact, or instantiate a separate query for each concrete value of \texttt{?}. The
+former uses a significant amount of memory, but is also complicated to get
+right; \texttt{x} may for example affect what values are aggregated together.
+The latter is simpler, and uses less memory, but requires duplicating the
+dataflow operators for each query, and keeping separate state for each one.
 
 Recent work introduced arrangements~\cite{arrangements} as a way to mitigate
 this problem. Arrangements allow sharing indexes and state across related

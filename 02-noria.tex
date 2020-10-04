@@ -37,10 +37,9 @@ directly from that cache. To keep the materialized view current, Noria
 internally instantiates a dataflow program to continuously process the
 application's writes and update the views as appropriate.
 
-This kind of view materialization makes Noria particularly well-suited for
-read-heavy applications that tolerate eventual consistency, since it shifts
-query execution cost from reads, which are frequent, to writes, which are
-infrequent.
+This kind of view materialization makes Noria well-suited for read-heavy
+applications that tolerate eventual consistency, since it shifts query execution
+cost from reads, which are frequent, to writes, which are infrequent.
 
 \paragraph{Materialization.}
 Throughout this thesis, the word materialization is often used as a noun. In the
@@ -119,13 +118,12 @@ when combined with other records (e.g., through joins). Negative updates hold
 exactly the same values as the positives they revoke and follow the same
 dataflow paths.
 
-The combined deltas emitted by an operator from the beginning of time
-constitutes the operator's current state. This state may not be stored anywhere,
-or the delta stream may be \textit{materialized}, in which case the current
-multiset of records is stored by the system. It is helpful to think of
-\emph{edges} as being materialized, rather than operators or views, since a
-materialization is exactly equivalent to the evaluation of the deltas that have
-flowed across that edge.
+The combined deltas an operator emits from the beginning of time constitutes the
+operator's current state. This state may be entirely virtual, or the delta
+stream may be \textit{materialized}, in which case the current multiset of
+records is stored by the system. It is helpful to think of \emph{edges} as being
+materialized, rather than operators or views, since a materialization is exactly
+equivalent to the evaluation of the deltas that have flowed across that edge.
 
 Noria supports \emph{stateless} and \emph{stateful} operators. Stateless
 operators, such as filters and projections, need no state to process updates;
@@ -181,15 +179,14 @@ not flow down the dataflow past the filter, since there is nothing there for it
 to revoke. However, the positive delta should, since the story (with its updated
 count) now passes the filter.
 
-When the join operator receives this replacement update from the count, it
-performs a lookup into its other ancestor, \texttt{stories}, for records that
-match the join column value of each delta of the incoming update. In this case,
-both deltas (the negative one and the positive one) have the same story
-identifier as the join value, and the lookup finds only a single
-record\,---\,the matching story. The operator then joins each delta with each
-matching result. This produces an update that (still) contains one negative and
-one positive delta, but where each delta now includes additional columns from
-the \texttt{stories} table.
+When the join receives this replacement update from the count, it looks in its
+other ancestor, \texttt{stories}, for records that match the join column value
+of each delta of the incoming update. In this case, both deltas (the negative
+one and the positive one) have the same story identifier as the join value, and
+the lookup finds only a single record\,---\,the matching story. The operator
+then joins each delta with each matching result. This produces an update that
+(still) contains one negative and one positive delta, but where each delta now
+includes additional columns from the \texttt{stories} table.
 
 Ultimately, this two-delta update arrives at the operator that represents the
 external \texttt{StoryWithVC} view. The changes from the update are applied one
@@ -225,21 +222,21 @@ consistency with partial state requires additional mechanisms, as discussed in
 have this property.
 
 \paragraph{How Eventual?}
-While Noria does not guarantee exactly when a write is visible in a given view,
-the time between when a write is acknowledged and when it becomes visible should
-be short. A view is stale only while the write propagates through the dataflow,
-so the time before the write manifests depends only on the height and complexity
-of the dataflow for the view in question.
+While Noria does not guarantee when a write is visible in a given view, the time
+between when a write is acknowledged and when it becomes visible is short. A
+view is stale only while the write propagates through the dataflow, so the time
+before the write manifests depends only on the height and complexity of the
+dataflow for the view in question.
 
 \subsection{System Invariants}
 
 Eventual consistency is an inherently vague consistency model\,---\,an
-eventually consistent system is allowed to do anything, or nothing at all, as
-long as reads \emph{eventually} all return the right result. In practice,
-eventual consistency is often ``good enough'' despite giving few
-\emph{guarantees}, and many eventually consistent systems appear strongly
-consistent most of the time~\cite{eventual}. To ensure that Noria is indeed
-eventually consistent, Noria upholds two safety invariants:
+eventually consistent system may return incorrect results as long as it
+\emph{eventually} returns the right result. In practice, eventual consistency is
+often ``good enough'' despite giving few \emph{guarantees}, and many eventually
+consistent systems appear strongly consistent most of the time~\cite{eventual}.
+To ensure that Noria is indeed eventually consistent, Noria upholds two safety
+invariants:
 
 \begin{invariant}
   \label{i:no-spurious}
@@ -302,13 +299,13 @@ output (subject also to Invariant~\ref{i:no-spurious}).
 
 \subsubsection*{Sharding and Consistency}
 
-When Noria's sharding feature is enabled, base tables are also sharded, which
-complicates the meaning of \emph{earlier} from
-Invariant~\ref{i:no-holes}. In particular, concurrent updates to different
-shards of the same base table do not happen before or after each other in any
-well-defined way. Thus, a read that observes the effects of one base table
-change may not observe the effects of another change that happened before if
-that other update was issued to a different shard of the base table.
+When sharding is enabled, base tables are also sharded, which complicates the
+meaning of \emph{earlier} from Invariant~\ref{i:no-holes}. In particular,
+concurrent updates to different shards of the same base table do not happen
+before or after each other in a well-defined way. Thus, a read that observes
+the effects of one base table change may not observe the effects of another
+change that happened before if the other update went to a different base table
+shard.
 
 Noria's views can also be sharded, in which case the shards are updated
 independently. If the effects of an update are present in one shard of a view,
@@ -321,10 +318,10 @@ certain circumstances in stream processing systems~\cite{materialize-eventual}.
 This subsection covers a number of such cases.
 
 \paragraph{View Discrepancy.}
-If a client reads from view $V1$ and then from view $V2$, the read from $V2$ may
-reflect base table changes that are not yet visible in $V1$. Similarly, if view
-$V$ is sharded, and a client reads from two different shards, either read may
-reflect base table changes that are not reflected in the other.
+If a client reads from view $V_1$ and then from view $V_2$, the read from $V_2$
+may reflect changes that are not yet visible in $V_1$. Similarly, if view $V$ is
+sharded, and a client reads from two different shards, either read may reflect
+changes that are not reflected in the other.
 
 \paragraph{Incomplete Effects.}
 A client that reads form view $V$ may observe \emph{some} of the effects of a
@@ -366,14 +363,14 @@ produce the expected non-empty query result.
 
 \subsection{Why Does It Go Wrong?}
 
-Exactly how strange these phenomena become, and how frequently they manifest,
-depends on the nature of the queries and the updates. For example, queries that
-access each base table only once will produce results that are stale, but never
-results that do not match the results a traditional database would have given
-given the same base table data. Queries with self-joins on the other hand are
-particularly prone to these temporary inconsistencies. For example, a join that
-computes a parent-child relationship between records may briefly reflect a new
-record as a child, but not as a parent, or vice-versa.
+Exactly how strange these phenomena become, and how often they manifest, depends
+on the nature of the queries and the updates. For example, queries that access
+each base table only once produce results that are stale, but never results that
+do not match the results a traditional database would have given given the same
+base table data. Queries with self-joins on the other hand are particularly
+prone to these temporary inconsistencies. For example, a join that computes a
+parent-child relationship between records may briefly reflect a new record as a
+child, but not as a parent, or vice-versa.
 
 These inconsistencies arise due to race conditions in the dataflow graph. In
 particular, if two deltas resulting from a single upstream change race against
@@ -420,14 +417,14 @@ better suited systems.
 \section{Parallelism}
 \label{s:parallel}
 
-Servers have many cores, and any high-performance system must be able to take
-advantage of these cores to take full advantage of the hardware. Noria does so
-in several ways. First, it allows reads to happen independently from any number
-of threads concurrently. Second, it allows different threads to process writes
-in disjoint parts of the dataflow concurrently. And third, it supports sharding
-individual operators, or cliques of operators, so that multiple threads can
-process disjoint subsets of the data concurrently through the same dataflow
-segment. These three mechanisms are described further below.
+Servers have many cores, and high-performance systems must use these cores to
+take full advantage of the hardware. Noria does so in several ways. First, it
+allows reads to happen independently from any number of threads concurrently.
+Second, it allows different threads to process writes in disjoint parts of the
+dataflow concurrently. And third, it supports sharding individual operators, or
+cliques of operators, so that multiple threads can process disjoint subsets of
+the data concurrently through the same dataflow segment. These three mechanisms
+are described further below.
 
 \subsection{Read Independence}
 
@@ -455,11 +452,10 @@ serialization and read/write system calls.
 \subsection{Partitioning}
 \label{s:noria:partitioning}
 
-The dataflow model is attractive because it is inherently streaming, and thus
-particularly well-suited for distributed deployments. Operators are independent
-and communicate only through their streams, so Noria can easily place them
-on different cores, or hosts, and use the appropriate messaging fabric to
-connect them.
+The dataflow model is inherently streaming, and thus well-suited for distributed
+deployments. Operators are independent and communicate only through their
+streams, so Noria can place them on different cores, or hosts, and use
+appropriate messaging fabrics to connect them.
 
 Tot take advantage of this, Noria divides the dataflow graph into a number of
 sub-graphs called \textit{thread domains}. Only a single thread can process
@@ -496,17 +492,17 @@ R's state was in a different domain than J, then the following can happen:
 \begin{enumerate}
   \item R receives and incorporates a delta $d_R$ that adds row $r_R$.
   \item J receives a delta $d_L$ from L that adds row $r_L$.
-  \item J performs a lookup into R's state based on $d_L$'s join key. The result
-        includes $r_R$, so J emits a delta that adds $r_L \bowtie r_R$.
+  \item J performs a lookup in R's state based on $d_L$'s join key. The result
+    includes $r_R$, so J emits a delta that adds $r_L \bowtie r_R$.
   \item $d_R$ arrives at J.
-  \item J performs a lookup into L's state based on $d_R$'s join key. The result
-        necessary includes $r_L$, so J emits a delta that adds $r_L \bowtie r_R$
-        a second time.
+  \item J performs a lookup in L's state based on $d_R$'s join key. The result
+    includes $r_L$, so J emits a delta that adds $r_L \bowtie r_R$ a second
+    time.
 \end{enumerate}
 
-This issue arises because the lookups bypass deltas that are in-flight between R
-and J. The lookups thus get to observe ``the future''. This erroneously causes J
-to incorporate the same data at two points in time, which violates
+This issue arises because the lookups bypass deltas in flight between R and J;
+the lookups get to observe ``the future''. This erroneously causes J to
+incorporate the same data at two points in time, which violates
 Invariant~\ref{i:no-spurious}.
 
 Multi-version concurrency control could likely be used to solve this problem,

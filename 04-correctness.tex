@@ -1,9 +1,9 @@
-The addition of partial state significantly changes how query results are
-computed by the underlying dataflow system, and the system must ensure that
-partial state produces the same results with partial state as it did without.
-This chapter explains how partial state is implemented in Noria such that
-the overall system maintains the invariants from \S\ref{s:noria:consistency}
-(page \pageref{i:no-spurious}) and \S\ref{s:eviction} (page
+Partial state significantly changes how query results are computed by the
+underlying dataflow system, and the system must ensure that partial state
+produces the same results with partial state as it did without. This chapter
+explains how partial state is implemented in Noria such that the overall system
+maintains the invariants from \S\ref{s:noria:consistency} (page
+\pageref{i:no-spurious}) and \S\ref{s:eviction} (page
 \pageref{i:missing-suffix}).
 
 The biggest change that partial state introduces is that multiple updates may
@@ -22,11 +22,11 @@ early in the dataflow (\S\ref{s:missing}), and the system must ensure that it
 maintains Invariant~\ref{i:missing-suffix} (page \pageref{i:missing-suffix})
 whenever this happens.
 
-This chapter gives an informal correctness argument for partial state on top of
-Noria by outlining how partial state maintains the system invariants for
-dataflow of increasing complexity. Section~\ref{s:partial:linear} makes the
-argument for a single stand of dataflow. Section~\ref{s:partial:diverging}
-expands that argument to include dataflow with multiple diverging branches. And
+This chapter gives an informal correctness argument for partial state in Noria
+by outlining how partial state maintains the system invariants for dataflow of
+increasing complexity. Section~\ref{s:partial:linear} makes the argument for a
+single stand of dataflow. Section~\ref{s:partial:diverging} expands that
+argument to include dataflow with multiple diverging branches. And
 Section~\ref{s:partial:merging} completes the argument by also considering
 dataflow where multiple strands join together. Finally,
 Section~\ref{s:challenge:sharding} discusses how partial state interacts with
@@ -41,17 +41,16 @@ case that computing missing results with an upquery that combines all past
 deltas into a single update produces the same results as processing the same
 deltas one-at-a-time.
 
-The deltas that flow through the dataflow system represent changes to the
-logical output state of the operator that produced the delta. If a base table
-produces a negative delta for a row $r$, it means that row $r$ is no longer part
-of that base table's current state. An upquery fetches current state, which is
-the sum of all past deltas emitted by the queried operator\footnote{As mentioned
-in \S\ref{s:missing}, if the dataflow encounters missing state while processing
-an update, it will discard that update. This means that there may be holes in an
-operator's logical current state. If an upquery encounters such a hole, the
-dataflow fills that hole with another upquery before proceeding.}, and then
-feeds it through the same chain of dataflow operators that individual deltas go
-through.
+Recall that the deltas that flow through the dataflow represent changes to the
+current state of the operator that emitted the delta. If a base table produces
+a negative delta for a row $r$, it means that $r$ is no longer in that base
+table's current state. An upquery fetches current state\,---\,the sum of all
+past deltas emitted by the queried operator\footnote{As mentioned in
+\S\ref{s:missing}, if the dataflow encounters missing state while processing an
+update, it discards that update. This means that there may be holes in an
+operator's state. If an upquery encounters such a hole, the dataflow fills the
+hole with another upquery before proceeding.}\,---\,and feeds it through the
+same chain of dataflow operators that individual deltas go through.
 
 For upquery processing to be equivalent to one-at-a-time delta processing, it is
 necessary that processing a combined update through all the dataflow operators
@@ -139,14 +138,12 @@ Partial state on divergent dataflow thus upholds the system invariants.
 \section{Merging Dataflow}
 \label{s:partial:merging}
 
-In practice, most applications include at least one join or union in their
-queries. When they do, strands of dataflow combine to produce joint output that
-depends on multiple inputs. And crucially, such dataflow constructions introduce
-the possibility of data races. Now, updates may arrive to an operator from two
-inputs in parallel, and the operator may process either update before the other.
-Furthermore, upqueries must now retrieve data from \emph{all} ancestors, and
-ensure that they are combined in such a way that the system invariants are
-maintained.
+Most applications use joins or unions in their queries, which cause strands of
+dataflow to combine. Such dataflow constructions introduce the possibility of
+data races. Now, updates may arrive at an operator from two inputs at the same
+time, and the operator may process either one before the other. Furthermore,
+upqueries must now retrieve data from \emph{all} ancestors, and ensure that they
+combine such that the system invariants are maintained.
 
 How upqueries work across multi-ancestor operators depends on the semantics of
 that operator. The only two relational multi-ancestor operators, unions and
@@ -162,26 +159,26 @@ the operator separately, and take the union of the responses to populate all the
 missing state.
 
 With concurrent processing, the multiple resulting responses may be arbitrarily
-delayed between the different upquery paths, which can cause issues. Consider
-a union, U, across two inputs, A and B, with a single materialized and partial
-downstream operator C. C discovers that it needs the state for $k = 1$, and
-sends an upquery for $k = 1$ to both A and B. A responds first, and C receives
-that response.
+delayed between the different upquery paths, which can cause issues. Consider a
+union, $U$, across two inputs, $A$ and $B$, with a single materialized and
+partial downstream operator $C$. $C$ discovers that it needs the state for $k =
+1$, and sends an upquery for $k = 1$ to both $A$ and $B$. $A$ responds first,
+and $C$ receives that response.
 
-C needs to remember that the missing state is still missing, so that it does not
-expose incomplete state downstream. For example, if it received an application
-read for $k = 1$, it could not reply with \textbf{just} A's state, as this might
-violate Invariant~\ref{i:no-holes}. However, this alone is not sufficient to
-uphold the system invariants.
+$C$ must remember that the missing state is still missing lest it expose
+incomplete state downstream. If it received an application read for $k = 1$, it
+could not reply with \textbf{just} $A$'s state, as this might violate
+Invariant~\ref{i:no-holes}. However, this alone is not sufficient to uphold the
+system invariants.
 
-Imagine that both A and B send one normal dataflow message each, and that they
-both include data for $k = 1$. When these messages reach C, C faces a dilemma.
-It cannot drop the messages, since the message from A includes data that was not
-included in A's upquery response. If it dropped them, those updates would be
+Imagine that both $A$ and $B$ send one normal dataflow message each, and both
+include data for $k = 1$. When these messages reach $C$, $C$ faces a dilemma. It
+cannot drop the messages, since the message from $A$ includes data that was not
+included in $A$'s upquery response. If it dropped them, those updates would be
 lost, and results downstream would not be updated, violating
 Invariant~\ref{i:no-holes}. But it also cannot apply the messages, since B's
-message includes data that will be included in B's eventual upquery response. If
-it did, that data would be duplicated, which violates
+message includes data that will be included in $B$'s eventual upquery response.
+If it did, that data would be duplicated, which violates
 Invariant~\ref{i:no-spurious}.
 
 \begin{listing}
@@ -274,9 +271,8 @@ These are all the upqueries that pass through $\cup_1$:
 \end{description}
 \end{multicols}
 
-$\cup_1$ must combine these in pairs such that every downstream union receives
-the responses that they expect from each of their inputs. The grouping that
-achieves this is:
+$\cup_1$ must combine these so that each downstream union receives the responses
+that they expect from their inputs. This grouping achieves that:
 
 \begin{multicols}{2}
 \begin{description}
@@ -288,21 +284,20 @@ achieves this is:
 \end{multicols}
 
 The key observation is that the distinction between $a$ and $b$ does not matter
-any longer downstream of $\cup_1$; a delta that arrived from $a$ is
-indistinguishable from one that arrived from $b$. Similarly, the distinction
-between $c$ and $d$ no longer matters past $\cup_2$, and the same for $e$ and
-$f$ past $\cup_3$. \texttt{upquery\_path\_group} is thus defined as a unique
-identifier for $v$'s upquery plan plus the sequence of nodes between the union
-and the target of the upquery response.
+downstream of $\cup_1$; a delta that arrived from $a$ is indistinguishable from
+one that arrived from $b$. Similarly, the distinction between $c$ and $d$ no
+longer matters past $\cup_2$, and the same for $e$ and $f$ past $\cup_3$.
+\texttt{upquery\_path\_group} is thus defined as a unique identifier for $v$'s
+upquery plan plus the sequence of nodes between the union and the target of the
+upquery response.
 
 \subsection{Joins}
 
-For unions the upquery must go to all the ancestors. For joins on the other
-hand, the upquery must only go to \textbf{one} ancestor. This is because when a
-join processes a message from one ancestor, it already queries the ``other''
-ancestor and thus pulls in any relevant state. If both sides of the join were
-queried, the processing of the upquery responses at the join would produce
-duplicates of every record.
+Upqueries across unions must go to all the ancestors. But across joins,
+upqueries must only go to \textbf{one} ancestor. This is because a join that
+processes a message from one ancestor already queries the ``other'' ancestor and
+pulls in relevant state from there. If both sides were queried, the processing
+of the upquery responses at the join would produce duplicates of every record.
 
 Noria supports two types of joins: inner joins and partial outer joins (i.e.
 ``left'' and ``right'' joins). For an inner join, either ancestor can be the
@@ -345,31 +340,31 @@ upquery response from the right parent. That upquery response may require a
 lookup into the left parent's state, which may itself encounter missing entries.
 The join is then forced to block on both inputs perpetually.
 
-Instead, the join \emph{discards} the current upquery response, and notes down
-the upquery parameters that triggered it, and the missing state it is waiting to
-be filled. It then continues processing the next update as normal. When all the
-missing entries are eventually filled in, the system \emph{re-issues} the
-original upquery to the join's left parent using the parameters it saved. This
-time, when the upquery response arrives, all entries required for the lookups
-into the right-hand parent's state should be present, and the downstream upquery
-response is produced. As far as the downstream dataflow is concerned, nothing
-abnormal has happened\,---\,the upquery response just took longer to arrive.
+Instead, the join \emph{discards} the current upquery response, and remembers
+the upquery parameters that triggered it, and the missing state that must be
+filled. It then continues processing the next update as normal. When the missing
+entries are eventually filled, Noria \emph{re-issues} the original upquery to
+the join's left parent using the saved parameters. This time, all entries
+required for the lookups into the right-hand parent's state are present, and the
+downstream upquery response can be produced. As far as the downstream dataflow
+is concerned, nothing abnormal has happened\,---\,the upquery response just took
+longer to arrive.
 
 \subsubsection{Incongruent Joins}
 \label{join-evictions}
 
 As discussed in \S\ref{s:partial:linear}, if some key $k$ is present in a
-materialization $m$, it must also be present at every materialization above $m$
-from the upquery chain that ultimately produced the entry for $k$ in $m$.
-However, certain query graphs produce dataflow where more than one key is used
-in the dataflow to compute an entry. Consider a dataflow that joins two inputs,
-\texttt{story} and \texttt{user}, on the story's author field. A downstream
-operator issues an upquery for story number 7. The upquery is issued to
-\texttt{story}, which produces a message that contains story number 7 with
-author ``Elena''. That message arrives at the join, which issues a dependent
-upquery to \texttt{user} for ``Elena''. When that dependent upquery resolves,
-the join produces the final upquery response, and the state for story number 7
-is populated in the downstream materialization.
+materialization $m$, it is also present at every materialization above $m$ from
+the upquery chain that ultimately produced the entry for $k$ in $m$. However,
+certain query graphs produce dataflow where more than one key is used to compute
+an entry. Consider a dataflow that joins two inputs, \texttt{story} and
+\texttt{user}, on the story's author field. A downstream operator issues an
+upquery for story number 7. The upquery is issued to \texttt{story}, which
+produces a message that contains story number 7 with author ``Elena''. That
+message arrives at the join, which issues a dependent upquery to \texttt{user}
+for ``Elena''. When that dependent upquery resolves, the join produces the final
+upquery response, and the state for story number 7 is populated in the
+downstream materialization.
 
 Next, an editor changes the author for story number 7 to ``Talia''. This
 takes the form of a delta with a negative multiplicity record for \texttt{[7,
@@ -422,11 +417,11 @@ thus in Noria as a whole.
 \section{Sharding}
 \label{s:challenge:sharding}
 
-Noria supports sharding cliques of operators to increase the throughput of
-particular sections of the dataflow (\S\ref{s:noria:sharding}). And upqueries
-must also work Noria decides to shard operators in this way. Partial state with
+Noria supports sharding cliques of operators to add parallelism to particular
+sections of the dataflow (\S\ref{s:noria:sharding}). When Noria decides to shard
+operators in this way, upqueries must continue to work. Partial state with
 sharding mainly follows the rules of partial across unions
-(\S\ref{s:upqueries:union}), with the following three modifications:
+(\S\ref{s:upqueries:union}), with three changes:
 
 First, if the node that receives the upquery, R, is sharded the same way as the
 querying node, Q, the upquery is sent \emph{only} to the same shard of R as the

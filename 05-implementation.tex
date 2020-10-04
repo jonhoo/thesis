@@ -21,8 +21,8 @@ allows even empty results to be evicted to save space.
 \paragraph{Upquery Bypass.}
 When Noria encounters missing state and issues an upquery, it sends that
 upquery directly to the root of the upquery path. This saves sending the
-message along all the intervening edges, but does not affect correctness since
-the intermediate operators do nothing but forward the upquery upstream.
+message along internal edges, but does not affect correctness as the
+intermediate operators only forward the upquery upstream.
 
 \paragraph{Batching.}
 Noria uses several time-limited batching buffers to improve performance. Writes

@@ -176,18 +176,16 @@ The main contributions of this thesis are:
 \begin{itemize}
  \item A model for, and implementation of, partial state in a dataflow-based
    materialized view system.
- \item An algorithm for implementing upqueries to populate missing state on
-   demand.
+ \item Upqueries\,---\,a mechanism that populates missing state on demand.
  \item An analysis of the inconsistencies that arise when introducing partial
    state to a distributed, high-performance stateful dataflow processing system
     where updates can race with one another, and with upqueries.
  \item Techniques for overcoming those inconsistencies while preserving system
    correctness, performance, and scalability.
  \item Micro and macro evaluations of the performance and memory benefits of
-   introducing partial state to dataflow. Experimental results suggest that the
-    presented system increases supported application load by up to $20\times$
-    over MySQL, and reduces memory use by up to $\sfrac{2}{3}$ compared to
-    existing approaches.
+   partial state. Experimental results suggest that the presented system
+    increases supported application load by up to $20\times$ over MySQL, and
+    reduces memory use by up to $\sfrac{2}{3}$ compared to existing approaches.
 \end{itemize}
 
 \section{Reading Guide}
