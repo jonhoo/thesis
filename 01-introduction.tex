@@ -62,9 +62,9 @@ database and the cache never leaves the system in an inconsistent state.
   \includegraphics{diagrams/Motivation Ad Hoc Cache.pdf}
   \caption{Application query execution against a cache in front of a database.
   Application queries first check for cached results, and only execute database
-  queries if the results are not in cache. Thea application must invalidate
-  cached results to ensure that later reads see the effects of new writes. The
-  application logic for both reads (\textbf{\color{set2}orange}) and writes
+  queries if the results are not cached. The application invalidates cached
+  results so that later reads see the effects of new writes. The application
+  logic for both reads (\textbf{\color{set2}orange}) and writes
   (\textbf{\color{set1}blue}) is more complex.}
   \label{f:motivation-adhoc}
 \end{figure}
@@ -98,11 +98,11 @@ underlying data changes~\cite{materialized-survey}.
 \begin{figure}
   \centering
   \includegraphics{diagrams/Motivation Materialized Views.pdf}
-  \caption{Application query execution against a database with materialized
-  views. All application views hit the materialized view, leading to simple
-  yet fast reads (\textbf{\color{set2}orange}). The database engine must
-  determine the effects of every write and update any materialized views to
-  reflect changes (\textbf{\color{set1}blue}).}
+  \caption{Application query execution against a materialized view. Application
+  queries only hit the view, which gives simple yet fast reads
+  (\textbf{\color{set2}orange}). The database must determine the effects of
+  every write and update the views to reflect changes
+  (\textbf{\color{set1}blue}).}
   \label{f:motivation-materialized}
 \end{figure}
 
