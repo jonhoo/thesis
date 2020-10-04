@@ -282,10 +282,10 @@ data may be updated at any time, including \emph{just} after a client has
 fetched the (then) latest data from the database.
 
 Because of the challenges above, implementing caching ``correctly'' requires
-highly sophisticated machinery~\cite{facebook-memcache, transactional-cache,
-orm-cache, sql-cache}, which developers may not even think to employ. A survey
-from 2016 found that 0.3-3.0\% of application code spread across 2.1-10.8\% of
-the application's source files is caching-related, and that cache-related issues
+highly sophisticated machinery~\cite{facebook-memcache, txcache, orm-cache,
+sql-cache}, which developers may not even think to employ. A survey from 2016
+found that 0.3-3.0\% of application code spread across 2.1-10.8\% of the
+application's source files is caching-related, and that cache-related issues
 make up 1-5\% of all issues~\cite{caching-is-hard}.
 
 With Noria, there is no need to maintain such a query result cache, as Noria's
