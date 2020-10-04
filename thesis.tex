@@ -1,4 +1,4 @@
-\documentclass[fontsize=12pt,paper=letter,draft=true]{scrbook}
+\documentclass[fontsize=12pt,paper=letter,overfullrule=yes]{scrbook}
 
 % for 1.5 line spacing
 \usepackage{setspace}
@@ -56,6 +56,9 @@
 
 % for \sfrac
 \usepackage{xfrac}
+
+% for \ifoptionfinal
+\usepackage{ifdraft}
 
 % do not reset page numbers at \mainmatter
 \let\mainmatterorig\mainmatter
@@ -132,7 +135,7 @@ paper~\cite{noria}.
 
 \section*{Acknowledgments}
 \begin{spacing}{1}
-  \input{00-acknowledgements.tex}
+  \ifoptionfinal{\input{00-acknowledgements.tex}}{Will be included in the final submission.}
 \end{spacing}
 
 \tableofcontents
