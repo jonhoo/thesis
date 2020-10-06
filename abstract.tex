@@ -22,17 +22,16 @@
     \end{addmargin}
   \end{center}
 
-  \vspace{0.5\baselineskip}
   \begin{flushleft}
   ABSTRACT
   \vspace{0.5\baselineskip}
 
   This thesis proposes a practical database system that lowers latency and
-    increases supported load for read-heavy applications. Where traditional
-    databases repeatedly re-execute queries, the presented system uses
+    increases supported load for read-heavy applications by using
     incrementally-maintained materialized views to cache query results. As
-    opposed to state-of-the-art systems, the presented system builds the cache
-    on demand, and evicts cache entries in response to a shifting workload.
+    opposed to state-of-the-art materialized view systems, the presented system
+    builds the cache on demand, and evicts cache entries in response to a
+    shifting workload.
 
   \vspace{0.5\baselineskip}
 
@@ -40,13 +39,18 @@
     stateful materialization}, which allows entries in materialized views to be
     \textit{missing}. The thesis introduces \textit{upqueries} as a mechanism to
     fill such missing state on demand in Noria, a materialized view system built
-    using dataflow.
+    using dataflow. The thesis also introduces mechanisms needed to establish
+    eventual consistency for partially stateful dataflow.
 
   \vspace{0.5\baselineskip}
 
-  Experimental results suggest that the presented system increases supported
-    application load by up to $20\times$ over MySQL, and reduces memory use by
-    up to $\sfrac{2}{3}$ compared to existing approaches.
+  The presented system saves application developers from implementing their own
+    ad hoc caching mechanisms to speed up their database accesses. Instead, the
+    caching is built directly into the database, and is transparent to the
+    application. Experimental results suggest that the presented system
+    increases supported application load by up to $20\times$ over MySQL,
+    performs similarly to an optimized key-value store, and reduces memory use
+    by up to $\sfrac{2}{3}$ compared to traditional materialized views.
 
   \vspace{\baselineskip}
   Thesis Supervisor: Robert Tappan Morris\\

@@ -75,6 +75,10 @@ request throughput and ``sojourn time''~\cite{open-loop-cautionary-tale}, which
 is the delay the client experiences from request generation until a response
 returns from the backend.
 
+To capture the variance of measurements, the benchmarks use
+HdrHistogram~\cite{hdrhistogram}, a data structure that efficiently captures and
+represents histograms with a high dynamic range over large numbers of samples.
+
 All experiments measure memory use using the resident virtual memory of the
 server process (VmRSS). This measurement therefore includes all indexes, runtime
 allocations, and other bookkeeping metadata. For Noria, it also includes the

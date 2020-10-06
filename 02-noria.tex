@@ -137,6 +137,10 @@ new votes efficiently. Noria's joins are stateless, but require that the state
 of their inputs be materialized to allow an update arriving at one input to join
 with all relevant state from the other.
 
+Noria always processes updates in order along any given dataflow edge, but
+chooses non-deterministically among different input edges which one to process
+updates from next.
+
 \subsection*{Example Execution}
 
 \begin{figure}[t]
@@ -201,116 +205,43 @@ To achieve high parallel processing performance, Noria's dataflow avoids
 global progress tracking or coordination. An update injected at a base table
 takes time to propagate through the dataflow, and the update may appear in
 different views at different times. Noria operators and the contents of its
-external views are thus \emph{eventually-consistent}. Eventual consistency is
-attractive for performance and scalability, and is sufficient for many web
-applications~\cite{eventually-consistent, facebook-memcache, pnuts}. In
-particular, Noria ensures that if writes quiesce, all external views eventually
-hold results that are the same as if the queries had been executed directly
-against the base table data.
+external views are thus \emph{eventually-consistent}: if writes quiesce,
+external views eventually hold results that are the same as if the queries were
+executed directly against the base table data at a single point in time.
+Eventual consistency is attractive for performance and scalability, and is
+sufficient for many web applications~\cite{eventually-consistent,
+facebook-memcache, pnuts}.
 
-Ensuring even this relatively weak property requires some care. Like most
-dataflow systems, Noria requires that operators are deterministic functions over
-their own state and the inputs from their ancestors. Furthermore, operators must
-be distributive over delta addition\footnote{$d_1 + d_2$ produces the union of
-all rows in $d_1$ or $d_2$ with the signed multiplicity of each row equal to the
-algebraic sum of that row's signed multiplicity in $d_1$ and $d_2$.} so that
-evaluating the query using tuple-at-a-time processing is equivalent to
-evaluating the whole query at once. Finally, Noria operators must be commutative
-so that operators with multiple inputs, like unions and joins, can process their
-inputs in any order without coordination\footnote{Maintaining eventual
-consistency with partial state requires additional mechanisms, as discussed in
-\S\ref{s:correct}.}. The standard relational operators that Noria supports all
-have this property.
-
-\paragraph{How Eventual?}
-While Noria does not guarantee when a write is visible in a given view, the time
-between when a write is acknowledged and when it becomes visible is short. A
-view is stale only while the write propagates through the dataflow, so the time
-before the write manifests depends only on the height and complexity of the
-dataflow for the view in question.
-
-\subsection{System Invariants}
+% In the meantime
 
 Eventual consistency is an inherently vague consistency model\,---\,an
 eventually consistent system may return incorrect results as long as it
 \emph{eventually} returns the right result. In practice, eventual consistency is
 often ``good enough'' despite giving few \emph{guarantees}, and many eventually
 consistent systems appear strongly consistent most of the time~\cite{eventual}.
-To ensure that Noria is indeed eventually consistent, Noria upholds two safety
-invariants:
 
-\begin{invariant}
-  \label{i:no-spurious}
-  All reads reflect each base table change at most once.
-\end{invariant}
+Ensuring even this relatively weak property requires some care. Like most
+dataflow systems, Noria requires that operators are \textbf{deterministic}
+functions over their own state and the inputs from their ancestors. Furthermore,
+operators must be \textbf{distributive over delta addition}\footnote{$d_1 + d_2$
+produces the union of all rows in $d_1$ or $d_2$ with the signed multiplicity of
+each row equal to the algebraic sum of that row's signed multiplicity in $d_1$
+and $d_2$.} so that evaluating the query using tuple-at-a-time processing is
+equivalent to evaluating the whole query at once. Finally, Noria operators must
+be \textbf{commutative} so that operators with multiple inputs, like unions and
+joins, can process their inputs in any order without
+coordination\footnote{Maintaining eventual consistency with partial state
+requires additional mechanisms, as discussed in \S\ref{s:correct}.}. The
+standard relational operators that Noria supports all have this property.
 
-This invariant ensures that Noria does not accidentally duplicate base table
-changes, such as by double-counting an insert or deletion. Note, however, that
-is does not preclude a \emph{value} present in a given base table row from
-appearing multiple times in a downstream view. If a query explicitly duplicates
-rows with a \texttt{UNION} or a column value appears in multiple output rows
-through a \texttt{JOIN}, then each base table \emph{change} is still reflected
-at most once. For a concrete example of this, consider a query that selects all
-columns from all rows in a given table twice, and takes the union of them. The
-expected output is that each \emph{row} in that table appears twice. However,
-each \emph{change} to the base table\,---\,the inserts that added those
-rows\,---\,is reflected only once. If a given \emph{insert} was reflected more
-than once, then the inserted row would appear more than twice by virtue of there
-(incorrectly) being multiple copies of it in the table.
-
-\begin{invariant}
-  \label{i:no-holes}
-  A read that observes all effects of a given base table change also observes
-  all effects of earlier changes to that base table that follow the same
-  dataflow path.
-\end{invariant}
-
-This invariant ensures that Noria does not drop updates, so that each base table
-update is ultimately fully reflected in the downstream views. The invariant is
-scoped to updates along the same dataflow path so that Noria can process updates
-on parallel strands of dataflow concurrently (\S\ref{s:parallel}). As long as
-Noria upholds the invariant on each strand of the dataflow in isolation, no
-updates may be dropped anywhere, and views will eventually yield the correct
-output (subject also to Invariant~\ref{i:no-spurious}).
-
-% Note: this invariant is more an additional guarantee than a system invariant.
-% While it is useful, it is very subtle (see the text), and not required for
-% correctness. Therefore, it was scrapped.
-%
-% \begin{invariant}
-%   \label{i:no-backsies}
-%   A read issued at time $t$ and again at time $t' > t$ reflects the effects of
-%   at least as many updates at $t'$ as at $t$.
-% \end{invariant}
-%
-% This invariant ensures that \emph{if} the system makes progress, that progress
-% persists\,---\,informally, Noria shouldn't expose the effects of an update, and
-% then roll back those effects at a later time. Of course, if a later update
-% happens to mask the effects of the earlier update, that is fine\,---\,the
-% invariant is still preserved.
-%
-% This invariant is weaker than it first appears: since Noria is permitted to
-% expose even incomplete effects of \emph{later} updates, the effects of an
-% earlier update may be temporarily masked. For example, it \emph{is} possible to
-% observe an output row introduced by an earlier update disappear while a future
-% replacement is only partially processed. This violates the intuitive
-% understanding of the invariant, but not its literal definition. The invariant is
-% useful nonetheless: as the system makes progress, it ensures that more updates
-% are reflected over time.
-
-\subsubsection*{Sharding and Consistency}
-
-When sharding is enabled, base tables are also sharded, which complicates the
-meaning of \emph{earlier} from Invariant~\ref{i:no-holes}. In particular,
-concurrent updates to different shards of the same base table do not happen
-before or after each other in a well-defined way. Thus, a read that observes
-the effects of one base table change may not observe the effects of another
-change that happened before if the other update went to a different base table
-shard.
-
-Noria's views can also be sharded, in which case the shards are updated
-independently. If the effects of an update are present in one shard of a view,
-they may not yet have manifested in another shard of that same view.
+\paragraph{How Eventual?}
+While Noria does not guarantee when a write is visible in a given view, the time
+between when a write is acknowledged and when it becomes visible is not
+completely arbitrary. A view is stale only while the write propagates through
+the dataflow, so the time before the write manifests depends only on the height
+and complexity of the dataflow for the view in question. While eventual
+consistency allows reads to give arbitrary results until they \emph{eventually}
+return the correct result, Noria reads are generally just stale.
 
 \subsection{What Can Go Wrong?}
 
@@ -320,9 +251,11 @@ This subsection covers a number of such cases.
 
 \paragraph{View Discrepancy.}
 If a client reads from view $V_1$ and then from view $V_2$, the read from $V_2$
-may reflect changes that are not yet visible in $V_1$. Similarly, if view $V$ is
-sharded, and a client reads from two different shards, either read may reflect
-changes that are not reflected in the other.
+may reflect changes that are not yet visible in $V_1$. For example, if a client
+inserts row $r$ into base table $A$, $r$ may appear in $V_1$ without yet
+appearing in $V_2$, or vice-versa. Similarly, if view $V$ is sharded, and a
+client reads from two different shards, either read may reflect changes that are
+not reflected in the other.
 
 \paragraph{Incomplete Effects.}
 A client that reads form view $V$ may observe \emph{some} of the effects of a
@@ -338,8 +271,10 @@ table changes may flow through the fast path, and be reflected in $V$, before
 \paragraph{Independent Writes.}
 If a client writes to a base table $A$, and then to a different base table $B$,
 and then reads from a view $V$ that is downstream of both $A$ and $B$, it may
-see the effects of the write to $B$ reflected in $V$, but not the effects of the
-write to $A$.
+see the effects of only the write to $B$ reflected in $V$. For example, if $A$
+is a table of albums, and $B$ is a table of images, a client that creates an
+albums and adds an image to it may briefly see the image appear with no
+associated album.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -373,12 +308,12 @@ prone to these temporary inconsistencies. For example, a join that computes a
 parent-child relationship between records may briefly reflect a new record as a
 child, but not as a parent, or vice-versa.
 
-These inconsistencies arise due to race conditions in the dataflow graph. In
-particular, if two deltas resulting from a single upstream change race against
-each another down different dataflow paths that later converge, one delta will
-be applied to the final view before the other. This leaves the view in an
-intermediate state where a partial effect of the original update can be observed
-until the other delta arrives.
+This is all because these inconsistencies arise due to race conditions in the
+dataflow graph. In particular, if two deltas resulting from a single upstream
+change race against each another down different dataflow paths that later
+converge, one delta will be applied to the final view before the other. This
+leaves the view in an intermediate state where a partial effect of the original
+update can be observed until the other delta arrives.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -401,6 +336,11 @@ will not see a record with \texttt{id = 42} until the addition is processed.
 Conversely, if the addition arrives first, reads will see two records with
 \texttt{id = 42} (one with \texttt{state = 1} and one with \texttt{state = 2})
 until the removal is processed.
+
+A query that accesses each dataflow only once never makes an update race ``with
+itself'', and thus never produces intermediate output, only stale output. A
+self-join on the other hand frequently makes updates resulting from one base
+table change race, and can therefore exhibit these ``strange'' results.
 
 To mitigate these kinds of inconsistencies, Noria would either need to enforce
 that no reads can happen between the application of one ``half'' and the other,
@@ -503,8 +443,8 @@ R's state was in a different domain than J, then the following can happen:
 
 This issue arises because the lookups bypass deltas in flight between R and J;
 the lookups get to observe ``the future''. This erroneously causes J to
-incorporate the same data at two points in time, which violates
-Invariant~\ref{i:no-spurious}.
+incorporate the same data at two points in time, which would lead to perpetually
+incorrect results in the downstream views.
 
 Multi-version concurrency control could likely be used to solve this problem,
 but would be heavyweight solution that also requires much more significant

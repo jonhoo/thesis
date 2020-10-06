@@ -1,13 +1,23 @@
-This chapter explores the motivation behind this thesis, and gives a sketch of
-the proposed solution that is covered in the rest of the dissertation.
-Section~\ref{s:contrib} gives a succinct list of the thesis contributions, and
-Section~\ref{s:read} concludes with a road map for how to read the remainder of
-the document.
+Many web applications written today are poorly served by the databases currently
+available to them. The databases are too slow to sustain the application load,
+and developers are forced to implement their own ad hoc systems to make the
+database work for them. This thesis is an attempt to improve that
+situation\,---\,to build a database tailored to the particulars of these
+applications that provides the performance they need.
+
+This chapter explores the thesis motivation in greater detail
+(\S\ref{s:motivation}) and briefly outlines existing solutions and their
+shortcomings (\S\ref{s:existing}). It then sketches out the proposed approach
+(\S\ref{s:approach}) and its implementation (\S\ref{s:intro:noria}), and
+provides a list of the thesis contributions (\S\ref{s:contrib}). The chapter
+concludes with a road map for how to read the remainder of the thesis
+(\S\ref{s:read}).
 
 Non-technical readers should start with Appendix~\ref{s:simple} (on
 page~\pageref{s:simple}).
 
 \section{Motivation}
+\label{s:motivation}
 
 Modern web applications typically have a number of traits in common. They are
 \textbf{interactive}: each incoming request has a user waiting on the other end.
@@ -18,13 +28,13 @@ interactions.
 
 Such applications are usually poorly served by the traditional relational
 databases that most of them use to store and query their underlying data. These
-application tend to issue the same read-only queries again and again, with the
-underlying data changing only infrequently. Existing databases do not optimize
-for this kind of workload: they run each query in isolation\footnote{
-Databases query caches~\cite{mysql-query-cache,pgpool-query-cache} cache results
-as long as no changes occur to the underlying tables if queries are
-byte-for-byte identical. While attractive on the surface, they often work poorly
-in practice when the workload is not
+applications tend to issue the same set of read-only queries again and again,
+with the underlying data changing only infrequently. Existing databases do not
+optimize for this kind of workload: they run each query in
+isolation\footnote{Databases query caches~\cite{mysql-query-cache,
+pgpool-query-cache} cache results as long as no changes occur to the underlying
+tables if queries are byte-for-byte identical. While attractive on the surface,
+they often work poorly in practice when the workload is not
 read-only~\cite{mysql-query-cache-nope,pgpool-query-cache}.}, and thus re-do
 work that has already been done many times over. This causes reads, which is the
 most frequent operation in these applications, to be slow, while writes are
@@ -46,16 +56,8 @@ high level in the traditional model: each query the application issues executes
 the query plan, represented by an aggregation and a join in the figure. Multiple
 concurrent queries execute independently, even if they run the same query.
 
-As a result, application authors often resort to ad hoc, error-prone
-techniques~\cite{ad-hoc-caching} to exploit their applications' workload
-patterns and satisfy impatient users. They change their database schemas by
-placing and updating computed values in the database tables, or introduce
-key-value stores that \textit{cache} the result of expensive queries. All these
-techniques introduce significant application complexity: the application authors
-must include logic to ensure that the auxiliary derived state remains up to date
-as the underlying data changes, that clients do not all flood the database when
-results are not available in the cache, and that concurrent access to the
-database and the cache never leaves the system in an inconsistent state.
+\section{Existing Solutions}
+\label{s:existing}
 
 \begin{figure}
   \centering
@@ -69,11 +71,18 @@ database and the cache never leaves the system in an inconsistent state.
   \label{f:motivation-adhoc}
 \end{figure}
 
-Figure~\vref{f:motivation-adhoc} shows an example of this application design:
-application writes must now also touch the cache, and reads must include logic
-to fall back to database queries if the cache does not hold the needed state.
-
-\section{Existing Solutions}
+To mitigate the lackluster performance of databases for these workloads,
+application authors often resort to ad hoc, error-prone
+techniques~\cite{ad-hoc-caching} to exploit their applications' workload
+patterns. They change their database schemas by placing and updating computed
+values in the database tables, or introduce key-value stores that \textit{cache}
+the result of expensive queries as shown in Figure~\vref{f:motivation-adhoc}.
+All these techniques introduce significant application complexity: the
+application authors must include logic to ensure that the auxiliary derived
+state remains up to date as the underlying data changes, that clients do not all
+flood the database when results are not available in the cache, and that
+concurrent access to the database and the cache never leaves the system in an
+inconsistent state.
 
 Existing systems from industry~\cite{facebook-memcache, tao, flannel} and
 academia~\cite{txcache, cachegenie, casql-consistency-thesis, pequod} have
@@ -123,6 +132,7 @@ materialized view systems are also restricted to a predeclared set of queries,
 and cannot incorporate changes to the application query set without restarting.
 
 \section{Approach: Partial State}
+\label{s:approach}
 
 Materialized views represent an ``almost there'' solution to automatic caching.
 They provide a great foundational mechanism for storing and maintaining query
@@ -153,6 +163,7 @@ avoid the overhead of maintaining results the application is no longer
 interested in.
 
 \section{Partial State in Noria}
+\label{s:intro:noria}
 
 The thesis includes an implementation of partial state in Noria, a
 state-of-the-art materialized view system that is already optimized for

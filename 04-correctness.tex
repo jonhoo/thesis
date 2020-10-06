@@ -1,45 +1,179 @@
-Partial state significantly changes how query results are computed by the
-underlying dataflow system, and the system must ensure that partial state
-produces the same results with partial state as it did without. This chapter
-explains how partial state is implemented in Noria such that the overall system
-maintains the invariants from \S\ref{s:noria:consistency} (page
-\pageref{i:no-spurious}) and \S\ref{s:eviction} (page
-\pageref{i:missing-suffix}).
-
-The biggest change that partial state introduces is that multiple updates may
-now be collapsed and re-processed through the dataflow as a single, consolidated
-update in response to an upquery. These consolidated updates represent snapshots
-of upstream state, and Noria must ensure that these snapshots do not cause reads
-to violate any of the system invariants. In particular, Noria must ensure that
-the upquery responses indeed represent a particular point in time, and include
-all earlier updates, and no later updates. If an upquery response did not
-include an earlier update, Invariant~\ref{i:no-holes} would be violated. If it
-includes a later update, the application of that later update would violate
-Invariant~\ref{i:no-spurious}.
-
-Partial state also causes deltas that encounter missing state to be discarded
-early in the dataflow (\S\ref{s:missing}), and the system must ensure that it
-maintains Invariant~\ref{i:missing-suffix} (page \pageref{i:missing-suffix})
-whenever this happens.
-
-This chapter gives an informal correctness argument for partial state in Noria
-by outlining how partial state maintains the system invariants for dataflow of
-increasing complexity. Section~\ref{s:partial:linear} makes the argument for a
-single stand of dataflow. Section~\ref{s:partial:diverging} expands that
+Partial state significantly changes how the underlying dataflow system computes
+query results, and without care, might cause the system to violate eventual
+consistency. This chapter gives an informal correctness argument for how Noria
+preserves eventual consistency by maintaining necessary system invariants for
+dataflow of increasing complexity. Section~\ref{s:invariants} introduces system
+invariants that Noria must uphold to ensure eventual consistency.
+Section~\ref{s:partial:linear} makes the argument for why a single strand of
+dataflow yields correct results. Section~\ref{s:partial:diverging} expands that
 argument to include dataflow with multiple diverging branches. And
 Section~\ref{s:partial:merging} completes the argument by also considering
 dataflow where multiple strands join together. Finally,
 Section~\ref{s:challenge:sharding} discusses how partial state interacts with
 sharded dataflow.
 
+\section{System Invariants}
+\label{s:invariants}
+
+The biggest change that partial state introduces is that multiple updates may
+now be collapsed and re-processed through the dataflow as a single, consolidated
+update in response to an upquery. These represent snapshots of upstream state,
+and Noria must ensure that these snapshots do not cause updates to be duplicated
+or dropped so that views are eventually consistent. While in theory Noria could
+later undo updates it duplicates, or restore updates it drops, Noria has no
+mechanism for doing so, and instead aims to not introduce errors that must be
+corrected later in the first place.
+
+Upquery responses must represent the current state of an operator at a
+particular point in time, and must include all earlier updates, and no later
+updates. If an upquery response does not include an earlier update, that update
+would be lost, and if it includes a later update, the application of that later
+update would cause the update's effects to be duplicated. To that end
+Noria upholds the following two safety invariants:
+
+\begin{invariant}
+  \label{i:no-spurious}
+  All reads reflect each base table change at most once.
+\end{invariant}
+
+This invariant ensures that Noria does not accidentally duplicate base table
+changes, such as by double-counting an insert or deletion. If this invariant
+were violated, a base table insert might be performed twice, leading a view to
+perpetually duplicate that row in its result set. Note, however, that is does
+not preclude a \emph{value} present in a given base table row from appearing
+multiple times in a downstream view. If a query explicitly duplicates
+rows with a \texttt{UNION} or a column value appears in multiple output rows
+through a \texttt{JOIN}, then each base table \emph{change} is still reflected
+at most once.
+
+% For a concrete example of this, consider a query that selects all columns from
+% all rows in a given table twice, and takes the union of them. The expected
+% output is that each \emph{row} in that table appears twice. However, each
+% \emph{change} to the base table\,---\,the inserts that added those
+% rows\,---\,is reflected only once. If a given \emph{insert} was reflected more
+% than once, then the inserted row would appear more than twice by virtue of
+% there (incorrectly) being multiple copies of it in the table.
+
+\begin{invariant}
+  \label{i:no-holes}
+  A read that observes all effects of a given base table change also observes
+  all effects of earlier changes to that base table that follow \emph{the same
+  dataflow path}.
+\end{invariant}
+
+This invariant ensures that Noria does not drop updates, so that downstream
+views ultimately reflect each base table change. The invariant is scoped to the
+same dataflow path so Noria can process updates on parallel strands of dataflow
+concurrently (\S\ref{s:parallel}). As long as Noria upholds the invariant on
+each strand in isolation, no updates may be dropped anywhere.
+
+Together these invariants ensure that Noria's views eventually reflect every
+base table change exactly once. Each base table change triggers updates in the
+dataflow, and by Invariant~\ref{i:no-holes} none of those updates can be dropped
+if the system is to make progress. The ``at most once'' from
+Invariant~\ref{i:no-spurious} must therefore mean that each base table change is
+reflected exactly once if the system makes progress. And since Noria's operators
+commute, as long as all updates are applied, the correct output must eventually
+result.
+
+Noria upholds these invariants without partial state, which is usually easy
+barring implementation bugs with commutative operators\footnote{The join
+consistency mechanism from \S\ref{s:join-state-dupe} is an example where Noria
+must work specifically to uphold the invariants without partial state.}.
+However, with partial state, they become harder to uphold as upquery response
+may race with updates reflected within them. If Noria applies a given update as
+it flows through the dataflow, that same update cannot also be applied as part
+of an upquery response. And similarly, if an update is dropped, it must be
+included with a later upquery response or it may never be applied.
+
+% Note: this invariant is more an additional guarantee than a system invariant.
+% While it is useful, it is very subtle (see the text), and not required for
+% correctness. Therefore, it was scrapped.
+%
+% \begin{invariant}
+%   \label{i:no-backsies}
+%   A read issued at time $t$ and again at time $t' > t$ reflects the effects of
+%   at least as many updates at $t'$ as at $t$.
+% \end{invariant}
+%
+% This invariant ensures that \emph{if} the system makes progress, that progress
+% persists\,---\,informally, Noria shouldn't expose the effects of an update, and
+% then roll back those effects at a later time. Of course, if a later update
+% happens to mask the effects of the earlier update, that is fine\,---\,the
+% invariant is still preserved.
+%
+% This invariant is weaker than it first appears: since Noria is permitted to
+% expose even incomplete effects of \emph{later} updates, the effects of an
+% earlier update may be temporarily masked. For example, it \emph{is} possible to
+% observe an output row introduced by an earlier update disappear while a future
+% replacement is only partially processed. This violates the intuitive
+% understanding of the invariant, but not its literal definition. The invariant is
+% useful nonetheless: as the system makes progress, it ensures that more updates
+% are reflected over time.
+
+\subsection{Eviction}
+
+Partial state also causes deltas that encounter missing state to be discarded
+early in the dataflow (\S\ref{s:missing}). When this happens, the missing entry
+may cause an update to be discarded even though downstream entries hold data
+that would grow stale without that update. For example, consider what happens if
+an operator counts the number of votes per author, and contains a count of 7 for
+the author ``Jane''. Then, the state for ``Jane'' is evicted from some operator
+upstream of the count. If an update now arrives at the operator where ``Jane''
+is missing it would discard the update, and the downstream count would remain
+perpetually stale, violating Invariant~\ref{i:no-holes}.
+
+To avoid this situation, Noria must ensure that when an entry is evicted, any
+dependent state downstream is also evicted:
+
+\begin{invariant}
+  \label{i:missing-suffix}
+  If an operator encounters missing state while processing a record $r$ in an
+  update, any downstream state that reflects $r$ must be evicted.
+\end{invariant}
+
+Upqueries generally uphold this invariant: as an upquery recurses up the
+dataflow, it fills in missing state ``from the top down'' until the operator
+that originally issued it receives the requested state. Thus, if a miss occurs
+in the dataflow, that state is also missing downstream\footnote{Though not
+always; see \S\ref{join-evictions}}.
+
+When Noria evicts state in the middle of the dataflow, as described in
+\S\ref{s:eviction}, this is no longer true. A miss mid-way down the dataflow no
+longer implies that all related state is absent downstream. Therefore, to uphold
+the property in the face of evictions, Noria issues evictions downstream
+whenever it evicts entries from state in the middle of the graph. This ensures
+that any future update that touches the evicted state can safely be discarded,
+as any relevant downstream state has been discarded as well.
+
+% Invariant~\ref{i:missing-suffix} implies the rule from earlier that partial
+% state cannot exist upstream of non-partial state. Since state cannot be
+% evicted from non-partial state, Noria would be unable to satisfy the invariant
+% should it ever encounter missing state upstream of the non-partial state.
+
+\subsection{Sharding}
+
+For sharded base tables, the meaning of \emph{earlier} from
+Invariant~\ref{i:no-holes} is unclear. In particular, concurrent updates to
+different shards of the same base table do not happen before or after each other
+in a well-defined way. This means that a read that observes the effects of one
+base table change may not observe the effects of another change that happened
+before if the other update went to a different base table shard. Effectively,
+different shards constitute different dataflow paths in the definition of
+Invariant~\ref{i:no-holes}.
+
+The same applies for sharded views. Noria updates the view shards independently,
+so if the effects of an update are present in one shard of a view, they may not
+yet have manifested in another shard of that same view.
+
 \section{Linear Dataflow}
 \label{s:partial:linear}
 
-First, consider a single strand of dataflow, where each operator has at most one
-input and at most one output. For partial state to be correct, it must be the
-case that computing missing results with an upquery that combines all past
-deltas into a single update produces the same results as processing the same
-deltas one-at-a-time.
+Consider a single strand of dataflow, where each operator has at most one input
+and at most one output. For partial state to be correct, it must be the case
+that computing missing results with an upquery that combines all past deltas
+into a single update produces the same results as processing the same deltas
+one-at-a-time.
 
 Recall that the deltas that flow through the dataflow represent changes to the
 current state of the operator that emitted the delta. If a base table produces
