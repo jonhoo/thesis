@@ -69,25 +69,25 @@ $(RESULTS):
 benchmarks/results/%/parsed.pickle: sources
 
 graphs/lobsters-%.pdf: graphs/common.py benchmarks/results/lobsters/parsed.pickle graphs/lobsters-%.py
-	python graphs/lobsters-$*.py graphs/lobsters-$*
+	python3 graphs/lobsters-$*.py graphs/lobsters-$*
 
 graphs/lobsters-throughput.pdf: graphs/common.py graphs/lobsters-throughput.py \
 	benchmarks/results/lobsters/parsed.pickle \
 	benchmarks/results/lobsters-mysql/parsed.pickle
-	python graphs/lobsters-throughput.py graphs/lobsters-throughput
+	python3 graphs/lobsters-throughput.py graphs/lobsters-throughput
 
 graphs/vote-migration.pdf: graphs/common.py benchmarks/results/vote-migration/parsed.pickle graphs/vote-migration.py
-	python graphs/vote-migration.py graphs/vote-migration
+	python3 graphs/vote-migration.py graphs/vote-migration
 
 graphs/vote-redis.pdf: graphs/common.py graphs/vote-redis.py \
 	benchmarks/results/vote-nojoin/parsed.pickle \
 	benchmarks/results/vote-redis/parsed.pickle
-	python graphs/vote-redis.py graphs/vote-redis
+	python3 graphs/vote-redis.py graphs/vote-redis
 
 graphs/vote-formula.pdf: graphs/common.py graphs/vote-formula.py \
 	benchmarks/results/vote-formula/results.log \
 	benchmarks/results/vote/parsed.pickle
-	python graphs/vote-formula.py graphs/vote-formula
+	python3 graphs/vote-formula.py graphs/vote-formula
 
 graphs/vote-%.pdf: graphs/common.py benchmarks/results/vote/parsed.pickle graphs/vote-%.py
-	python graphs/vote-$*.py graphs/vote-$*
+	python3 graphs/vote-$*.py graphs/vote-$*
