@@ -230,9 +230,9 @@ and $d_2$.} so that evaluating the query using tuple-at-a-time processing is
 equivalent to evaluating the whole query at once. Finally, Noria operators must
 be \textbf{commutative} so that operators with multiple inputs, like unions and
 joins, can process their inputs in any order without
-coordination\footnote{Maintaining eventual consistency with partial state
-requires additional mechanisms, as discussed in \S\ref{s:correct}.}. The
-standard relational operators that Noria supports all have this property.
+coordination\footnote{Eventual consistency with partial state requires
+additional mechanisms (\S\ref{s:correct}).}. The standard relational operators
+that Noria supports all have this property.
 
 \paragraph{How Eventual?}
 While Noria does not guarantee when a write is visible in a given view, the time
