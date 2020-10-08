@@ -1,50 +1,101 @@
 Partial state significantly changes how the underlying dataflow system computes
-query results, and without care, might cause the system to violate eventual
-consistency. This chapter gives an informal correctness argument for how Noria
-preserves eventual consistency by maintaining necessary system invariants for
-dataflow of increasing complexity. Section~\ref{s:invariants} introduces system
-invariants that Noria must uphold to ensure eventual consistency.
-Section~\ref{s:partial:linear} makes the argument for why a single strand of
-dataflow yields correct results. Section~\ref{s:partial:diverging} expands that
-argument to include dataflow with multiple diverging branches. And
-Section~\ref{s:partial:merging} completes the argument by also considering
-dataflow where multiple strands join together. Finally,
-Section~\ref{s:challenge:sharding} discusses how partial state interacts with
-sharded dataflow.
+query results. And without care, those changes may cause the system to violate
+eventual consistency. This chapter gives an informal correctness argument for
+how Noria preserves eventual consistency.
+Section~\ref{s:partial:inconsistencies} outlines several inconsistencies that
+can arise because of partial state. Section~\ref{s:invariants} introduces system
+invariants that Noria must uphold to avoid those inconsistencies and ensure
+eventual consistency. Section~\ref{s:partial:linear} makes the argument for why
+a single strand of dataflow yields correct results.
+Section~\ref{s:partial:diverging} expands that argument to include dataflow with
+multiple diverging branches. And Section~\ref{s:partial:merging} completes the
+argument by also considering dataflow where multiple strands join together.
+Finally, Section~\ref{s:challenge:sharding} discusses how partial state
+interacts with sharded dataflow.
+
+\section{Partial State Inconsistencies}
+\label{s:partial:inconsistencies}
+
+The most challenging change introduced by partial state is that multiple deltas
+may be collapsed and re-processed through the dataflow as a single, consolidated
+update in response to an upquery. Since these responses logically overlap with
+deltas that may still flow through the dataflow, Noria must take care to
+guarantee eventual consistency no matter how upquery responses and deltas are
+interleaved.
+
+This section outlines several inconsistencies that can arise as a result of
+partial state. While Noria could attempt to fix these inconsistencies after they
+manifest, Noria has no mechanism for doing so. Noria instead aims to not
+introduce such errors in the first place, through the mechanisms described in
+the remainder of the chapter.
+
+\paragraph{Double Application.}
+An upquery requests the current state of an operator, which represents all
+earlier deltas at that operator. Therefore, after a delta flows through an
+operator, a subsequent upquery to that operator receives a response that
+incorporates that delta. This immediately poses a problem: if a stateful
+downstream operator applies both the delta and that upquery response, it will
+apply the delta twice, leading to incorrect state.
+
+\paragraph{Skipped Deltas.}
+Noria must sometimes \emph{not} process a delta in order to avoid the
+duplication mentioned above. However, it must do so carefully, or it might skip
+a delta that \emph{succeeds} the upquery response, and thus \emph{must} be
+applied. If Noria skips such a delta, that delta will never manifest\,---\,the
+upquery response does not contain it, and the delta itself was skipped.
+
+\paragraph{Upquery Races.}
+Some queries produce dataflow that diverges and then converges again so that the
+edges form a diamond shape. This happens if the query performs a self-join, or
+otherwise accesses a given base table or internal view more than once. When
+this occurs, upquery responses needed to fill missing state may race with one
+another, or with other dataflow deltas, since the operator where the strands
+converge processes updates in an arbitrary order. This magnifies the challenge
+of mitigating double applications and skipped deltas, since the interleaving of
+different strands must also be considered.
+
+\paragraph{Lost Deltas.}
+If Noria encounters missing state while processing a delta, it discards that
+delta (\S\ref{s:missing}). However, Noria cannot discard deltas that would
+affect downstream state that is \emph{not} missing. If it did, the downstream
+state would be left permanently stale. Noria must therefore ensure that it is
+always safe to discard a delta that encounters missing state.
+
+\paragraph{Upquery Livelock.}
+If Noria encounters missing state while processing an upquery response $u$, it
+faces a dilemma: it cannot discard $u$ since downstream is waiting for a reply,
+and must thus fill the missing state. But to do so, it must process updates that
+\emph{succeeded} $u$, which might invalidate $u$. Upqueries are supposed to be
+snapshots of an operator's current state, so any delta that follows $u$ is
+\emph{not} reflected in $u$. But by processing a later delta $d$ ahead of $u$,
+Noria is effectively telling downstream operators that $d$ precedes $u$, and
+thus that $d$ is accounted for in $u$. As a result, a downstream operator may
+discard $d$ in anticipation of $u$ to avoid applying $d$ twice. However, since
+$u$ does not actually contain $d$, $d$ is never applied.
 
 \section{System Invariants}
 \label{s:invariants}
 
-The biggest change that partial state introduces is that multiple updates may
-now be collapsed and re-processed through the dataflow as a single, consolidated
-update in response to an upquery. These represent snapshots of upstream state,
-and Noria must ensure that these snapshots do not cause updates to be duplicated
-or dropped so that views are eventually consistent. While in theory Noria could
-later undo updates it duplicates, or restore updates it drops, Noria has no
-mechanism for doing so, and instead aims to not introduce errors that must be
-corrected later in the first place.
-
-Upquery responses must represent the current state of an operator at a
-particular point in time, and must include all earlier updates, and no later
-updates. If an upquery response does not include an earlier update, that update
-would be lost, and if it includes a later update, the application of that later
-update would cause the update's effects to be duplicated. To that end
-Noria upholds the following two safety invariants:
+To ensure that the inconsistencies in the previous section cannot occur, Noria
+upholds the following safety invariants:
 
 \begin{invariant}
   \label{i:no-spurious}
   All reads reflect each base table change at most once.
 \end{invariant}
 
-This invariant ensures that Noria does not accidentally duplicate base table
-changes, such as by double-counting an insert or deletion. If this invariant
-were violated, a base table insert might be performed twice, leading a view to
-perpetually duplicate that row in its result set. Note, however, that is does
-not preclude a \emph{value} present in a given base table row from appearing
-multiple times in a downstream view. If a query explicitly duplicates
-rows with a \texttt{UNION} or a column value appears in multiple output rows
-through a \texttt{JOIN}, then each base table \emph{change} is still reflected
-at most once.
+This invariant ensures that Noria does not duplicate base table changes, such as
+by double-counting an insert or deletion. If this invariant were violated, a
+base table insert might be applied twice, and make a view perpetually duplicate
+that row in its result set. The invariant also ensures that Noria does not
+double-apply deltas, as doing so would ultimately cause the base table change
+that spurred the delta to manifest twice.
+
+Note that the invariant does not preclude a \emph{value} present in a given base
+table row from appearing multiple times in a downstream view. If a query
+explicitly duplicates rows with a \texttt{UNION} or a column value appears in
+multiple output rows through a \texttt{JOIN}, then each base table \emph{change}
+is still reflected at most once.
 
 % For a concrete example of this, consider a query that selects all columns from
 % all rows in a given table twice, and takes the union of them. The expected
@@ -61,30 +112,18 @@ at most once.
   dataflow path}.
 \end{invariant}
 
-This invariant ensures that Noria does not drop updates, so that downstream
-views ultimately reflect each base table change. The invariant is scoped to the
-same dataflow path so Noria can process updates on parallel strands of dataflow
-concurrently (\S\ref{s:parallel}). As long as Noria upholds the invariant on
-each strand in isolation, no updates may be dropped anywhere.
+This invariant ensures that Noria does not expose results where deltas have been
+dropped, so that downstream views ultimately reflect each base table change. The
+invariant is scoped to the same dataflow path so Noria can process updates on
+parallel strands of dataflow concurrently (\S\ref{s:parallel}). As long as Noria
+upholds the invariant on each strand in isolation, no updates that affect
+readable state may be dropped anywhere.
 
-Together these invariants ensure that Noria's views eventually reflect every
-base table change exactly once. Each base table change triggers updates in the
-dataflow, and by Invariant~\ref{i:no-holes} none of those updates can be dropped
-if the system is to make progress. The ``at most once'' from
-Invariant~\ref{i:no-spurious} must therefore mean that each base table change is
-reflected exactly once if the system makes progress. And since Noria's operators
-commute, as long as all updates are applied, the correct output must eventually
-result.
-
-Noria upholds these invariants without partial state, which is usually easy
-barring implementation bugs with commutative operators\footnote{The join
-consistency mechanism from \S\ref{s:join-state-dupe} is an example where Noria
-must work specifically to uphold the invariants without partial state.}.
-However, with partial state, they become harder to uphold as upquery response
-may race with updates reflected within them. If Noria applies a given update as
-it flows through the dataflow, that same update cannot also be applied as part
-of an upquery response. And similarly, if an update is dropped, it must be
-included with a later upquery response or it may never be applied.
+% Noria without partial state already upholds these invariants. Without partial
+% state, there are few cases where inconsistencies can
+% arise\footnote{\S\ref{s:join-state-dupe} is an example where Noria must uphold
+% the invariants even without partial state.}, especially since the Noria
+% operators are commutative.
 
 % Note: this invariant is more an additional guarantee than a system invariant.
 % While it is useful, it is very subtle (see the text), and not required for
@@ -111,60 +150,38 @@ included with a later upquery response or it may never be applied.
 % useful nonetheless: as the system makes progress, it ensures that more updates
 % are reflected over time.
 
-\subsection{Eviction}
-
-Partial state also causes deltas that encounter missing state to be discarded
-early in the dataflow (\S\ref{s:missing}). When this happens, the missing entry
-may cause an update to be discarded even though downstream entries hold data
-that would grow stale without that update. For example, consider what happens if
-an operator counts the number of votes per author, and contains a count of 7 for
-the author ``Jane''. Then, the state for ``Jane'' is evicted from some operator
-upstream of the count. If an update now arrives at the operator where ``Jane''
-is missing it would discard the update, and the downstream count would remain
-perpetually stale, violating Invariant~\ref{i:no-holes}.
-
-To avoid this situation, Noria must ensure that when an entry is evicted, any
-dependent state downstream is also evicted:
-
 \begin{invariant}
   \label{i:missing-suffix}
   If an operator encounters missing state while processing a record $r$ in an
   update, any downstream state that reflects $r$ must be evicted.
 \end{invariant}
 
-Upqueries generally uphold this invariant: as an upquery recurses up the
-dataflow, it fills in missing state ``from the top down'' until the operator
-that originally issued it receives the requested state. Thus, if a miss occurs
-in the dataflow, that state is also missing downstream\footnote{Though not
-always; see \S\ref{join-evictions}}.
+This invariant ensures that when Noria discards a delta due to missing state
+(\S\ref{s:missing}), it is safe to do so. Without this invariant, an update may
+be discarded even though downstream entries hold data that would grow stale
+without that update. For example, consider what happens if an operator counts
+the number of votes per author, and contains a count of 7 for the author
+``Jane''. Then, the state for ``Jane'' is evicted from some operator upstream of
+the count. If an update now arrives at the operator where ``Jane'' is missing it
+would discard the update, and the downstream count would remain perpetually
+stale, violating Invariant~\ref{i:no-holes}.
 
-When Noria evicts state in the middle of the dataflow, as described in
-\S\ref{s:eviction}, this is no longer true. A miss mid-way down the dataflow no
-longer implies that all related state is absent downstream. Therefore, to uphold
-the property in the face of evictions, Noria issues evictions downstream
-whenever it evicts entries from state in the middle of the graph. This ensures
-that any future update that touches the evicted state can safely be discarded,
-as any relevant downstream state has been discarded as well.
+\paragraph{Eventually Exactly Once.}
+Together these invariants together ensure that Noria's views eventually reflect
+every base table change exactly once. Each base table change triggers updates in
+the dataflow, and by Invariant~\ref{i:no-holes} none of those updates can be
+dropped if the system is to make progress. Furthermore, by
+Invariant~\ref{i:missing-suffix}, those updates cannot be discarded early if
+they affect downstream reads. The ``at most once'' from
+Invariant~\ref{i:no-spurious} must therefore mean that each base table change is
+reflected exactly once if the system makes progress. And since Noria's operators
+commute, as long as all updates are applied, the correct output must eventually
+result.
 
 % Invariant~\ref{i:missing-suffix} implies the rule from earlier that partial
 % state cannot exist upstream of non-partial state. Since state cannot be
 % evicted from non-partial state, Noria would be unable to satisfy the invariant
 % should it ever encounter missing state upstream of the non-partial state.
-
-\subsection{Sharding}
-
-For sharded base tables, the meaning of \emph{earlier} from
-Invariant~\ref{i:no-holes} is unclear. In particular, concurrent updates to
-different shards of the same base table do not happen before or after each other
-in a well-defined way. This means that a read that observes the effects of one
-base table change may not observe the effects of another change that happened
-before if the other update went to a different base table shard. Effectively,
-different shards constitute different dataflow paths in the definition of
-Invariant~\ref{i:no-holes}.
-
-The same applies for sharded views. Noria updates the view shards independently,
-so if the effects of an update are present in one shard of a view, they may not
-yet have manifested in another shard of that same view.
 
 \section{Linear Dataflow}
 \label{s:partial:linear}
@@ -222,7 +239,7 @@ over that. Or, stated differently, if normal dataflow processing does not
 violate the correctness invariants, the same must be true of processing a
 combined upquery response.
 
-Because the first three invariants do not deal with missing state, the argument
+Because the first two invariants do not deal with missing state, the argument
 above concerns itself only with the processing of updates in the normal case.
 However, the system must also uphold Invariant~\ref{i:missing-suffix}, which
 dictates that Noria cannot discard messages that may affect non-missing,
@@ -233,7 +250,17 @@ the dataflow. Thus, if some key $k$ is present in a materialization $m$, it must
 also be present at every materialization above $m$ from the upquery chain that
 ultimately produced the entry for $k$ in $m$. Since updates are discarded only
 when they encounter missing state, a miss on $k$ anywhere in the dataflow
-implies that $k$ is also absent downstream.
+implies that $k$ is also absent downstream\footnote{Though see
+\S\ref{join-evictions}}.
+
+When Noria evicts state in the middle of the dataflow, as described in
+\S\ref{s:eviction}, the above argument no longer holds: a miss mid-way down the
+dataflow no longer implies that all related state is absent downstream.
+Therefore, to uphold the property in the face of evictions, Noria issues
+evictions downstream whenever it evicts entries from state in the middle of the
+graph. This ensures that any future update that touches the evicted state can
+safely be discarded, as any relevant downstream state has been discarded as
+well.
 
 The system invariants are thus all upheld for any operator sequence.
 
@@ -437,12 +464,11 @@ Noria supports two types of joins: inner joins and partial outer joins (i.e.
 ``left'' and ``right'' joins). For an inner join, either ancestor can be the
 target of the upquery, whereas for a partial outer join, the upquery \emph{must}
 go to the ``full'' side\,---\,the side from which all rows are
-yielded\footnote{An upquery for a column that originates from the non-full
-ancestor must be routed according to its value. If it is \texttt{NULL}, the
-upquery must go to the left, with additional later filtering, whereas if it is
-non-\texttt{NULL}, it can go to the non-full side without issue. Noria does not
-support such upqueries.}. Otherwise, the upquery may produce only a subset of
-the results for the join.
+yielded\footnote{An upquery for a column from the non-full ancestor must be
+routed by value. If it is \texttt{NULL}, the upquery must go to the left, and
+its result must be filtered. If it is non-\texttt{NULL}, it must go to the
+non-full side. Noria does not support such upqueries.}. Otherwise, the upquery
+may produce only a subset of the results for the join.
 
 \subsubsection{Dependent Upqueries}
 
@@ -526,20 +552,19 @@ a hypothetical downstream view that is keyed by author instead. A join that is
 incongruent with any upquery path that flows through it is considered an
 incongruent join.
 
-Noria can easily recognize incongruent joins through key provenance
-analysis\,---\,if an upquery flows through a join, and the upquery column is not
-the same as the join column, the join is incongruent. If an incongruent join
-encounters missing state while processing a delta at runtime, it must take
-action to ensure that downstream state remains correct. Since the domain that
-processes the join cannot produce a valid delta, and does not know what state is
-present and missing in the downstream dataflow, its only option is to issue an
-eviction for any downstream state that \emph{may} be rendered stale. Concretely,
-if an incongruent join processes a record $r$ and encounters a missing state
-entry, it should issue an eviction downstream on all incongruent upquery paths
-using the appropriate values from $r$. For example, if the join column is $c_j$,
-and upquery path $u_i$ through the join is keyed by column $c_i$, then the join
-should issue downstream evictions of $r[c_i]$ for each $u_i$ where $c_i \neq
-c_j$.
+Noria can recognize incongruent joins through key provenance\,---\,if an upquery
+flows through a join, and the upquery column is not the same as the join column,
+the join is incongruent. If an incongruent join encounters missing state while
+processing a delta at runtime, it must take action to ensure that downstream
+state remains correct. Since the domain that processes the join cannot produce a
+valid delta, and does not know what state is present and missing in the
+downstream dataflow, its only option is to issue an eviction for any downstream
+state that \emph{may} be rendered stale. Concretely, if an incongruent join
+processes a record $r$ and encounters a missing state entry, it should issue an
+eviction downstream on all incongruent upquery paths using the appropriate
+values from $r$. For example, if the join column is $c_j$, and upquery path
+$u_i$ through the join is keyed by column $c_i$, then the join should issue
+downstream evictions of $r[c_i]$ for each $u_i$ where $c_i \neq c_j$.
 
 \paragraph{All Together Now.}
 %
@@ -581,6 +606,20 @@ originator, and so the response should not go there.
 
 Beyond those three modifications, the existing logic for handling upqueries
 across forked strands of dataflow is sufficient.
+
+\paragraph{Shard Consistency.}
+For sharded base tables, the meaning of \emph{earlier} from
+Invariant~\ref{i:no-holes} is unclear: concurrent updates to different shards of
+the same base table do not happen before or after each other in a well-defined
+way. This means that a read that observes the effects of one base table change
+may not observe the effects of another change that happened before if the other
+update went to a different base table shard. Effectively, different shards
+constitute different dataflow paths in the definition of
+Invariant~\ref{i:no-holes}. The same applies for sharded views. Noria updates
+the view shards independently, so if the effects of an update are present in one
+shard of a view, they may not yet have manifested in another shard of that same
+view.
+
 
 % \footnote{Since shard mergers have only one operator (but many shards) as their
 % ancestor, they use the shard index of the operator that sent each input as a way
