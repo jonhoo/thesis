@@ -37,7 +37,7 @@ denormalize the schema by adding a new computed ``karma'' column to the
 (hypothesized) \texttt{users} table. Neither option is great. The former is slow
 to execute, and the latter requires computing the karma for every story. The
 index Noria must construct for efficient upqueries is cheaper to construct than
-such a computed \texttt{karma} column, which makes Noria's scan seems
+such a computed \texttt{karma} column, which makes Noria's single scan seem
 reasonable.
 
 Note that if \texttt{VoteCount} \emph{is} partial, the karma view is free to
@@ -71,7 +71,7 @@ from the top list are uncommon and the top list rotates over time. Otherwise,
 the approach is brittle; if many top rows are removed, or if the top is changing
 very infrequently, the top list may eventually hold none of the actual top
 items. Support for ordered indexes, and limited upqueries against those indexes,
-would fix this problem.
+would address this limitation.
 
 \section{Ranged Upqueries}
 \label{s:disc:ranged}
@@ -157,8 +157,9 @@ to the base tables, but the corresponding update has not yet entered the
 dataflow. This is a problem, because if an upquery response reflects that new
 data, and then an update arrives and adds that same data, the data will be
 reflected twice and thus violate Invariant~\ref{i:no-spurious}. In many ways,
-this is a similar problem to the one faced by joins if their input state could
-be remote (\S\ref{s:join-state-dupe}).
+this is a similar problem to the one that joins face if their input state
+resides across an edge that may hold in-flight updates
+(\S\ref{s:join-state-dupe}).
 
 A possible solution is to take a page out of the multi-version concurrency
 control playbook, and ensure that lookups into base table state do not see the

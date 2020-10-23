@@ -36,7 +36,7 @@ pgpool-query-cache} cache results as long as no changes occur to the underlying
 tables if queries are byte-for-byte identical. While attractive on the surface,
 they often work poorly in practice when the workload is not
 read-only~\cite{mysql-query-cache-nope,pgpool-query-cache}.}, and thus re-do
-work that has already been done many times over. This causes reads, which is the
+work that has already been done many times over. This causes reads, which are the
 most frequent operation in these applications, to be slow, while writes are
 simple and fast.
 
@@ -97,12 +97,12 @@ existing results in-place, which is wasteful.
 
 Eons ago~\cite{relational-materialized-views,stonebraker-views}, the database
 community introduced \textit{materialized views} as an answer to the problem of
-slow queries. Materialized views store the contents of \textit{views} (i.e.,
-named queries) which makes those queries faster to
-execute~\cite{materialized-views}. The materialized views can then be
-\textit{maintained} incrementally, meaning results are updated in-place, rather
-than invalidating stores results or re-executing queries from scratch when the
-underlying data changes~\cite{materialized-survey}.
+how to execute queries that are too slow to execute on demand. Materialized
+views store the contents of \textit{views} (i.e., named queries) which makes
+those queries faster to execute~\cite{materialized-views}. The materialized
+views can then be \textit{maintained} incrementally, meaning results are updated
+in-place, rather than invalidating stored results or re-executing queries from
+scratch when the underlying data changes~\cite{materialized-survey}.
 
 \begin{figure}
   \centering
@@ -116,20 +116,22 @@ underlying data changes~\cite{materialized-survey}.
 \end{figure}
 
 Figure~\vref{f:motivation-materialized} shows an approximate system architecture
-for a materialized view system: the system updates the materialized results in
-response to application writes, and reads access only the stored results.
-However, few commercially available databases support materialized views, and
-the ones that do come with significant
+for an incrementally-maintained materialized view system: the system updates the
+materialized results in response to application writes, and reads access only
+the stored results. However, few commercially available databases support
+materialized views, and the ones that do come with significant
 restrictions~\cite{mssql-materialized-view-restrictions}.
 
 State-of-the-art research systems support flexible materialized
-views~\cite{dbtoaster,materialize}, but do not support eviction or low-latency
-reads. In these systems, reads cannot access the materialized view directly, and
-must synchronize with the write-processing pipeline to get query results. They
-thus function poorly as a replacement for a cache: infrequently accessed results
-cannot be evicted, and reads must wait on writes. Many recent state-of-the-art
-materialized view systems are also restricted to a predeclared set of queries,
-and cannot incorporate changes to the application query set without restarting.
+views~\cite{dbtoaster,materialize}, but do not support low-latency reads In
+these systems, reads cannot access the materialized view directly, and must
+synchronize with the write-processing pipeline to get query results. They also
+do not have the ability to evict infrequently accessed state, which accumulates
+over time. They thus function poorly as a replacement for a cache: infrequently
+accessed results cannot be evicted, and reads must wait on writes. Many recent
+state-of-the-art materialized view systems are also restricted to a predeclared
+set of queries, and cannot incorporate changes to application queries without
+restarting.
 
 \section{Approach: Partial State}
 \label{s:approach}
@@ -174,10 +176,11 @@ represents computational dependencies as a directed acyclic graph where edges
 represent data dependencies, and vertices represent computations (like
 aggregations or joins) over the data that arrives over the incoming edges.
 Partial state upqueries flow ``up'' this dataflow, in the opposite direction of
-the data, to replay past state in the case of a cache miss. Those replays then
-use the existing Noria dataflow to process the responses and fill in missing
-state. This avoids the need for separate logic for serving cache misses and
-maintaining already cached state, and simplifies the implementation.
+the data, and trigger the retransmission of past state in the case of a cache
+miss. The resulting retransmissions then use the existing Noria dataflow to
+process the responses and fill in missing state. This avoids the need for
+separate logic for serving cache misses and maintaining already cached state,
+and simplifies the implementation.
 
 \section{Contributions}
 \label{s:contrib}
@@ -206,11 +209,12 @@ The rest of the dissertation is organized as follows: Chapter~\ref{s:noria}
 describes the Noria dataflow system. Chapter~\ref{s:partial} introduces the
 partially stateful dataflow model. Chapter~\ref{s:correct} describes additional
 mechanisms that are needed to ensure that partially stateful dataflow produces
-correct query results. Chapter~\ref{s:eval} evaluates Noria's implementation of
-partial state on a realistic application query workload. Chapter~\ref{s:related}
-explores related work. Chapter~\ref{s:disc} discusses shortcomings of, and
-alternatives to, partial state. Finally, Chapter~\ref{s:future} outlines future
-work on partial state.
+correct query results. Chapter~\ref{s:impl} details some of the implementation
+decisions in the thesis prototype. Chapter~\ref{s:eval} evaluates Noria's
+implementation of partial state on a realistic application query workload.
+Chapter~\ref{s:related} explores related work. Chapter~\ref{s:disc} discusses
+shortcomings of, and alternatives to, partial state. Finally,
+Chapter~\ref{s:future} outlines future work on partial state.
 
 For readers that are unfamiliar with database queries, materialized views,
 dataflow, and application caching, but would still like to understand roughly

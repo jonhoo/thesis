@@ -13,7 +13,7 @@ either in memory (the default) or on disk using using RocksDB~\cite{rocksdb}, a
 key-value store based on log-structured merge trees.
 
 \paragraph{Missing State.}
-Noria does not store tombstones for results that are missing in a
+Noria does not store markers (``tombstones'') for missing results in a
 materialization. Instead, it stores materialized results that are known to be
 empty in hash tables alongside other (non-empty) materialized results. This
 allows even empty results to be evicted to save space.

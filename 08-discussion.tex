@@ -15,9 +15,9 @@ views, and partial state specifically, are tailored for applications that:
     frequent, or more frequent, than reads, other systems will work better.
   \item Tolerate \textbf{eventual consistency}, at least for large parts of the
     application's workload. Much of Noria's performance advantages over other
-    systems stems from the relaxed consistency model. If much of the
-    application's workload requires stronger consistency guarantees, there is
-    little for Noria to speed up.
+    materialized view systems stems from the relaxed consistency model. If much
+    of the application's workload requires stronger consistency guarantees,
+    there is little for Noria to speed up.
   \item Experience \textbf{good locality}. If the application's access pattern
     is completely uniform, caching is unhelpful unless \emph{all} results are
     cached. In that case, partial state, and the complexity it introduces,
@@ -108,9 +108,7 @@ Recent work introduced arrangements~\cite{arrangements} as a way to mitigate
 this problem. Arrangements allow sharing indexes and state across related
 operators to avoid duplication. However, even with arrangements, the system may
 execute the same computation over a given input record more than once if it is
-needed by more than one instance of a query. Furthermore, eviction is made more
-difficult with arrangements, as the system must update the entire arrangement to
-accommodate any new or evicted parameter value. Noria supports joint query
+needed by more than one instance of a query. Noria supports joint query
 optimization~\cite{noria}, which combined with arrangements could reduce much of
 the duplicated effort by instantiating each query multiple times, though this
 does not improve the eviction process.
@@ -161,6 +159,7 @@ base data.
 Noria is eventually consistent, and so is the partial state implementation
 outlined in this thesis. That said, adding partial state to a system with
 stronger consistency guarantees should not require extensive changes. In fact,
-parts of the design could likely be simplified; union buffering, for example,
-would likely no longer be necessary, and could be replaced with some kind of
-multi-versioned concurrency control.
+parts of the design could likely be simplified; the buffering required for
+unions (\S\ref{s:upqueries:union}), for example, would likely no longer be
+necessary, and could be replaced with some kind of multi-versioned concurrency
+control.

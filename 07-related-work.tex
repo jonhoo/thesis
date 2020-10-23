@@ -55,7 +55,7 @@ alike have therefore attempted to build systems to automate cache maintenance.
 
 Authors of large applications often build their own custom caching
 infrastructure that solves their immediate needs~\cite{facebook-memcache,
-flannel}, but does not provide a ready-to-use solution for other developers that
+flannel}, but does not provide a ready-to-use solution for other developers who
 face similar issues. These custom-built solutions tend to implement only the
 minimum functionality the authors need at the time, and forego more complicated,
 but nonetheless useful features like incremental cache updates. Noria presents a
@@ -81,7 +81,7 @@ stores cache entries so that the application can correctly manage races between
 database updates and cache invalidations~\cite{facebook-memcache,
 casql-consistency, casql-consistency-thesis}. Noria instead integrates the cache
 management into the database, which allows the cache entries to be incrementally
-updated, automatically, in-place.
+updated, automatically, in-place, albeit with eventual consistency.
 
 A related approach is \textit{mid-tier database caching}, in which subsets of
 the database are replicated onto the hosts that run the application's code. This

@@ -32,9 +32,9 @@ when additional operators are added.
   \caption{Multiple indexes over the state in a single view in Noria. Even
   though \emph{some} rows for author B are \textbf{\color{set3}present}, some
   are \textbf{\color{set2}missing} and so the entry for B is considered missing
-  in the \texttt{author} index. Even though no rows for author C are present,
-  the index entry is not marked as missing, which would happen if Noria has
-  checked that there are indeed no rows for author C.}
+  in the \texttt{author} index. Even though there are no rows for author C, the
+  index entry is not marked as missing, which would happen if Noria has already
+  checked that there are indeed no rows in the base tables that match author C.}
   \label{f:indexing}
 \end{figure}
 
@@ -90,8 +90,8 @@ operator that issued the upquery, so that one upquery does not populate the
 relevant data in the state of \emph{every} operator. And second, if an operator
 encounters missing state while processing an upquery response update, it does
 \emph{not} discard that update as it would a regular dataflow update. Instead,
-it does the work necessary to fill the missing state and then process that
-update.
+it eagerly does the work necessary to fill the missing state and then process
+that update.
 
 When an application query encounters missing state in a view, Noria needs to
 know what upqueries to issue to fill that state. The set of upqueries for each
@@ -141,8 +141,8 @@ important properties of key tracing:
     provenance of the \texttt{story\_id} column, for example, traces both to
     \texttt{stories.id} and \texttt{votes.story\_id}.
   \item An output column may be entirely computed, and thus have no association
-    with a column in the inputs. The \texttt{vcount} column is computed by the
-    \texttt{VoteCount} aggregation, and does not exist in the input data.
+    with a column the operator's inputs. The \texttt{vcount} column is computed
+    by the \texttt{VoteCount} aggregation, and does not exist in the input data.
 \end{enumerate}
 
 In Listing~\ref{l:vote-src}, Noria is asked to parameterize
@@ -180,7 +180,7 @@ join, it must upquery the left ancestor, or risk missing rows in the left
 ancestor that have no matching rows in the right ancestor. This would result in
 those rows never appearing in downstream views, which violates eventual
 consistency. For a right join, the same logic applies, but mirrored to the right
-ancestor.
+ancestor. Noria does not support full outer joins.
 
 \paragraph{Disjoint Provenance.}
 If the provenance of a column crosses a union, \emph{all} ancestors of that
