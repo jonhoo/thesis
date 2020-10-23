@@ -72,3 +72,5 @@ writes.set_xlabel("Time after migration [s]")
 
 fig.tight_layout()
 plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")
+# for thesis presentation:
+# plt.savefig("{}.png".format(sys.argv[1]), format="png", dpi=256)

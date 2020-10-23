@@ -142,3 +142,5 @@ lo.set_xlabel("Page latency")
 
 fig.tight_layout()
 plt.savefig("{}.pdf".format(sys.argv[1]), format="pdf")
+# for thesis presentation backup slides:
+# plt.savefig("{}.png".format(sys.argv[1]), format="png", dpi=256)
