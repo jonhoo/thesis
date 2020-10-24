@@ -378,14 +378,15 @@ to allow reads to go ahead at full speed whenever possible. In particular, Noria
 does not synchronize reads with reads \emph{or} writes.
 
 This is achieved through a concurrency primitive that maintains two instances of
-each materialized view, with deduplication between them. Reads go to one view,
-and writes to the other. Readers see updates to the view only when a writer
-exposes those changes explicitly\,---\,the writer flips an atomic pointer to the
-other view, and then waits for all readers to exit the old view before modifying
-it again. This flip can be done on every update, as Noria currently does, or
-only occasionally to amortize the cross-core communication penalty and the wait
-period for the writer. Crucially, readers do not take locks, and generally
-operate only on core-local cache lines.
+each materialized view, with deduplication between them~\cite{evmap}. Reads go
+to one view, and writes to the other. Readers see updates to the view only when
+a writer exposes those changes explicitly\,---\,the writer flips an atomic
+pointer to the other view, and then waits for all readers to exit the old view
+before modifying it again. The scheme is similar to user-space read-copy-update,
+except that new copies are not continuously created. This flip can be done on
+every update, as Noria currently does, or only occasionally to amortize the
+cross-core communication penalty and the wait period for the writer. Crucially,
+readers do not take locks, and generally operate only on core-local cache lines.
 
 This design allows Noria to use any number of threads to serve reads from any
 view. As long as there are cores available, Noria can use additional threads to
