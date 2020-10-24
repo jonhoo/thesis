@@ -22,10 +22,11 @@ Noria derives more data, including some intermediate results. Noria stores views
 in memory.
 
 Noria's interface resembles parameterized SQL queries. The application supplies
-a \emph{Noria program}, which registers base tables and views with parameters
-supplied by the application when it retrieves data. The Noria program includes
-base table definitions, \emph{internal} views used as shorthands in other
-expressions, and \emph{external} views that the application later queries
+a \emph{Noria program}, which registers base tables and views. Unlike
+traditional database views, Noria's views also contain parameters that the
+application supplies values for whenever it retrieves data. The Noria program
+includes base table definitions, \emph{internal} views used as shorthands in
+other expressions, and \emph{external} views that the application later queries
 (the next section gives an example). It can be thought of as an extended schema
 for the application that includes its queries.
 

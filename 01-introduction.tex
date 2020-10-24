@@ -156,22 +156,23 @@ some columns are materialized as ``partially
 materialized''~\cite{partially-materialized}. This meaning of the term is
 unrelated to the use of the term in this thesis.}, or partial state for short.
 Partial state lets entries in materialized views be marked as \textit{missing},
-and introduces \textit{upqueries} to compute such missing state on-demand. This
-allows new queries to be added efficiently by leaving the initial materialized
-view empty, and populating the view only in response to application queries.
-Furthermore, as the application loses interest in old query results, those
-results can be evicted to reclaim memory, which can in turn be used to cache
-more important query results. In essence, partial state enables materialized
-views to function like caches.
+and introduces \textit{upqueries} to compute such missing state on-demand.
+This allows new queries to be added efficiently by leaving the initial
+materialized view empty, and populating the view only in response to application
+queries. Furthermore, as the application loses interest in old query results,
+those results can be evicted to reclaim memory, which can in turn be used to
+cache more important query results. In essence, partial state enables
+materialized views to function like caches.
 
 In the proposed work, the system model still looks like
-Figure~\vref{f:motivation-materialized}, but queries to the materialized view
-can \emph{miss}, just like in a cache. When they do, the database internally
-fills in the missing state before it responds to the application. If the
-application later executes the same query, the cache holds the result. Over
-time, the database evicts infrequently accessed results to save memory and to
-avoid the overhead of maintaining results the application is no longer
-interested in.
+Figure~\vref{f:motivation-materialized}, except that the materialized view also
+contains parameters whose value the application supplies at runtime. Queries to
+the materialized view can then \emph{miss} for a given parameter value, just
+like in a cache. When they do, the database internally fills in the missing
+state before it responds to the application. If the application later executes
+the same query, the cache holds the result. Over time, the database evicts
+infrequently accessed results to save memory and to avoid the overhead of
+maintaining results the application is no longer interested in.
 
 \section{Partial State in Noria}
 \label{s:intro:noria}
