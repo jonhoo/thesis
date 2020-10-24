@@ -123,7 +123,7 @@ materialized views, and the ones that do come with significant
 restrictions~\cite{mssql-materialized-view-restrictions}.
 
 State-of-the-art research systems support flexible materialized
-views~\cite{dbtoaster,materialize}, but do not support low-latency reads In
+views~\cite{dbtoaster,materialize}, but do not support low-latency reads. In
 these systems, reads cannot access the materialized view directly, and must
 synchronize with the write-processing pipeline to get query results. They also
 do not have the ability to evict infrequently accessed state, which accumulates
