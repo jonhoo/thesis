@@ -90,9 +90,45 @@ remove existing views, and to adapt base table schemas. When it does, Noria
 adapts the running dataflow to incorporate the changes without restarting the
 dataflow engine.
 
+\subsection{SQL Support}
+
 Unlike the iterative or graph computations that are the focus of other dataflow
 systems~\cite{naiad, differential-dataflow}, Noria focuses entirely on
-relational operators. Noria supports much, but not all, of SQL.
+relational operators. Noria supports much, but not all, of SQL. This subsection
+describes some noteworthy subsets of SQL that are not supported.
+Section~\ref{s:future} also details how some of these may be supported in the
+future.
+
+\paragraph{Non-Equality Query Parameters.}
+Query parameters cannot be compared using anything but equality. With ordered
+state (\S\ref{s:fut:ordered}), this restriction could be lifted.
+
+\paragraph{Non-Equality Joins.}
+Join clauses may only compare columns of joined tables by equality. Views with
+inequality joins are known to be hard to maintain~\cite{inequality-incremental}.
+
+\paragraph{Result Set Offsets.}
+Queries cannot contain the \texttt{OFFSET} operator, or a second argument to the
+\texttt{LIMIT} operator. While Noria could support such result set iteration
+(\S\ref{s:fut:cursors}), how to evict from a view with such parameters remains
+an open question.
+
+\paragraph{Correlated Subqueries.}
+Queries with correlated subqueries are not supported as these were not used by
+the evaluated application (\S\ref{s:eval}). Such queries also do not fall under
+select-project-join (SPJ) query model that incremental view maintenance
+algorithms tend to support, and maintenance of such queries is an open problem.
+
+\paragraph{MIN/MAX Aggregates.}
+Noria does not support the SQL minimum and maximum aggregate functions, which
+are also known to be difficult to maintain
+incrementally~\cite{minmax-incremental}. This is because those functions may
+need to scan the state of their ancestor if the current extremum is removed,
+which Noria does not currently provide a mechanism for. Top-$k$ queries
+(\texttt{ORDER BY} + \texttt{LIMIT}) are supported, but only in a limited
+fashion: if an entry in the top $k$ is removed, the query will not eagerly fetch
+its replacement. These operators could be supported if Noria supported ordered
+indexes (\S\ref{s:fut:ordered}).
 
 \section{Dataflow Execution}
 
