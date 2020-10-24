@@ -38,12 +38,74 @@ asynchronous Rust runtime. Tokio manages a pool of threads that cooperatively
 schedule thread domain processing (\S\ref{s:noria:partitioning}), query
 handling, and control operations like adding and removing queries.
 
+\paragraph{Network Protocol.}
+Noria uses a very simple, Rust-specific binary encoding for its network
+protocol. The protocol tags each request and response with a required
+identifier, which allows Noria to respond to requests as they complete on the
+server, rather than process them one-at-a-time. This also enables the Noria
+dataflow to process updates in batch more often, since multiple client requests
+can be batched together.
+
+\paragraph{Running Out of Memory.}
+Noria has no special mechanisms for monitoring its own memory use. If eviction
+is not aggressive enough, or a given materialization simply requires more memory
+than is available, the Noria process crashes.
+
+\paragraph{Storing Result Sets.}
+Noria stores materialized views as a hash table whose key is the view's
+parameter column. The value for a given entry in the hash table is the
+collection of rows that a query with that entry's key should return. There
+may be many rows for a given key, including duplicates, so to support efficient
+removal of individual rows, the result set is stored as a hash bag: a hash table
+where the index is each distinct row, and the value is that row's multiplicity.
+
+\paragraph{Resizing Pauses.}
+Many of the benchmarks in this thesis continuously accumulate more data,
+especially in the base tables, and then measure latency over time. Since the
+benchmarking harness captures the full distribution of latencies, including the
+far tail, this surfaced a number of ``amortized'' costs from data structures
+like hash tables and vectors that occasionally double in size as they grow.
+Those resizes caused significant spikes in tail latency, which was unfortunate
+in experiments that aimed to measure tail latency specifically. Noria therefore
+now uses specialized data structures whose resize behavior is \emph{also}
+amortized by spreading the cost of resizes across multiple later inserts.
+
+\paragraph{Nagle's algorithm.} Disabled, as it should be for anything
+latency-sensitive. Many hours were lost in the searches for TCP sockets where it
+had not yet been disabled.
+
 \paragraph{Fast Reads.}
 Query handlers process clients' RPCs to read from external views. They must
 access the view with low latency and high concurrency, even while a thread
 domain applies updates to the view. To minimize synchronization, Noria uses
-double-buffered hash tables for external views~\cite{evmap}: the thread domain
-updates one table while read handlers read the other, and an atomic pointer
-swap exposes new writes. This design can significantly improve read throughput
-on multi-core servers over a single-buffered hash table with bucket-level locks
-in workloads with high skew.
+double-buffered hash tables for external views that are wait-free for
+readers~\cite{evmap}: the thread domain updates one table while read handlers
+read the other, and an atomic pointer swap exposes new writes. This design can
+significantly improve read throughput on multi-core servers over a
+single-buffered hash table with bucket-level locks in workloads with high skew.
+Internally, the design resembles the ``left-right'' concurrency
+scheme~\cite{left-right}.
+
+\paragraph{Operator Implementation.}
+The implementation of the various relational operators in Noria is perhaps
+surprisingly straightforward, despite the vast literature on how to implement
+joins and aggregations more efficiently. The primary reason for this is that the
+operators must work in an incremental fashion with small batches of rows
+arriving intermittently. Most intelligent implementations play tricks with how
+they arrange and walk the indices of upstream tables, and how the columns of the
+output rows are collected, but this is not feasible in a tuple-at-a-time system
+like Noria. Nevertheless, the operators try to be efficient where possible: they
+only look up each distinct value of a join key or aggregation group column in a
+batch of rows once, and sort batches before processing to improve cache
+efficiency.
+
+\paragraph{Query-Through.}
+The restriction that join inputs must be materialized
+(\S\ref{s:join-state-dupe}) is not quite as strict in practice as it might first
+seem. The true requirement is that the source of the join lookups must reside in
+the same thread domain, not that the join's \emph{immediate} ancestors be
+materialized. For example, if an aggregation (which must have its output
+materialized) is a followed by a filter, which is then followed by a join, the
+output of the filter does not \emph{also} need to materialized if all nodes are
+in the same thread domain. Noria can reuse the aggregation's materialization as
+long as the filter is applied to any lookup results before the join sees them.
