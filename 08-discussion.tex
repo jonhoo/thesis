@@ -57,11 +57,12 @@ supports \emph{lateral} joins~\cite{lateral-join}, which is described as
 \end{quote}
 
 In particular, lateral joins let the application author write a query that has
-access to the contents of some unrelated table. For example,
+access to the contents of some unrelated control table. For example,
 Listing~\vref{l:emulate-partial-vote} shows how a lateral join can be used to
 emulate a partially materialize vote count view like the one from
-Listing~\vref{l:votes}. The idea is to have a table of ``filled'' keys, and have
-the results only for those keys be included in the final materialized view.
+Listing~\vref{l:votes}. The idea is to have a control table of ``filled'' keys,
+and have the results only for those keys be included in the final materialized
+view.
 
 \begin{listing}[h]
   \begin{minted}{sql}
@@ -78,12 +79,20 @@ SELECT article_id, votes FROM
   \label{l:emulate-partial-vote}
 \end{listing}
 
+This same approach is used to implement dynamic materialized
+views~\cite{dynamic-materialized-views, partially-materialized-views}, in which
+only an application-controlled subset of the records in each view are
+materialized. In dynamic materialized views, the ``lateral join'' is an EXISTS
+subquery against a control table that holds the keys the view should maintain.
+
 This approach works well to emulate partial state in simple situations, but
 requires significant manual effort for a large application. In Lobsters, for
 example, the application author must re-write their applications to use such
 lateral joins, and must include application logic to maintain the auxiliary
-tables used to indicate what keys are materialized. It may be possible to
-automate this process, though doing so requires research.
+tables used to indicate what keys are materialized. It is possible to automate
+the population of the control table using a feedback-loop cache
+manager~\cite{dynamic-materialized-views}, but the requested query results would
+be unavailable until the control table is updated.
 
 Effort notwithstanding, emulating partial state in this way also presents an
 ``all or nothing'' choice for applications for a given key. Either, all state

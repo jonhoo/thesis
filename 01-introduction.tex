@@ -125,13 +125,18 @@ restrictions~\cite{mssql-materialized-view-restrictions}.
 State-of-the-art research systems support flexible materialized
 views~\cite{dbtoaster,materialize}, but do not support low-latency reads. In
 these systems, reads cannot access the materialized view directly, and must
-synchronize with the write-processing pipeline to get query results. They also
-do not have the ability to evict infrequently accessed state, which accumulates
-over time. They thus function poorly as a replacement for a cache: infrequently
-accessed results cannot be evicted, and reads must wait on writes. Many recent
-state-of-the-art materialized view systems are also restricted to a predeclared
-set of queries, and cannot incorporate changes to application queries without
-restarting.
+synchronize with the write-processing pipeline to get query results. Many of
+these systems are also restricted to a predeclared set of queries, and cannot
+incorporate changes to application queries without restarting.
+
+Most materialized view systems do not have the ability to evict infrequently
+accessed state that accumulates over time. They thus function poorly as a
+replacement for a cache: infrequently accessed results cannot be evicted, and
+reads must wait on writes. Dynamic materialized
+views~\cite{dynamic-materialized-views, partially-materialized-views} allow the
+application to materialize only a subset of each view. This enables limited
+eviction, but is cumbersome for the application to manage, and only allows
+coarse-grained eviction decisions (\S\ref{s:disc:emulating}).
 
 \section{Approach: Partial State}
 \label{s:approach}
@@ -145,15 +150,19 @@ is a way to make the materialized views more dynamic. Specifically, to serve as
 a good cache-substitute, materialized views must support efficiently adding new
 queries and evicting old results at runtime.
 
-To bridge the gap, this thesis proposes \textit{partially materialized state},
-or partial state for short. Partial state lets entries in materialized views be
-marked as \textit{missing}, and introduces \textit{upqueries} to compute such
-missing state on-demand. This allows new queries to be added efficiently by
-leaving the initial materialized view empty, and populating the view only in
-response to application queries. Furthermore, as the application loses interest
-in old query results, those results can be evicted to reclaim memory, which can
-in turn be used to cache more important query results. In essence, partial state
-enables materialized views to function like caches.
+To bridge the gap, this thesis proposes \textit{partially materialized
+state}\footnote{The database literature sometimes refers to a view where only
+some columns are materialized as ``partially
+materialized''~\cite{partially-materialized}. This meaning of the term is
+unrelated to the use of the term in this thesis.}, or partial state for short.
+Partial state lets entries in materialized views be marked as \textit{missing},
+and introduces \textit{upqueries} to compute such missing state on-demand. This
+allows new queries to be added efficiently by leaving the initial materialized
+view empty, and populating the view only in response to application queries.
+Furthermore, as the application loses interest in old query results, those
+results can be evicted to reclaim memory, which can in turn be used to cache
+more important query results. In essence, partial state enables materialized
+views to function like caches.
 
 In the proposed work, the system model still looks like
 Figure~\vref{f:motivation-materialized}, but queries to the materialized view
