@@ -50,7 +50,7 @@ make a traditional relational database do if they wanted to make a view
 efficient to query remains an open question.
 
 \section{Ordered State}
-\label{s:disc:ordered}
+\label{s:fut:ordered}
 
 Certain ordered operations, like max aggregations (\texttt{SELECT MAX}) and
 top-k-style queries (\texttt{ORDER BY LIMIT}), occasionally require re-fetching
@@ -74,7 +74,7 @@ items. Support for ordered indexes, and limited upqueries against those indexes,
 would address this limitation.
 
 \section{Ranged Upqueries}
-\label{s:disc:ranged}
+\label{s:fut:ranged}
 
 Throughout this thesis, upqueries have been described in terms of point lookups
 of the form \texttt{WHERE x = ? AND y = ?}. However, the design of partial state
@@ -213,6 +213,7 @@ between these, otherwise Noria's read performance would be bottlenecked by the
 performance of the write path.
 
 \section{Cursors}
+\label{s:fut:cursors}
 
 Websites frequently have paginated listings, or pages that fill in with more
 content as the user scrolls. Behind the scenes, these techniques are implemented
@@ -231,14 +232,14 @@ the results for a query the application has already seen, and the application
 can fetch more results directly from the cursor.
 
 Noria currently cannot represent cursors like these since it does not maintain
-the order of in-memory state (\S\ref{s:disc:ordered}). \texttt{OFFSET} might not
+the order of in-memory state (\S\ref{s:fut:ordered}). \texttt{OFFSET} might not
 skip the same results as shown on the previous page, and \texttt{WHERE x > ?} is
 not supported. If support for ordered state was added, Noria would support these
 types of queries much like existing databases.
 
 To make paginated queries \emph{partial}, additional challenges must be solved.
 First, ranged upqueries are required for \texttt{x > ?} conditionals
-(\S\ref{s:disc:ranged}). Then, a decision must be made as to how \texttt{LIMIT}
+(\S\ref{s:fut:ranged}). Then, a decision must be made as to how \texttt{LIMIT}
 should interact with upqueries. There are two primary design options:
 \emph{post-limiting} and \emph{pre-limiting}.
 
