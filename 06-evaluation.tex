@@ -748,30 +748,29 @@ asked to evict more keys than the predicted size of the ``hot'' key set.
 
 \section{Cost of (Partial) View Maintenance}
 
-Materialized view maintenance is not free: writes to traditional relational
-databases need only modify the contents of a single table, whereas in
-Noria those changes must propagate through the dataflow. What may have started
-as a single new table row may instigate a host of dataflow updates to different
-views, dependent upqueries, and evictions for incongruent joins. As a result,
-while Noria \emph{reads} are faster than reads from traditional databases,
-\emph{writes} are slower.
+View maintenance is not free: writes to traditional relational databases need
+only modify the contents of a single table, while in Noria those changes must
+propagate through the dataflow. What may have started as a single new table row
+may cause a host of updates to different views, dependent upqueries, and
+incongruent join evictions. Thus, while Noria \emph{reads} are faster than reads
+from traditional databases, \emph{writes} are slower.
 
-For applications whose workload is skewed towards reads, this trade-off still
-tends to be worthwhile; more CPU cycles are saved from not repeatedly
-re-executing queries for reads than are consumed by processing writes through
-the dataflow. However, as the application grows and its load increases,
-\emph{eventually} its write volume may still become a bottleneck. This is
-because while Noria can process reads in parallel on many cores, writes must
-flow through the dataflow, which has less capacity for concurrent processing.
-Ultimately, \emph{some} node in the dataflow will be unable to keep up with the
-write load offered to it, and a queue will build up upstream of that node.
+For applications whose workload skews towards reads, this trade-off still tends
+to be worthwhile; more CPU cycles are saved from not repeatedly re-executing
+queries for reads than are consumed by processing writes through the dataflow.
+However, as the application grows and its load increases, \emph{eventually} its
+write volume may still become a bottleneck. This is because while Noria can
+process reads in parallel on many cores, writes must flow through the dataflow,
+which has less capacity for concurrent processing. Ultimately, \emph{some} node
+in the dataflow will be unable to keep up with the write load offered to it, and
+a queue will build up upstream of that node.
 
 Where this bottleneck occurs depends on the application workload, as well as how
 the application writes arrive. If writes are also skewed, and arrive in batches,
 Noria's operators can sustain higher throughput than if the writes are uniformly
 distributed or arrive in small batches at high frequency.
 
-The reason why Noria with partial state plateaus where it does in
+The reason why Noria plateaus where it does in
 Figure~\vref{f:lobsters-throughput} is because of precisely such a bottleneck in
 the Lobsters queries. In particular, Lobsters has a query that fetches a user's
 \emph{notifications}. A notification is generated for user $u$ whenever another
@@ -782,17 +781,17 @@ notifications in case any should be removed. Thus, 55.8\% (cf.
 Table~\vref{t:lobsters-pages}) of requests must send an update through the one
 dataflow path that updates the notifications view.
 
-When Lobsters no longer keeps up with offered load beyond 7700 pages per second,
-it is this dataflow update that drives up the latency. The server has spare
-memory and spare cores, but one thread is constantly busy working on the
-notification dataflow\footnote{This load could be spread across cores by
-sharding the dataflow, though this would slow down other queries due to
-limitations in Noria's basic sharding implementation.}. The $\approx4300$ story
-requests per second generate a total of over 100,000 read queries per second,
-which Noria handles just fine, but the 4300 \emph{updates} per second saturate
-Noria's dataflow for the notifications query. This suggests that Noria's
-dataflow cannot support an aggregate update rate beyond 4300 across tables that
-feed into a shared dataflow node.
+When Lobsters latency spikes beyond 7700 pages per second, it is this dataflow
+update that drives up the latency. The server has spare memory and spare cores,
+but one thread is constantly busy working on the notification
+dataflow\footnote{This load could be spread across cores by sharding the
+dataflow, though this would slow down other queries due to limitations in
+Noria's basic sharding implementation.}. The $\approx4300$ story requests per
+second generate over 100,000 reads per second, which Noria handles just fine,
+but the 4300 \emph{updates} per second saturate Noria's dataflow for the
+notifications query. This suggests that Noria's dataflow cannot support an
+aggregate update rate beyond 4300 across tables that share a downstream dataflow
+node.
 
 Partial state has a modest impact on what update rate Noria can support. Without
 partial state, \emph{every} update must be processed to completion, which
