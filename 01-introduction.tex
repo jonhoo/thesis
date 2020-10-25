@@ -104,7 +104,7 @@ views can then be \textit{maintained} incrementally, meaning results are updated
 in-place, rather than invalidating stored results or re-executing queries from
 scratch when the underlying data changes~\cite{materialized-survey}.
 
-\begin{figure}
+\begin{figure}[h]
   \centering
   \includegraphics{diagrams/Motivation Materialized Views.pdf}
   \caption{Application query execution against a materialized view. Application
@@ -115,11 +115,11 @@ scratch when the underlying data changes~\cite{materialized-survey}.
   \label{f:motivation-materialized}
 \end{figure}
 
-Figure~\vref{f:motivation-materialized} shows an approximate system architecture
-for an incrementally-maintained materialized view system: the system updates the
+Figure~\vref{f:motivation-materialized} shows an approximate architecture for an
+incrementally-maintained materialized view system. The system updates the
 materialized results in response to application writes, and reads access only
-the stored results. However, few commercially available databases support
-materialized views, and the ones that do come with significant
+the stored results. Sadly, few commercially available databases support
+materialized views, and the ones that do have significant
 restrictions~\cite{mssql-materialized-view-restrictions}.
 
 State-of-the-art research systems support flexible materialized

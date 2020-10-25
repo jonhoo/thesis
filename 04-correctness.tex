@@ -45,14 +45,14 @@ applied. If Noria skips such a delta, that delta will never manifest\,---\,the
 upquery response does not contain it, and the delta itself was skipped.
 
 \paragraph{Upquery Races.}
-Some queries produce dataflow that diverges and then converges again so that the
+Some queries produce dataflow that diverges and then converges again so the
 edges form a diamond shape. This happens if the query performs a self-join, or
-otherwise accesses a given base table or internal view more than once. When
-this occurs, upquery responses needed to fill missing state may race with one
-another, or with other dataflow deltas, since the operator where the strands
-converge processes updates in an arbitrary order. This magnifies the challenge
-of mitigating double applications and skipped deltas, since the interleaving of
-different strands must also be considered.
+otherwise accesses a given base table more than once. When this occurs, upquery
+responses needed to fill missing state may race with one another, or with other
+dataflow deltas, since the operator where the strands converge processes updates
+in an arbitrary order. This magnifies the challenge of mitigating double
+applications and skipped deltas, since the interleaving of different strands
+must also be considered.
 
 \paragraph{Lost Deltas.}
 If Noria encounters missing state while processing a delta, it discards that
@@ -157,6 +157,8 @@ independent paths for the purposes of this invariant.
 % useful nonetheless: as the system makes progress, it ensures that more updates
 % are reflected over time.
 
+\clearpage
+
 \begin{invariant}
   \label{i:missing-suffix}
   If an operator encounters missing state while processing a record $r$ in an
@@ -204,11 +206,11 @@ current state of the operator that emitted the delta. If a base table produces
 a negative delta for a row $r$, it means that $r$ is no longer in that base
 table's current state. An upquery fetches current state\,---\,the sum of all
 past deltas emitted by the queried operator\footnote{If the dataflow encounters
-missing state while processing an update, it discards that update
-(\S\ref{s:missing}). This means that there may be state missing in an operator's
-state. If an upquery encounters such missing state, it triggers an upquery for
-that state before it proceeds.}\,---\,and feeds it through the same chain of
-dataflow operators that individual deltas go through.
+missing state when processing an update, it discards that update. Thus, there
+may be state missing in an operator's state. If an upquery encounters such
+missing state, it triggers an upquery for that state before it
+proceeds.}\,---\,and feeds it through the same chain of dataflow operators that
+individual deltas go through.
 
 For upquery processing to be equivalent to one-at-a-time delta processing, it is
 necessary that processing a combined update through all the dataflow operators
@@ -271,7 +273,7 @@ graph. This ensures that any future update that touches the evicted state can
 safely be discarded, as any relevant downstream state has been discarded as
 well.
 
-The system invariants are thus all upheld for any linear sequence of operators.
+The system invariants are thus upheld for any linear operator sequence.
 
 \section{Diverging Dataflow}
 \label{s:partial:diverging}
@@ -305,7 +307,7 @@ upquery response on the path to the target state never duplicates effects.
 
 Thus\footnote{Assuming that Noria does not erroneously upquery for, and
 incorporate the results of, the same upstream state multiple times.}, partial
-state on divergent dataflow thus upholds the system invariants.
+state on divergent dataflow upholds the system invariants.
 
 \section{Merging Dataflow}
 \label{s:partial:merging}

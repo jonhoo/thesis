@@ -47,9 +47,9 @@ dataflow to process updates in batch more often, since multiple client requests
 can be batched together.
 
 \paragraph{Running Out of Memory.}
-Noria has no special mechanisms for monitoring its own memory use. If eviction
-is not aggressive enough, or a given materialization simply requires more memory
-than is available, the Noria process crashes.
+Noria does not monitor its own memory use. If eviction is not aggressive enough,
+or a given materialization simply requires more memory than is available, the
+Noria process aborts.
 
 \paragraph{Storing Result Sets.}
 Noria stores materialized views as a hash table whose key is the view's
@@ -70,21 +70,20 @@ in experiments that aimed to measure tail latency specifically. Noria therefore
 now uses specialized data structures whose resize behavior is \emph{also}
 amortized by spreading the cost of resizes across multiple later inserts.
 
-\paragraph{Nagle's algorithm.} Disabled, as it should be for anything
-latency-sensitive. Many hours were lost in the searches for TCP sockets where it
-had not yet been disabled.
+\paragraph{Nagle's algorithm.} Disabled, as it should be for any
+latency-sensitive application. Many hours were lost in the (multiple) searches
+for latency spikes caused by TCP sockets where it had not yet been disabled.
 
 \paragraph{Fast Reads.}
 Query handlers process clients' RPCs to read from external views. They must
 access the view with low latency and high concurrency, even while a thread
 domain applies updates to the view. To minimize synchronization, Noria uses
 double-buffered hash tables for external views that are wait-free for
-readers~\cite{evmap}: the thread domain updates one table while read handlers
+readers~\cite{evmap}. The thread domain updates one table while read handlers
 read the other, and an atomic pointer swap exposes new writes. This design can
 significantly improve read throughput on multi-core servers over a
-single-buffered hash table with bucket-level locks in workloads with high skew.
-Internally, the design resembles the ``left-right'' concurrency
-scheme~\cite{left-right}.
+single-buffered hash table with bucket-level locks. Internally, the design
+resembles the ``left-right'' concurrency scheme~\cite{left-right}.
 
 \paragraph{Operator Implementation.}
 The implementation of the various relational operators in Noria is perhaps

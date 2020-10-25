@@ -34,9 +34,9 @@ in commercially available databases. Unlike Noria, these systems focus on
 long-term maintenance of analytics queries\,---\,they do not provide mechanisms
 for fast reads and do not support eviction. Dynamic materialized
 views~\cite{dynamic-materialized-views, partially-materialized-views} allow the
-application to materialize only a subset of each view, which enables limited
-eviction, but is cumbersome for the application to manage, and only allows
-coarse-grained eviction decisions\footnote{This strategy is discussed further in
+materialization of only a subset of each view, which enables limited eviction,
+but is cumbersome for the application to manage, and only allows coarse-grained
+eviction decisions\footnote{This strategy is discussed further in
 \S\ref{s:disc:emulating}.}.
 
 Noria's dataflow resembles Higher-Order IVM, including the materialization of

@@ -79,11 +79,10 @@ To capture the variance of measurements, the benchmarks use
 HdrHistogram~\cite{hdrhistogram}, a data structure that efficiently captures and
 represents histograms with a high dynamic range over large numbers of samples.
 
-All experiments measure memory use using the resident virtual memory of the
-server process (VmRSS) unless otherwise noted. This measurement therefore
-includes all indexes, runtime allocations, and other bookkeeping metadata. For
-Noria, it also includes the data stored in the base tables except where
-indicated.
+All experiments report the resident virtual memory of the server process (VmRSS)
+unless otherwise noted. This measurement therefore includes all indexes, runtime
+allocations, and other bookkeeping metadata. For Noria, it also includes the
+data stored in the base tables except where indicated.
 
 Since the benchmarks introduce more data as they run, memory use increases with
 time. Experiments are run for 5 minutes unless otherwise specified, and memory

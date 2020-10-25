@@ -82,17 +82,18 @@ SELECT article_id, votes FROM
 This same approach is used to implement dynamic materialized
 views~\cite{dynamic-materialized-views, partially-materialized-views}, in which
 only an application-controlled subset of the records in each view are
-materialized. In dynamic materialized views, the ``lateral join'' is an EXISTS
-subquery against a control table that holds the keys the view should maintain.
+materialized. In dynamic materialized views, the ``lateral join'' is an
+\texttt{EXISTS} correlated subquery against a control table that holds the keys
+the view should maintain.
 
 This approach works well to emulate partial state in simple situations, but
 requires significant manual effort for a large application. In Lobsters, for
-example, the application author must re-write their applications to use such
-lateral joins, and must include application logic to maintain the auxiliary
-tables used to indicate what keys are materialized. It is possible to automate
-the population of the control table using a feedback-loop cache
+example, the application author must re-write their queries to use such lateral
+joins, and must include application logic to maintain the auxiliary tables used
+to indicate what keys are materialized. It is possible to automate the
+population of the control table using a feedback-loop cache
 manager~\cite{dynamic-materialized-views}, but the requested query results would
-be unavailable until the control table is updated.
+be unavailable until the cache manager has updated the control table.
 
 Effort notwithstanding, emulating partial state in this way also presents an
 ``all or nothing'' choice for applications for a given key. Either, all state

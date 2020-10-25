@@ -100,12 +100,12 @@ Section~\ref{s:future} also details how some of these may be supported in the
 future.
 
 \paragraph{Non-Equality Query Parameters.}
-Query parameters cannot be compared using anything but equality. With ordered
-state (\S\ref{s:fut:ordered}), this restriction could be lifted.
+Query parameters can only be compared using equality. Ordered state
+(\S\ref{s:fut:ordered}) could lift this restriction.
 
 \paragraph{Non-Equality Joins.}
-Join clauses may only compare columns of joined tables by equality. Views with
-inequality joins are known to be hard to maintain~\cite{inequality-incremental}.
+Join clauses may only compare columns by equality. Views with inequality joins
+are known to be hard to maintain~\cite{inequality-incremental}.
 
 \paragraph{Result Set Offsets.}
 Queries cannot contain the \texttt{OFFSET} operator, or a second argument to the
@@ -443,13 +443,12 @@ updates in a given thread domain at a time (except with sharding; see below),
 and any update that enters a thread domain is processed to completion within
 the domain before another update is processed.
 
-Noria never shares state between thread domains, which means that state access
-is not guarded by locks. Thread domains communicate with one another only
-through messages across the edges of the dataflow, or in the case of upqueries,
-by sending messages through dedicated upquery paths
-(\S\ref{s:upquery:selection}). All such communication can happen either over the
-network if the other thread domain is on a different host, or over an in-memory
-channel if it is local.
+Noria never shares state between thread domains, so state access is not guarded
+by locks. Thread domains communicate with each other only through messages sent
+across the edges of the dataflow, or in the case of upqueries, through messages
+sent on dedicated upquery paths (\S\ref{s:upquery:selection}). All such
+communication can happen either over the network if the other thread domain is
+on a different host, or over an in-memory channel if it is local.
 
 Since thread domains share nothing, Noria duplicates state across boundaries
 when needed. For example, a join operator at an incoming edge of a thread domain

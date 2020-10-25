@@ -29,25 +29,24 @@ when additional operators are added.
 \begin{figure}
   \centering
   \includegraphics{diagrams/Indexing.pdf}
-  \caption{Multiple indexes over the state in a single view in Noria. Even
-  though \emph{some} rows for author B are \textbf{\color{set3}present}, some
-  are \textbf{\color{set2}missing} and so the entry for B is considered missing
-  in the \texttt{author} index. Even though there are no rows for author C, the
-  index entry is not marked as missing, which would happen if Noria has already
+  \caption{Multiple indexes in a single view in Noria. Even though \emph{some}
+  rows for author B are \textbf{\color{set3}present}, some are
+  \textbf{\color{set2}missing}, so the entry for B is missing in the
+  \texttt{author} index. Even though there are no rows for author C, the index
+  entry is not marked as missing, which would happen if Noria has already
   checked that there are indeed no rows in the base tables that match author C.}
   \label{f:indexing}
 \end{figure}
 
-Missing state manifests as missing entries in particular indices. Indexes over a
-given state are either all partial or none of them are. This may seem strange
-based on how indices work in traditional relation databases.
-Figure~\vref{f:indexing} gives an example with two different partial indices
-over a view that holds a unique story identifier and the story's author. One
-index is over the primary key column \texttt{id}, and one is over the story
-author. Here, even though some rows with author B are present, the index entry
-for author B is still considered missing, since not \emph{all} rows with author
-B are present. This is necessary, as otherwise an application query for stories
-authored by B would return a result with missing rows.
+Missing state manifests as missing entries in indices. Indexes over a given
+state are either all partial or none of them are. This may seem strange given
+how indices work in traditional relation databases. Figure~\vref{f:indexing}
+gives an example of two partial indices over a view that holds a unique story
+identifier and the story's author. One index is over the primary key column
+\texttt{id}, and one is over the story author. Even though some rows with author
+B are present, the index entry for author B is still considered missing, as not
+\emph{all} rows with author B are present. This is necessary, as otherwise a
+query for stories authored by B would return a result with missing rows.
 
 While there are no rows for authors C or D, C is considered complete because
 Noria has checked upstream that there are indeed no stories written by C. For D,
@@ -141,8 +140,9 @@ important properties of key tracing:
     provenance of the \texttt{story\_id} column, for example, traces both to
     \texttt{stories.id} and \texttt{votes.story\_id}.
   \item An output column may be entirely computed, and thus have no association
-    with a column the operator's inputs. The \texttt{vcount} column is computed
-    by the \texttt{VoteCount} aggregation, and does not exist in the input data.
+    with a column in the operator's inputs. For example, the \texttt{vcount}
+    column is computed by the \texttt{VoteCount} aggregation, and does not exist
+    in the input data.
 \end{enumerate}
 
 In Listing~\ref{l:vote-src}, Noria is asked to parameterize
