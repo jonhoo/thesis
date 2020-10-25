@@ -90,7 +90,7 @@ time. Experiments are run for 5 minutes unless otherwise specified, and memory
 measurements are taken at the end of the run. All results are stable and
 consistent across multiple runs.
 
-\section{Benefits and Costs of View Materialization}
+\section{Benefits of Partial View Materialization}
 \label{s:eval:why}
 
 The core argument of this thesis is that partial state makes materialized views
@@ -745,3 +745,63 @@ write path that could otherwise be dedicated to serving upqueries.
 \paragraph{In summary,} Noria benefits from skewed access, which is common in
 real-world datasets. At moderate throughput levels, Noria falls over only when
 asked to evict more keys than the predicted size of the ``hot'' key set.
+
+\section{Cost of (Partial) View Maintenance}
+
+Materialized view maintenance is not free: writes to traditional relational
+databases need only modify the contents of a single table, whereas in
+Noria those changes must propagate through the dataflow. What may have started
+as a single new table row may instigate a host of dataflow updates to different
+views, dependent upqueries, and evictions for incongruent joins. As a result,
+while Noria \emph{reads} are faster than reads from traditional databases,
+\emph{writes} are slower.
+
+For applications whose workload is skewed towards reads, this trade-off still
+tends to be worthwhile; more CPU cycles are saved from not repeatedly
+re-executing queries for reads than are consumed by processing writes through
+the dataflow. However, as the application grows and its load increases,
+\emph{eventually} its write volume may still become a bottleneck. This is
+because while Noria can process reads in parallel on many cores, writes must
+flow through the dataflow, which has less capacity for concurrent processing.
+Ultimately, \emph{some} node in the dataflow will be unable to keep up with the
+write load offered to it, and a queue will build up upstream of that node.
+
+Where this bottleneck occurs depends on the application workload, as well as how
+the application writes arrive. If writes are also skewed, and arrive in batches,
+Noria's operators can sustain higher throughput than if the writes are uniformly
+distributed or arrive in small batches at high frequency.
+
+The reason why Noria with partial state plateaus where it does in
+Figure~\vref{f:lobsters-throughput} is because of precisely such a bottleneck in
+the Lobsters queries. In particular, Lobsters has a query that fetches a user's
+\emph{notifications}. A notification is generated for user $u$ whenever another
+user posts a direct response to user $u$'s story or comment \textbf{after $u$
+last viewed that story}. This last part is key, because it requires that every
+time a user visits \emph{any} story, that visit must update the user's
+notifications in case any should be removed. Thus, 55.8\% (cf.
+Table~\vref{t:lobsters-pages}) of requests must send an update through the one
+dataflow path that updates the notifications view.
+
+When Lobsters no longer keeps up with offered load beyond 7700 pages per second,
+it is this dataflow update that drives up the latency. The server has spare
+memory and spare cores, but one thread is constantly busy working on the
+notification dataflow\footnote{This load could be spread across cores by
+sharding the dataflow, though this would slow down other queries due to
+limitations in Noria's basic sharding implementation.}. The $\approx4300$ story
+requests per second generate a total of over 100,000 read queries per second,
+which Noria handles just fine, but the 4300 \emph{updates} per second saturate
+Noria's dataflow for the notifications query. This suggests that Noria's
+dataflow cannot support an aggregate update rate beyond 4300 across tables that
+feed into a shared dataflow node.
+
+Partial state has a modest impact on what update rate Noria can support. Without
+partial state, \emph{every} update must be processed to completion, which
+reduces throughput as shown in Figure~\vref{f:vote-migration}. At the same time,
+\emph{with} partial state, the dataflow must also service upqueries for missing
+state in downstream materializations, which reduces the effective update rate
+that dataflow can sustain.
+
+\paragraph{In summary,} Noria reduces the cost of reads, but increases the cost
+of writes in order to do so. Beyond $\approx4300$ updates per second to a single
+segment of the dataflow, the write processing pipeline becomes a bottleneck, and
+must be sharded or otherwise modified to support higher update rates.
