@@ -2,26 +2,25 @@ Partial state significantly changes how the underlying dataflow system computes
 query results. And without care, those changes may cause the system to violate
 eventual consistency. This chapter gives an informal correctness argument for
 how Noria preserves eventual consistency.
-Section~\ref{s:partial:inconsistencies} outlines several inconsistencies that
-can arise because of partial state. Section~\ref{s:invariants} introduces system
-invariants that Noria must uphold to avoid those inconsistencies and ensure
-eventual consistency. Section~\ref{s:partial:linear} makes the argument for why
-a single strand of dataflow yields correct results.
-Section~\ref{s:partial:diverging} expands that argument to include dataflow with
-multiple diverging branches. And Section~\ref{s:partial:merging} completes the
-argument by also considering dataflow where multiple strands join together.
-Finally, Section~\ref{s:challenge:sharding} discusses how partial state
-interacts with sharded dataflow.
+Section~\ref{s:partial:inconsistencies} outlines inconsistencies that can arise
+because of partial state. Section~\ref{s:invariants} introduces system
+invariants that Noria upholds to avoid those inconsistencies and ensure eventual
+consistency. Section~\ref{s:partial:linear} argues why a single strand of
+dataflow yields correct results. Section~\ref{s:partial:diverging} expands that
+argument to dataflow with multiple diverging branches. And
+Section~\ref{s:partial:merging} completes the argument by also considering
+dataflow where multiple strands join together. Finally,
+Section~\ref{s:challenge:sharding} discusses how partial state interacts with
+sharded dataflow.
 
 \section{Partial State Inconsistencies}
 \label{s:partial:inconsistencies}
 
-The most challenging change introduced by partial state is that multiple deltas
-may be collapsed and re-processed through the dataflow as a single, consolidated
-update in response to an upquery. Since these responses logically overlap with
-deltas that may still flow through the dataflow, Noria must take care to
-guarantee eventual consistency no matter how upquery responses and deltas are
-interleaved.
+The most challenging change from partial state is that deltas may be combined
+and re-processed through the dataflow as single, consolidated updates in
+response to upqueries. Since these responses logically overlap with deltas that
+may still be in the dataflow, Noria must take care to guarantee eventual
+consistency no matter how upquery responses and deltas are interleaved.
 
 This section outlines several inconsistencies that can arise as a result of
 partial state. While Noria could attempt to fix these inconsistencies after they
@@ -94,11 +93,11 @@ that row in its result set. The invariant also ensures that Noria does not
 double-apply deltas, as doing so would ultimately cause the base table change
 that spurred the delta to manifest twice.
 
-Note that the invariant does not preclude a \emph{value} present in a given base
-table row from appearing multiple times in a downstream view. If a query
-explicitly duplicates rows with a \texttt{UNION} or a column value appears in
-multiple output rows through a \texttt{JOIN}, then each base table \emph{change}
-is still reflected at most once.
+The invariant does not preclude a \emph{value} present in a given base table row
+from appearing multiple times in a downstream view. If a query explicitly
+duplicates rows with a \texttt{UNION}, or a value appears in multiple output
+rows through a \texttt{JOIN}, then each base table \emph{change} is still
+reflected at most once.
 
 % For a concrete example of this, consider a query that selects all columns from
 % all rows in a given table twice, and takes the union of them. The expected
@@ -157,12 +156,10 @@ independent paths for the purposes of this invariant.
 % useful nonetheless: as the system makes progress, it ensures that more updates
 % are reflected over time.
 
-\clearpage
-
 \begin{invariant}
   \label{i:missing-suffix}
   If an operator encounters missing state while processing a record $r$ in an
-  update, any downstream state that reflects $r$ must be evicted.
+  update, downstream state that reflects $r$ must be evicted.
 \end{invariant}
 
 This invariant ensures that when Noria discards a delta due to missing state
@@ -284,11 +281,11 @@ table. When the dataflow diverges, upstream operators may receive multiple
 upqueries for the same data. This happens if multiple downstream views encounter
 missing entries that rely on the same upstream data.
 
-The primary concern in this case is that the multiple upquery responses not
-result in data duplication, and thus violate Invariant~\ref{i:no-spurious}. If a
-stateful operator processes two upquery responses that both reflect some base
-table change, the effects of that change would now be duplicated in the
-operator's state.
+The primary concern is that the multiple upquery responses not result in data
+duplication, and thus violate Invariant~\ref{i:no-spurious}. If a stateful
+operator processes two upquery responses that both reflect some base table
+change, the effects of that change would now be duplicated in the operator's
+state.
 
 Since upquery results only ever flow along the same edges that the upquery
 followed on its way up the dataflow (\S\ref{s:upqueries}), such duplicates are

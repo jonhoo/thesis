@@ -73,8 +73,8 @@ perpetually stale.
 If an application requests data that is found to be missing, Noria issues an
 \textit{upquery} to compute the requested data. Upqueries flow ``up'' the
 dataflow graph, towards the base tables at the ``top'', and constitute a request
-for the target of the upquery to replay past data. Upqueries may recurse if the
-requested state is not available at the initial target.
+for the target of the upquery to retransmit past data. Upqueries may recurse if
+the requested state is not available at the initial target.
 
 The response to an upquery takes the form of a regular dataflow update that
 flows down the dataflow. It combines all past deltas pertinent to the upquery
@@ -105,10 +105,10 @@ changing the direction in which joins are executed as explained below.
 \subsection{Key Provenance Tracing}
 
 To determine what upqueries can reconstitute missing entries in a given index,
-Noria must trace the view's parameter column (the \texttt{?} in the query) back
-to a column in upstream state. The intuition here is that in order to answer the
+Noria must trace the view's parameter column (\texttt{?} in the query) back to a
+column in upstream state. The intuition here is that in order to answer the
 application's query of ``give me the results where column $C$ has value $x$'',
-Noria must be able to replay rows where $C = x$ from somewhere. Or, phrased
+Noria must be able to retransmit rows where $C = x$ from somewhere. Or, phrased
 differently, when the output for $C = x$ is missing, Noria must have a way to
 get the inputs that \emph{generate} $C = x$. As an example, if a view counts
 books by a given author, and the current count for author $a$ is missing, Noria
@@ -157,7 +157,7 @@ Consider what would happen if Listing~\ref{l:vote-src} had \texttt{WHERE vcount
 upquery would have to be sent to \texttt{VoteCount}, and query for ``all stories
 whose vote count is $x$''. If that state is present, all is well, but if
 \texttt{VoteCount} is missing the state for \texttt{vcount = x}, there is a
-problem: Noria has no way to compute the missing state except by replaying
+problem: Noria has no way to compute the missing state except by retransmitting
 \emph{all} state in \texttt{votes} without using an index. This is equivalent to
 a full table scan in a traditional database. Noria's only%
 %
