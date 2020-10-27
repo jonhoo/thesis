@@ -219,12 +219,13 @@ intermediate state can be re-used.
 
 This process leaves Noria with a set of paths to upquery when it encounters a
 missing entry. In many ways, the procedure is similar to that of traditional
-query planning, and some techniques from there could likely be applied. At the
-same time, upquery planning introduces some unique challenges. First, planning
-cannot change the order of existing operators, since they are part of the
-running dataflow that is already maintaining other views. To modify them, Noria
-would have to stop the dataflow to rewire the edges. Second, upquery plans still
-rely on forward incremental dataflow to compute the final results\,---\,a join
+query planning and query optimization, and some techniques from there could
+likely be applied. At the same time, the desire to use the existing dataflow to
+satisfy upqueries introduces some unique challenges. First, planning cannot
+change the order of existing operators, since they are part of the running
+dataflow that is already maintaining other views. To modify them, Noria would
+have to stop the dataflow to rewire the edges. Second, upquery plans still rely
+on forward incremental dataflow to compute the final results\,---\,a join
 strategy that cannot be executed incrementally is no good, no matter how well it
 might perform.
 
@@ -232,6 +233,15 @@ Once Noria has a plan, that plan is communicated to all domains that appear
 along each path in the plan. This is necessary so that each domain knows where
 to route upquery responses that are part of a given plan, and does not
 disseminate the response to the entire downstream dataflow.
+
+\paragraph{An Alternative Approach.}
+In theory, partial state could use a separate execution mechanism to satisfy
+upqueries, rather than re-using the existing dataflow. This would allow the use
+of more traditional query optimization techniques that do not work in a dataflow
+tuple-at-a-time processing model, but would come at the cost of managing two
+disjoint query execution pipelines: one ``forward'' pipeline for incremental
+updates and one ``backward'' pipeline to query missing state. Noria does not do
+this, and all upqueries go through the dataflow.
 
 \subsection{Index Planning}
 
