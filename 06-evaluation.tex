@@ -746,6 +746,7 @@ real-world datasets. At moderate throughput levels, Noria falls over only when
 asked to evict more keys than the predicted size of the ``hot'' key set.
 
 \section{Cost of (Partial) View Maintenance}
+\label{s:eval:writes}
 
 View maintenance is not free: writes to traditional relational databases need
 only modify the contents of a single table, while in Noria those changes must
