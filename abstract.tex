@@ -7,18 +7,16 @@
 \begin{titlepage}
   \begin{center}
     \textbf{\large Partial State in Dataflow-Based Materialized Views}\\
-    \vspace{0.5\baselineskip}
+    \vspace{0.3\baselineskip}
     by\\
-    \vspace{0.5\baselineskip}
+    \vspace{0.3\baselineskip}
     {\large Jon Ferdinand Ronge Gjengset}\\
-    \vspace{0.5\baselineskip}
-    \begin{addmargin}[0.15in]{0.15in}
+    \vspace{0.4\baselineskip}
+    \begin{addmargin}[0.5in]{0.5in}
       \centering
-    Submitted to the Department of
-    Electrical Engineering and Computer Science
-    on \today{}
-    in Partial Fulfillment of the Requirements for the Degree of
-    Doctor of Philosophy in Computer Science
+      Submitted to the Department of Electrical Engineering and Computer Science
+      on \today{} in Partial Fulfillment of the Requirements for the Degree of
+      Doctor of Philosophy in Electrical Engineering and Computer Science
     \end{addmargin}
   \end{center}
 
@@ -33,7 +31,7 @@
     builds the cache on demand, keeps it updated, and evicts cache entries in
     response to a shifting workload.
 
-  \vspace{0.5\baselineskip}
+  \vspace{0.2\baselineskip}
 
   The enabling technique the thesis introduces is \textit{partially stateful
     materialization}, which allows entries in materialized views to be
@@ -43,7 +41,7 @@
     dataflow updates and upqueries race with one another, and introduces
     mechanisms that uphold eventual consistency in the face of such races.
 
-  \vspace{0.5\baselineskip}
+  \vspace{0.2\baselineskip}
 
   Partial materialization saves application developers from having to implement
     ad hoc caching mechanisms to speed up their database accesses. Instead, the
@@ -53,10 +51,14 @@
     cache. Partial state also reduces memory use by up to $\sfrac{2}{3}$
     compared to traditional materialized views.
 
-  \vspace{\baselineskip}
+  \vspace{0.5\baselineskip}
   Thesis Supervisor: Robert Tappan Morris\\
+  Title: Professor of Electrical Engineering and Computer Science
+
+  \vspace{0.2\baselineskip}
+
   Thesis Co-Supervisor: M. Frans Kaashoek\\
-  Thesis Readers: Sam Madden and Malte Schwarzkopf
+  Title: Professor of Electrical Engineering and Computer Science
   \end{flushleft}
 \end{titlepage}
 \end{document}

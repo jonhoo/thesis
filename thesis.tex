@@ -1,4 +1,4 @@
-\documentclass[fontsize=12pt,paper=letter,oneside,final]{scrbook}
+\documentclass[fontsize=12pt,paper=letter,twosided,cleardoublepage=plain,final]{scrbook}
 
 % for 1.5 line spacing
 \usepackage{setspace}
@@ -123,20 +123,21 @@
 \pagenumbering{arabic}
 
 \includepdf[pages=-]{./titlepage.pdf}
-\leavevmode\thispagestyle{empty}\newpage % since title page is single-sided
+\cleardoublepage
 
-\includepdf[pages=-]{./abstract.pdf}
-\leavevmode\thispagestyle{empty}\newpage % since abstract is also single-sided
-
-\section*{Prior Publication}
-Parts of this thesis was previously published in a conference
-paper~\cite{noria}.
-\newpage
+\includepdf[pages=-,pagecommand={}]{./abstract.pdf}
+\cleardoublepage
 
 \section*{Acknowledgments}
 \begin{spacing}{1}
   \ifoptionfinal{\input{00-acknowledgements.tex}}{Will be included in the final submission.}
 \end{spacing}
+\cleardoublepage
+
+\section*{Prior Publication}
+Parts of this thesis was previously published in a conference
+paper~\cite{noria}.
+\cleardoublepage
 
 \tableofcontents
 
